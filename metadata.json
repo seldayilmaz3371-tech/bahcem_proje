@@ -1,0 +1,6 @@
+{
+  "name": "Mersin Tarım Asistanı",
+  "description": "Mersin Toroslar ve Değirmençay mevkilerindeki tarımsal faaliyetleri, zeytin ağaçlarını, gözlemleri ve envanteri yöneten yapay zeka destekli karar destek sistemi.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

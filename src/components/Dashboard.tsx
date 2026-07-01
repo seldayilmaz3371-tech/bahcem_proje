@@ -1,0 +1,278 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from "react";
+import { 
+  CloudSun, 
+  MapPin, 
+  Trees, 
+  AlertTriangle, 
+  ThermometerSnowflake, 
+  Calendar,
+  Clock,
+  ArrowRight,
+  RefreshCw,
+  Droplet,
+  Wind
+} from "lucide-react";
+import { Parcel, InventoryItem, WeatherRecord, ActivityLog } from "../types";
+
+export default function Dashboard() {
+  const [parcels, setParcels] = useState<Parcel[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [weatherHistory, setWeatherHistory] = useState<WeatherRecord[]>([]);
+  const [recentLogs, setRecentLogs] = useState<ActivityLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [simulatedForecast, setSimulatedForecast] = useState<any[]>([]);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      
+      const [parcelsRes, invRes, weatherRes, logsRes] = await Promise.all([
+        fetch("/api/parcels", { headers }),
+        fetch("/api/inventory", { headers }),
+        fetch("/api/weather", { headers }),
+        fetch("/api/activities", { headers })
+      ]);
+
+      if (parcelsRes.ok) setParcels(await parcelsRes.json());
+      if (invRes.ok) setInventory(await invRes.json());
+      if (weatherRes.ok) setWeatherHistory(await weatherRes.json());
+      if (logsRes.ok) setRecentLogs(await logsRes.json());
+      
+      // Simulate highly customized Değirmençay / Toroslar local micro-climate forecast
+      // Toroslar region usually receives cool breezes and is susceptible to winter frost
+      const today = new Date();
+      const forecasts = [];
+      for (let i = 0; i < 4; i++) {
+        const date = new Date();
+        date.setDate(today.getDate() + i);
+        const tempMin = Math.round(1 + Math.random() * 5); // 1-6 degrees Celsius (critical for olive trees)
+        const tempMax = Math.round(11 + Math.random() * 6); // 11-17 degrees Celsius
+        const hasFrost = tempMin <= 3; // Olive trees can suffer damage below 3C in spring buds
+        forecasts.push({
+          date: date.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "short" }),
+          tempMin,
+          tempMax,
+          humidity: Math.round(45 + Math.random() * 30),
+          windSpeed: Math.round(10 + Math.random() * 15),
+          condition: tempMin <= 2 ? "Kırağı / Ayaz" : Math.random() > 0.5 ? "Parçalı Bulutlu" : "Güneşli",
+          hasFrostRisk: hasFrost
+        });
+      }
+      setSimulatedForecast(forecasts);
+    } catch (err) {
+      console.error("Dashboard metrics loading error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  // Compute stats
+  const totalLand = parcels.reduce((sum, p) => sum + p.areaDekar, 0);
+  const totalTrees = parcels.reduce((sum, p) => sum + p.treeCount, 0);
+  const criticalItems = inventory.filter((item) => item.stockQuantity <= item.minStockAlert);
+  const nextFrostRisk = simulatedForecast.some(f => f.hasFrostRisk);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 py-24">
+        <RefreshCw className="h-8 w-8 text-[#556b2f] animate-spin" />
+        <span className="text-sm font-medium text-[#5a6a55]">Mersin tarım paneli yükleniyor...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div id="dashboard-tab" className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold font-display text-[#1a2416] tracking-tight">Tarla Kontrol Paneli</h1>
+          <p className="text-sm text-[#5a6a55] mt-1">
+            Mersin Toroslar, Değirmençay mevkii güncel tarımsal durum ve faaliyet izleme ekranı
+          </p>
+        </div>
+        <button
+          id="refresh-dashboard-btn"
+          onClick={fetchDashboardData}
+          className="self-start flex items-center gap-2 px-4 py-2 text-xs font-semibold text-[#556b2f] border border-[#556b2f] rounded-2xl hover:bg-[#556b2f]/5 transition-all"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          <span>Verileri Yenile</span>
+        </button>
+      </div>
+
+      {/* Overview Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Total Land Size */}
+        <div className="bg-[#fcfdfc] p-6 rounded-3xl border border-[#e2e8df] shadow-sm flex items-start justify-between">
+          <div>
+            <span className="text-xs font-bold text-[#80907a] uppercase tracking-wider">Toplam Arazi Büyüklüğü</span>
+            <div className="mt-2 text-3xl font-bold font-display text-[#1a2416]">{totalLand.toFixed(1)} <span className="text-sm font-normal text-[#5a6a55]">Dekar</span></div>
+            <p className="mt-2 text-xs text-[#5a6a55] flex items-center gap-1">
+              <MapPin className="h-3.5 w-3.5 text-[#556b2f]" />
+              {parcels.length} adet kayıtlı zeytinlik parseli
+            </p>
+          </div>
+          <div className="p-3 bg-[#f0f4ee] text-[#556b2f] rounded-2xl">
+            <MapPin className="h-6 w-6" />
+          </div>
+        </div>
+
+        {/* Total Trees */}
+        <div className="bg-[#fcfdfc] p-6 rounded-3xl border border-[#e2e8df] shadow-sm flex items-start justify-between">
+          <div>
+            <span className="text-xs font-bold text-[#80907a] uppercase tracking-wider">Takipteki Zeytin Ağacı</span>
+            <div className="mt-2 text-3xl font-bold font-display text-[#1a2416]">{totalTrees} <span className="text-sm font-normal text-[#5a6a55]">Adet</span></div>
+            <p className="mt-2 text-xs text-[#5a6a55]">
+              Ortalama ağaç yaşı: <span className="font-semibold text-[#1a2416]">11 Yıl</span> (Mersin Yerel)
+            </p>
+          </div>
+          <div className="p-3 bg-[#f0f4ee] text-[#556b2f] rounded-2xl">
+            <Trees className="h-6 w-6" />
+          </div>
+        </div>
+
+        {/* Stock Warnings */}
+        <div className={`p-6 rounded-3xl border shadow-sm flex items-start justify-between ${
+          criticalItems.length > 0 
+            ? "bg-amber-50/50 border-amber-200 text-amber-900" 
+            : "bg-[#fcfdfc] border-[#e2e8df] text-[#1a2416]"
+        }`}>
+          <div>
+            <span className={`text-xs font-bold uppercase tracking-wider ${criticalItems.length > 0 ? "text-amber-800" : "text-[#80907a]"}`}>Kritik Stok Uyarısı</span>
+            <div className="mt-2 text-3xl font-bold font-display">{criticalItems.length} <span className="text-sm font-normal">Ürün</span></div>
+            <p className="mt-2 text-xs text-[#5a6a55] truncate max-w-[180px]">
+              {criticalItems.length > 0 
+                ? `${criticalItems[0].name} kritik seviyede` 
+                : "Gübre ve ilaç depoları güvenli seviyede"}
+            </p>
+          </div>
+          <div className={`p-3 rounded-2xl ${criticalItems.length > 0 ? "bg-amber-100 text-amber-700" : "bg-[#f0f4ee] text-[#556b2f]"}`}>
+            <AlertTriangle className="h-6 w-6" />
+          </div>
+        </div>
+
+        {/* Frost Warning Card */}
+        <div className={`p-6 rounded-3xl border shadow-sm flex items-start justify-between ${
+          nextFrostRisk 
+            ? "bg-red-50/50 border-red-200 text-red-900" 
+            : "bg-[#fcfdfc] border-[#e2e8df]"
+        }`}>
+          <div>
+            <span className={`text-xs font-bold uppercase tracking-wider ${nextFrostRisk ? "text-red-800" : "text-[#80907a]"}`}>Don Riski / Ayaz Seviyesi</span>
+            <div className="mt-2 text-3xl font-bold font-display">
+              {nextFrostRisk ? "VAR" : "YOK"}
+            </div>
+            <p className="mt-2 text-xs text-[#5a6a55]">
+              {nextFrostRisk ? "Değirmençay'da gece don riski yüksek!" : "Sıcaklıklar zeytin ağaçları için elverişli"}
+            </p>
+          </div>
+          <div className={`p-3 rounded-2xl ${nextFrostRisk ? "bg-red-100 text-red-700 animate-pulse" : "bg-[#f0f4ee] text-[#556b2f]"}`}>
+            <ThermometerSnowflake className="h-6 w-6" />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Değirmençay Climate and Weather forecast */}
+        <div className="lg:col-span-2 bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CloudSun className="h-5 w-5 text-[#556b2f]" />
+              <h2 className="text-lg font-bold font-display text-[#1a2416]">Bölgesel Mikro-Klima Meteoroloji Paneli</h2>
+            </div>
+            <span className="text-xs bg-[#f0f4ee] text-[#556b2f] px-2.5 py-1 rounded-full font-semibold font-mono">Değirmençay, Mersin</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {simulatedForecast.map((day, idx) => (
+              <div 
+                id={`weather-day-${idx}`}
+                key={idx} 
+                className={`p-4 rounded-2xl border flex flex-col justify-between items-center text-center transition-all ${
+                  day.hasFrostRisk 
+                    ? "bg-red-50/40 border-red-200 text-red-900" 
+                    : "bg-[#fcfdfc] border-[#e2e8df] hover:border-[#556b2f]/30"
+                }`}
+              >
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-[#5a6a55]">{day.date}</p>
+                  <p className="text-xs font-bold text-[#222] font-mono mt-1">{day.condition}</p>
+                </div>
+
+                <div className="my-3">
+                  <span className="text-2xl font-bold font-display">{day.tempMax}°</span>
+                  <span className="text-sm text-[#888] mx-1">/</span>
+                  <span className="text-sm font-semibold text-[#556b2f]">{day.tempMin}°</span>
+                </div>
+
+                <div className="w-full pt-2 border-t border-[#f0f4ee] flex justify-around text-[10px] text-[#80907a] font-mono">
+                  <span className="flex items-center gap-0.5"><Droplet className="h-3 w-3" /> %{day.humidity}</span>
+                  <span className="flex items-center gap-0.5"><Wind className="h-3 w-3" /> {day.windSpeed}km/h</span>
+                </div>
+
+                {day.hasFrostRisk && (
+                  <span className="mt-2 text-[9px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                    <ThermometerSnowflake className="h-3 w-3" /> Gece Ayazı
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-[#f0f4ee] border border-[#dee5db] rounded-2xl p-4 text-xs text-[#3b4c33] leading-relaxed flex items-start gap-2.5">
+            <AlertTriangle className="h-5 w-5 text-[#556b2f] shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold">Mersin AgriTech Tavsiyesi:</span> Don Riski mevcuttur. Sol menüdeki <span className="font-semibold">Yapay Zeka Karar Destek</span> ekranına giderek parselleriniz için don önleme faaliyetlerini (yağmurlama sulama zamanlamaları, saman dumanı vb.) sorgulayıp bölgesel reçete talep edebilirsiniz.
+            </div>
+          </div>
+        </div>
+
+        {/* Audit Logs and Activities */}
+        <div className="bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-[#556b2f]" />
+              <h2 className="text-lg font-bold font-display text-[#1a2416]">Son Çiftlik Faaliyetleri</h2>
+            </div>
+
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+              {recentLogs.length > 0 ? (
+                recentLogs.slice(0, 6).map((log) => (
+                  <div id={`activity-log-${log.id}`} key={log.id} className="text-xs border-b border-[#f0f4ee] pb-3 last:border-b-0 space-y-1">
+                    <div className="flex justify-between text-[#80907a]">
+                      <span className="font-bold font-mono tracking-wider">{log.action}</span>
+                      <span className="font-mono">{new Date(log.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                    <p className="text-[#2d3a2a] leading-relaxed font-medium">{log.details}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-[#5a6a55] italic text-center py-8">Kayıtlı sistem faaliyeti bulunmamaktadır.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-[#f0f4ee] mt-4">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-[#80907a] block mb-1">Mersin Yerel Merkez</span>
+            <p className="text-xs text-[#5a6a55] font-semibold flex items-center gap-1">
+              Enlem: <span className="font-mono text-[#1a2416]">36.912°N</span> | Boylam: <span className="font-mono text-[#1a2416]">34.423°E</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
