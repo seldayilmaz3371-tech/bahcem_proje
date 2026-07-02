@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -43,11 +43,23 @@ import {
 } from "./server/models";
 import { logger } from "./server/logger";
 import multer from "multer";
+// pdf-parse v2.4.5: paket artık default export değil, "PDFParse" adında bir sınıf (named export) sağlıyor.
+// Eski v1 API'si (import pdfParse from "pdf-parse"; pdfParse(buffer)) v2'de kaldırıldı.
+// Detay: https://www.npmjs.com/package/pdf-parse (v2 "Migration" bölümü)
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 
 const app = express();
-const PORT = 3000;
+
+/**
+ * PORT YAPILANDIRMASI
+ * -------------------
+ * Proje talimatları gereği (Gizlilik ve Güvenlik: her zaman process.env kullan),
+ * port değeri koda sabit yazılmıyor. .env dosyasında PORT=xxxx tanımlanarak
+ * override edilebilir. Tanımlı değilse varsayılan olarak 3000 kullanılır.
+ */
+const PORT = Number(process.env.PORT) || 3000;
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Enable JSON parsing with large limits to support photo/document payloads
@@ -703,7 +715,15 @@ app.get("/api/ai/documents", requireAuth, asyncHandler(async (req, res) => {
   res.json(docs);
 }));
 
-// Parse a PDF or DOCX file and extract its text content
+/**
+ * Parse a PDF or DOCX file and extract its text content.
+ *
+ * NOT (pdf-parse v2 uyumluluğu): pdf-parse paketi v2.4.5'te API'sini tamamen
+ * değiştirdi. Artık `pdfParse(buffer)` şeklinde çağrılan bir default export
+ * fonksiyonu yok; bunun yerine `PDFParse` adında bir sınıf (named export)
+ * kullanılıyor. Akış: (1) PDFParse örneği oluştur → (2) getText() ile metni
+ * al → (3) destroy() ile belleği/worker kaynaklarını serbest bırak.
+ */
 app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "Lütfen bir dosya yükleyin." });
@@ -712,20 +732,15 @@ app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHan
   const file = req.file;
   const extension = file.originalname.split('.').pop()?.toLowerCase();
   let text = "";
+  let parser: PDFParse | null = null;
 
   try {
     if (extension === "pdf") {
-      const parser = new PDFParse({ data: file.buffer });
-      try {
-        const data = await parser.getText();
-        text = data.text;
-      } finally {
-        await parser.destroy(); // v2'de manuel kaynak temizliği gerekiyor, aksi halde bellek sızıntısı riski var
-      }
-    } else if (extension === "docx") {
-      const result = await mammoth.extractRawText({ buffer: file.buffer });
-      text = result.value;
-    } else if (extension === "doc") {
+      // pdf-parse v2 API: PDFParse sınıfı buffer'ı "data" alanı üzerinden alır.
+      parser = new PDFParse({ data: file.buffer });
+      const result = await parser.getText();
+      text = result.text;
+    } else if (extension === "docx" || extension === "doc") {
       const result = await mammoth.extractRawText({ buffer: file.buffer });
       text = result.value;
     } else if (extension === "txt" || extension === "md") {
@@ -749,6 +764,12 @@ app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHan
   } catch (error: any) {
     console.error("Dosya ayrıştırma hatası:", error);
     res.status(500).json({ error: `Dosya içeriği okunurken bir hata oluştu: ${error.message || error}` });
+  } finally {
+    // pdf-parse v2, her PDFParse örneği için worker/bellek kaynaklarını tutar;
+    // işlem bitince (başarılı ya da hatalı) mutlaka destroy() ile temizlenmeli.
+    if (parser) {
+      await parser.destroy();
+    }
   }
 }));
 
@@ -838,9 +859,26 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const httpServer = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server started and successfully listening on http://localhost:${PORT}`);
     logger.info("SYSTEM", `Server initiated. High-performance Express listener bounded to port ${PORT}`);
+  });
+
+  // Port çakışması (EADDRINUSE) gibi başlatma hatalarını sessizce çökmek yerine
+  // anlaşılır bir Türkçe uyarıyla loglar ve süreci düzgünce sonlandırır.
+  httpServer.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(
+        `\n[HATA] Port ${PORT} zaten kullanımda! Lütfen o portu tutan process'i sonlandırın ` +
+        `(PowerShell: 'netstat -ano | findstr :${PORT}' ardından 'taskkill /PID <PID> /F') ` +
+        `ya da .env dosyasında farklı bir PORT değeri tanımlayın.\n`
+      );
+      logger.error("SYSTEM", `Port ${PORT} already in use (EADDRINUSE). Server could not start.`, err);
+      process.exit(1);
+    } else {
+      logger.error("SYSTEM", "Unexpected server startup error.", err);
+      throw err;
+    }
   });
 }
 
