@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import "dotenv/config";
+
 import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -43,23 +43,11 @@ import {
 } from "./server/models";
 import { logger } from "./server/logger";
 import multer from "multer";
-// pdf-parse v2.4.5: paket artık default export değil, "PDFParse" adında bir sınıf (named export) sağlıyor.
-// Eski v1 API'si (import pdfParse from "pdf-parse"; pdfParse(buffer)) v2'de kaldırıldı.
-// Detay: https://www.npmjs.com/package/pdf-parse (v2 "Migration" bölümü)
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 
 const app = express();
-
-/**
- * PORT YAPILANDIRMASI
- * -------------------
- * Proje talimatları gereği (Gizlilik ve Güvenlik: her zaman process.env kullan),
- * port değeri koda sabit yazılmıyor. .env dosyasında PORT=xxxx tanımlanarak
- * override edilebilir. Tanımlı değilse varsayılan olarak 3000 kullanılır.
- */
-const PORT = Number(process.env.PORT) || 3000;
-
+const PORT = 3000;
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Enable JSON parsing with large limits to support photo/document payloads
@@ -113,6 +101,18 @@ const asyncHandler = (fn: (req: any, res: Response, next: NextFunction) => Promi
   };
 };
 
+/**
+ * Strips sensitive fields (bcrypt password hash) from a User entity before
+ * it is serialized and sent to the client. This prevents credential material
+ * from ever leaving the server boundary.
+ * @param user Full User entity as stored in the database
+ * @returns User object safe for client-side exposure
+ */
+function toSafeUser(user: User): Omit<User, "passwordHash"> {
+  const { passwordHash, ...safeUser } = user;
+  return safeUser;
+}
+
 // ==========================================
 // 1. AUTHENTICATION API ENDPOINTS
 // ==========================================
@@ -133,7 +133,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
   logger.info("AUTH", `User successfully logged in: '${username}'`);
   res.json({
     token: result.token,
-    user: result.user,
+    user: toSafeUser(result.user),
     permissions: permissionsResult.permissions
   });
 }));
@@ -151,7 +151,7 @@ app.post("/api/auth/logout", requireAuth, asyncHandler(async (req: Authenticated
 
 app.get("/api/auth/me", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.json({
-    user: req.user,
+    user: toSafeUser(req.user),
     permissions: req.permissions
   });
 }));
@@ -176,36 +176,31 @@ app.post("/api/auth/register", requireAuth, asyncHandler(async (req: Authenticat
     return res.status(403).json({ error: "Yeni kullanıcı kaydetmek için Yönetici yetkiniz bulunmalıdır." });
   }
 
-  const { username, password, fullName, role, email } = req.body;
+  const { username, password, fullName, role, email, phoneNumber } = req.body;
   if (!username || !password || !fullName || !role) {
     return res.status(400).json({ error: "Tüm alanlar (kullanıcı adı, şifre, ad soyad, rol) zorunludur." });
   }
 
-  const existing = await userRepository.getByUsername(username);
-  if (existing) {
-    return res.status(400).json({ error: "Bu kullanıcı adı zaten sistemde kayıtlıdır." });
-  }
-
-  const newUser = await userRepository.create({
-    username,
-    passwordHash: password, // For simplicity we store/process through userRepository directly or custom helper
-    fullName,
-    role: role as UserRole,
-    email: email || `${username}@agritech.com`,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  });
-
-  await activityLogRepository.writeLog(
+  // Delegates to the Auth Service layer, which performs bcrypt hashing,
+  // duplicate username/email checks, and audit logging. Routes must never
+  // write directly to the repository for security-sensitive entities.
+  const newUser = await authService.registerUser(
     req.user.id,
-    "USER_REGISTER",
-    `Yeni kullanıcı kaydedildi: '${username}' (${role})`
+    username,
+    password,
+    fullName,
+    email || `${username}@agritech.com`,
+    role as UserRole,
+    phoneNumber
   );
 
-  res.status(211).json({ 
-    success: true, 
-    user: { id: newUser.id, username: newUser.username, fullName: newUser.fullName, role: newUser.role } 
+  if (!newUser) {
+    return res.status(400).json({ error: "Kullanıcı adı veya e-posta zaten sistemde kayıtlı, ya da kayıt işlemi sırasında bir hata oluştu." });
+  }
+
+  res.status(201).json({
+    success: true,
+    user: toSafeUser(newUser)
   });
 }));
 
@@ -244,7 +239,7 @@ app.post("/api/parcels", requireAuth, asyncHandler(async (req: AuthenticatedRequ
     `Yeni arazi parseli eklendi: '${name}' (${areaDekar} Dekar)`
   );
 
-  res.status(211).json(newParcel);
+  res.status(201).json(newParcel);
 }));
 
 app.put("/api/parcels/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -336,7 +331,7 @@ app.post("/api/parcels/:id/trees", requireAuth, asyncHandler(async (req: Authent
     `Parsele (${parcel.name}) yeni ağaç kaydedildi: '${treeNumber}'`
   );
 
-  res.status(211).json(newTree);
+  res.status(201).json(newTree);
 }));
 
 app.put("/api/trees/:id", requireAuth, asyncHandler(async (req, res) => {
@@ -406,7 +401,7 @@ app.post("/api/observations", requireAuth, asyncHandler(async (req: Authenticate
     `Yeni saha gözlemi kaydedildi. ${treeId ? "Ağaç ID: " + treeId : "Genel parsel gözlemi."}`
   );
 
-  res.status(211).json(newObs);
+  res.status(201).json(newObs);
 }));
 
 /**
@@ -435,7 +430,7 @@ app.post("/api/observations/upload-photo", requireAuth, asyncHandler(async (req:
   });
 
   logger.info("AI", `Image metadata extracted successfully. Simulated GPS registered: [${simulatedLatitude}, ${simulatedLongitude}]`);
-  res.status(211).json(newPhoto);
+  res.status(201).json(newPhoto);
 }));
 
 app.get("/api/observations/photos", requireAuth, asyncHandler(async (req, res) => {
@@ -499,7 +494,7 @@ app.post("/api/inventory", requireAuth, asyncHandler(async (req: AuthenticatedRe
     `Envantere yeni ürün eklendi: '${name}' (${stockQuantity} ${unit})`
   );
 
-  res.status(211).json(newItem);
+  res.status(201).json(newItem);
 }));
 
 app.post("/api/inventory/adjust", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -563,7 +558,7 @@ app.post("/api/finance/costs", requireAuth, asyncHandler(async (req: Authenticat
     `Yeni harcama kaydı girildi: ${amount} TL (${category})`
   );
 
-  res.status(211).json(newCost);
+  res.status(201).json(newCost);
 }));
 
 // Sales API
@@ -598,7 +593,7 @@ app.post("/api/finance/sales", requireAuth, asyncHandler(async (req: Authenticat
     `Yeni zeytin/yağ satışı kaydedildi: ${totalRevenue} TL (${quantityKg} Kg, Marka: ${isOrganikSaglikBrand ? "Organik Sağlık" : "Standart"})`
   );
 
-  res.status(211).json(newSale);
+  res.status(201).json(newSale);
 }));
 
 // Harvest Logs API
@@ -640,7 +635,7 @@ app.post("/api/finance/harvests", requireAuth, asyncHandler(async (req: Authenti
     `Yeni hasat kaydı girildi: ${quantityKg} Kg`
   );
 
-  res.status(211).json(newHarvest);
+  res.status(201).json(newHarvest);
 }));
 
 // Annual ROI and Profitability Analysis Reports
@@ -695,7 +690,7 @@ app.post("/api/weather/record", requireAuth, asyncHandler(async (req, res) => {
     createdAt: new Date().toISOString()
   });
 
-  res.status(211).json(newRecord);
+  res.status(201).json(newRecord);
 }));
 
 // System activity log tracking logs
@@ -715,15 +710,7 @@ app.get("/api/ai/documents", requireAuth, asyncHandler(async (req, res) => {
   res.json(docs);
 }));
 
-/**
- * Parse a PDF or DOCX file and extract its text content.
- *
- * NOT (pdf-parse v2 uyumluluğu): pdf-parse paketi v2.4.5'te API'sini tamamen
- * değiştirdi. Artık `pdfParse(buffer)` şeklinde çağrılan bir default export
- * fonksiyonu yok; bunun yerine `PDFParse` adında bir sınıf (named export)
- * kullanılıyor. Akış: (1) PDFParse örneği oluştur → (2) getText() ile metni
- * al → (3) destroy() ile belleği/worker kaynaklarını serbest bırak.
- */
+// Parse a PDF or DOCX file and extract its text content
 app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "Lütfen bir dosya yükleyin." });
@@ -732,15 +719,20 @@ app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHan
   const file = req.file;
   const extension = file.originalname.split('.').pop()?.toLowerCase();
   let text = "";
-  let parser: PDFParse | null = null;
 
   try {
     if (extension === "pdf") {
-      // pdf-parse v2 API: PDFParse sınıfı buffer'ı "data" alanı üzerinden alır.
-      parser = new PDFParse({ data: file.buffer });
-      const result = await parser.getText();
-      text = result.text;
-    } else if (extension === "docx" || extension === "doc") {
+      const parser = new PDFParse({ data: file.buffer });
+      try {
+        const result = await parser.getText();
+        text = result.text;
+      } finally {
+        await parser.destroy();
+      }
+    } else if (extension === "docx") {
+      const result = await mammoth.extractRawText({ buffer: file.buffer });
+      text = result.value;
+    } else if (extension === "doc") {
       const result = await mammoth.extractRawText({ buffer: file.buffer });
       text = result.value;
     } else if (extension === "txt" || extension === "md") {
@@ -764,12 +756,6 @@ app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHan
   } catch (error: any) {
     console.error("Dosya ayrıştırma hatası:", error);
     res.status(500).json({ error: `Dosya içeriği okunurken bir hata oluştu: ${error.message || error}` });
-  } finally {
-    // pdf-parse v2, her PDFParse örneği için worker/bellek kaynaklarını tutar;
-    // işlem bitince (başarılı ya da hatalı) mutlaka destroy() ile temizlenmeli.
-    if (parser) {
-      await parser.destroy();
-    }
   }
 }));
 
@@ -794,7 +780,7 @@ app.post("/api/ai/documents/upload", requireAuth, asyncHandler(async (req: Authe
     return res.status(500).json({ error: "Doküman işlenirken ve vektör dizini oluşturulurken bir hata oluştu." });
   }
 
-  res.status(211).json(doc);
+  res.status(201).json(doc);
 }));
 
 // Remove a document and clear its vector spaces
@@ -813,7 +799,7 @@ app.post("/api/ai/recommend/:parcelId", requireAuth, asyncHandler(async (req, re
   if (!result) {
     return res.status(500).json({ error: "Yapay zeka tavsiye raporu oluşturulamadı. Lütfen API anahtarınızı veya internet bağlantınızı kontrol edin." });
   }
-  res.status(211).json(result);
+  res.status(201).json(result);
 }));
 
 // Get historical recommendation for a single parcel
@@ -859,26 +845,9 @@ async function startServer() {
     });
   }
 
-  const httpServer = app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server started and successfully listening on http://localhost:${PORT}`);
     logger.info("SYSTEM", `Server initiated. High-performance Express listener bounded to port ${PORT}`);
-  });
-
-  // Port çakışması (EADDRINUSE) gibi başlatma hatalarını sessizce çökmek yerine
-  // anlaşılır bir Türkçe uyarıyla loglar ve süreci düzgünce sonlandırır.
-  httpServer.on("error", (err: NodeJS.ErrnoException) => {
-    if (err.code === "EADDRINUSE") {
-      console.error(
-        `\n[HATA] Port ${PORT} zaten kullanımda! Lütfen o portu tutan process'i sonlandırın ` +
-        `(PowerShell: 'netstat -ano | findstr :${PORT}' ardından 'taskkill /PID <PID> /F') ` +
-        `ya da .env dosyasında farklı bir PORT değeri tanımlayın.\n`
-      );
-      logger.error("SYSTEM", `Port ${PORT} already in use (EADDRINUSE). Server could not start.`, err);
-      process.exit(1);
-    } else {
-      logger.error("SYSTEM", "Unexpected server startup error.", err);
-      throw err;
-    }
   });
 }
 
