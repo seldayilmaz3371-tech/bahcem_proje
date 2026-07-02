@@ -43,8 +43,7 @@ import {
 } from "./server/models";
 import { logger } from "./server/logger";
 import multer from "multer";
-// @ts-ignore
-import pdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 
 const app = express();
@@ -716,8 +715,13 @@ app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHan
 
   try {
     if (extension === "pdf") {
-      const data = await pdfParse(file.buffer);
-      text = data.text;
+      const parser = new PDFParse({ data: file.buffer });
+      try {
+        const data = await parser.getText();
+        text = data.text;
+      } finally {
+        await parser.destroy(); // v2'de manuel kaynak temizliği gerekiyor, aksi halde bellek sızıntısı riski var
+      }
     } else if (extension === "docx") {
       const result = await mammoth.extractRawText({ buffer: file.buffer });
       text = result.value;
