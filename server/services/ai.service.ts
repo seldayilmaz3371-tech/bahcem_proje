@@ -73,13 +73,17 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 export function chunkText(text: string, chunkSize = 800, overlap = 150): string[] {
   const chunks: string[] = [];
   let index = 0;
+  const step = chunkSize - overlap;
+  if (step <= 0) {
+    return [text];
+  }
   
   while (index < text.length) {
     const chunk = text.substring(index, index + chunkSize).trim();
     if (chunk.length > 0) {
       chunks.push(chunk);
     }
-    index += chunkSize - overlap;
+    index += step;
     if (index >= text.length - overlap) {
       break;
     }

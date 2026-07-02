@@ -21,16 +21,42 @@ import { Parcel, AIRecommendation } from "../types";
 
 export default function AIRecommendations() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
-  const [selectedParcelId, setSelectedParcelId] = useState("");
+  const [selectedParcelId, setSelectedParcelId] = useState(() => {
+    return localStorage.getItem("agri_selected_parcel_id") || "";
+  });
   const [userQuery, setUserQuery] = useState("");
   
   const [generating, setGenerating] = useState(false);
-  const [currentReport, setCurrentReport] = useState<AIRecommendation | null>(null);
+  const [currentReport, setCurrentReport] = useState<AIRecommendation | null>(() => {
+    const saved = localStorage.getItem("agri_current_report");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
   
   const [history, setHistory] = useState<AIRecommendation[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [error, setError] = useState("");
+
+  const changeSelectedParcelId = (id: string) => {
+    setSelectedParcelId(id);
+    localStorage.setItem("agri_selected_parcel_id", id);
+  };
+
+  const saveAndSetCurrentReport = (report: AIRecommendation | null) => {
+    setCurrentReport(report);
+    if (report) {
+      localStorage.setItem("agri_current_report", JSON.stringify(report));
+    } else {
+      localStorage.removeItem("agri_current_report");
+    }
+  };
 
   const fetchParcels = async () => {
     try {
@@ -39,8 +65,8 @@ export default function AIRecommendations() {
       if (res.ok) {
         const data = await res.json();
         setParcels(data);
-        if (data.length > 0) {
-          setSelectedParcelId(data[0].id);
+        if (data.length > 0 && !selectedParcelId) {
+          changeSelectedParcelId(data[0].id);
         }
       }
     } catch (err) {
@@ -69,8 +95,13 @@ export default function AIRecommendations() {
   };
 
   useEffect(() => {
-    fetchParcelHistory(selectedParcelId);
-    setCurrentReport(null);
+    if (selectedParcelId) {
+      fetchParcelHistory(selectedParcelId);
+      // Clear the current report ONLY if it belongs to a different parcel!
+      if (currentReport && currentReport.parcelId !== selectedParcelId) {
+        saveAndSetCurrentReport(null);
+      }
+    }
   }, [selectedParcelId]);
 
   const handleGenerateReport = async (e: React.FormEvent) => {
@@ -82,7 +113,7 @@ export default function AIRecommendations() {
 
     setError("");
     setGenerating(true);
-    setCurrentReport(null);
+    saveAndSetCurrentReport(null);
 
     try {
       const headers = { 
@@ -103,7 +134,7 @@ export default function AIRecommendations() {
         throw new Error(data.error || "Yapay zeka tavsiye raporu oluşturulamadı.");
       }
 
-      setCurrentReport(data);
+      saveAndSetCurrentReport(data);
       setUserQuery("");
       fetchParcelHistory(selectedParcelId); // Refresh history feed
     } catch (err: any) {
@@ -149,7 +180,7 @@ export default function AIRecommendations() {
                 <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Hedef Zeytinlik Parseli</label>
                 <select
                   value={selectedParcelId}
-                  onChange={(e) => setSelectedParcelId(e.target.value)}
+                  onChange={(e) => changeSelectedParcelId(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:ring-2 focus:ring-[#556b2f]"
                 >
                   {parcels.map(p => (
@@ -229,7 +260,7 @@ export default function AIRecommendations() {
                 history.map((rec) => (
                   <button
                     key={rec.id}
-                    onClick={() => setCurrentReport(rec)}
+                    onClick={() => saveAndSetCurrentReport(rec)}
                     className="w-full text-left p-3 border border-[#f0f4ee] hover:border-[#556b2f]/30 rounded-2xl text-xs transition-all flex items-center justify-between group bg-[#fcfdfc]"
                   >
                     <div className="space-y-1 min-w-0 flex-1">

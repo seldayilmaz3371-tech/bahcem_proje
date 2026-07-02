@@ -42,9 +42,14 @@ import {
   WeatherRecord
 } from "./server/models";
 import { logger } from "./server/logger";
+import multer from "multer";
+// @ts-ignore
+import pdfParse from "pdf-parse";
+import mammoth from "mammoth";
 
 const app = express();
 const PORT = 3000;
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Enable JSON parsing with large limits to support photo/document payloads
 app.use(express.json({ limit: "15mb" }));
@@ -699,6 +704,50 @@ app.get("/api/ai/documents", requireAuth, asyncHandler(async (req, res) => {
   res.json(docs);
 }));
 
+// Parse a PDF or DOCX file and extract its text content
+app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "Lütfen bir dosya yükleyin." });
+  }
+
+  const file = req.file;
+  const extension = file.originalname.split('.').pop()?.toLowerCase();
+  let text = "";
+
+  try {
+    if (extension === "pdf") {
+      const data = await pdfParse(file.buffer);
+      text = data.text;
+    } else if (extension === "docx") {
+      const result = await mammoth.extractRawText({ buffer: file.buffer });
+      text = result.value;
+    } else if (extension === "doc") {
+      const result = await mammoth.extractRawText({ buffer: file.buffer });
+      text = result.value;
+    } else if (extension === "txt" || extension === "md") {
+      text = file.buffer.toString("utf8");
+    } else {
+      return res.status(400).json({ error: "Desteklenmeyen dosya formatı. Sadece .pdf, .docx, .txt ve .md desteklenmektedir." });
+    }
+
+    // Clean up carriage returns, excessive vertical spacing, and trim
+    text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+
+    if (!text) {
+      return res.status(400).json({ error: "Dosyadan okunabilir metin içeriği çıkarılamadı. Dosyanın boş olmadığından veya taranmış bir resim (OCR gerektiren) olmadığından emin olun." });
+    }
+
+    res.json({
+      text,
+      fileName: file.originalname.replace(/\.[^/.]+$/, ""),
+      originalName: file.originalname
+    });
+  } catch (error: any) {
+    console.error("Dosya ayrıştırma hatası:", error);
+    res.status(500).json({ error: `Dosya içeriği okunurken bir hata oluştu: ${error.message || error}` });
+  }
+}));
+
 // Index a new text document into the vector RAG engine
 app.post("/api/ai/documents/upload", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { fileName, fileType, textContent } = req.body;
@@ -758,7 +807,11 @@ app.post("/api/ai/chat", requireAuth, asyncHandler(async (req, res) => {
   }
 
   const result = await aiService.queryChatAssistant(query);
-  res.json(result);
+  res.json({
+    response: result.text,
+    text: result.text,
+    usedChunks: result.usedChunks
+  });
 }));
 
 

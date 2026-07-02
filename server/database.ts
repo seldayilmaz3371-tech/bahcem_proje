@@ -185,10 +185,446 @@ class DatabaseManager {
       mutated = true;
     }
 
+    // Seeding check for sample data
+    if (this.data.parcels.length === 0) {
+      this.seedSampleData();
+      mutated = true;
+    }
+
     if (mutated) {
       this.saveImmediate();
       logger.info("DATABASE", "Alembic-style migration successful: Schema definitions fully aligned.");
     }
+  }
+
+  /**
+   * Seeds realistic sample data for the Mersin Değirmençay region.
+   */
+  private seedSampleData(): void {
+    if (!this.data) return;
+    const timestamp = new Date().toISOString();
+
+    logger.info("DATABASE", "Seeding realistic Mersin Değirmençay agricultural sample data.");
+
+    // 1. Parcels
+    this.data.parcels = [
+      {
+        id: "parcel-1",
+        name: "Kuzey Yamaç Zeytinliği",
+        latitude: 36.9312,
+        longitude: 34.4255,
+        areaDekar: 12.5,
+        treeCount: 5,
+        soilType: "Killi-Tınlı",
+        irrigationType: "Damlama",
+        notes: "Sarıulak ağırlıklı, rüzgara açık kuzey yamaç.",
+        createdAt: timestamp,
+        updatedAt: timestamp
+      },
+      {
+        id: "parcel-2",
+        name: "Derekenarı Düzlüğü",
+        latitude: 36.9288,
+        longitude: 34.4290,
+        areaDekar: 8.0,
+        treeCount: 4,
+        soilType: "Tınlı",
+        irrigationType: "Damlama",
+        notes: "Su sıkıntısı olmayan, derin profilli alüvyal toprak.",
+        createdAt: timestamp,
+        updatedAt: timestamp
+      },
+      {
+        id: "parcel-3",
+        name: "Tepebağ Eski Bahçe",
+        latitude: 36.9340,
+        longitude: 34.4210,
+        areaDekar: 6.2,
+        treeCount: 3,
+        soilType: "Kireçli",
+        irrigationType: "Kuru",
+        notes: "Geleneksel dikim, yaşlı ağaçlar, susuz tarım.",
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }
+    ];
+
+    // 2. Trees
+    this.data.trees = [
+      // parcel-1
+      { id: "tree-1-1", parcelId: "parcel-1", treeNumber: "KY-T01", variety: "Sarıulak", plantingYear: 2012, createdAt: timestamp, updatedAt: timestamp, notes: "Verimi yüksek, güçlü taç gelişimi." },
+      { id: "tree-1-2", parcelId: "parcel-1", treeNumber: "KY-T02", variety: "Sarıulak", plantingYear: 2012, createdAt: timestamp, updatedAt: timestamp, notes: "Damlama ucu kontrol edilmeli, biraz gölge görüyor." },
+      { id: "tree-1-3", parcelId: "parcel-1", treeNumber: "KY-T03", variety: "Sarıulak", plantingYear: 2013, createdAt: timestamp, updatedAt: timestamp },
+      { id: "tree-1-4", parcelId: "parcel-1", treeNumber: "KY-T04", variety: "Ayvalık", plantingYear: 2015, createdAt: timestamp, updatedAt: timestamp },
+      { id: "tree-1-5", parcelId: "parcel-1", treeNumber: "KY-T05", variety: "Sarıulak", plantingYear: 2012, createdAt: timestamp, updatedAt: timestamp, notes: "Gövde çevresi sağlıklı." },
+      // parcel-2
+      { id: "tree-2-1", parcelId: "parcel-2", treeNumber: "DK-T01", variety: "Ayvalık", plantingYear: 2014, createdAt: timestamp, updatedAt: timestamp },
+      { id: "tree-2-2", parcelId: "parcel-2", treeNumber: "DK-T02", variety: "Ayvalık", plantingYear: 2014, createdAt: timestamp, updatedAt: timestamp },
+      { id: "tree-2-3", parcelId: "parcel-2", treeNumber: "DK-T03", variety: "Ayvalık", plantingYear: 2014, createdAt: timestamp, updatedAt: timestamp, notes: "Nemli toprağı seviyor." },
+      { id: "tree-2-4", parcelId: "parcel-2", treeNumber: "DK-T04", variety: "Ayvalık", plantingYear: 2015, createdAt: timestamp, updatedAt: timestamp },
+      // parcel-3
+      { id: "tree-3-1", parcelId: "parcel-3", treeNumber: "TB-T01", variety: "Gemlik", plantingYear: 2008, createdAt: timestamp, updatedAt: timestamp, notes: "En yaşlı ve anıt ağaç statüsünde verimli." },
+      { id: "tree-3-2", parcelId: "parcel-3", treeNumber: "TB-T02", variety: "Gemlik", plantingYear: 2008, createdAt: timestamp, updatedAt: timestamp, notes: "Halkalı leke geçmişi var, yakından izlenmeli." },
+      { id: "tree-3-3", parcelId: "parcel-3", treeNumber: "TB-T03", variety: "Gemlik", plantingYear: 2009, createdAt: timestamp, updatedAt: timestamp }
+    ];
+
+    // 3. Observations
+    this.data.observations = [
+      {
+        id: "obs-1",
+        parcelId: "parcel-1",
+        treeId: "tree-1-2",
+        observerId: "user-admin-default",
+        observationDate: "2026-06-15",
+        notes: "KY-T02 ağacının altındaki damlama memesi tıkanmıştı. Temizlenerek su akışı yeniden sağlandı. Yapraklarda hafif sararma başlangıcı var.",
+        createdAt: timestamp
+      },
+      {
+        id: "obs-2",
+        parcelId: "parcel-3",
+        treeId: "tree-3-2",
+        observerId: "user-admin-default",
+        observationDate: "2026-06-20",
+        notes: "Tepebağ parselindeki Gemlik çeşidi ağaçta dairesel gri halkalar (Halkalı Leke belirtileri) gözlendi. Bakırlı ilaç (Bordo bulamacı) uygulaması ilk serin günde yapılacaktır.",
+        createdAt: timestamp
+      },
+      {
+        id: "obs-3",
+        parcelId: "parcel-2",
+        treeId: "tree-2-3",
+        observerId: "user-admin-default",
+        observationDate: "2026-06-25",
+        notes: "Zeytin sineği popülasyon tespiti için asılan feromonlu sarı yapışkan tuzaklar incelendi. Tuzak başına ortalama 1 adet sinek sayıldı, henüz mücadele eşiğinin altında.",
+        createdAt: timestamp
+      }
+    ];
+
+    // 4. Inventory items
+    this.data.inventory = [
+      {
+        id: "inv-1",
+        categoryId: "cat-pesticide",
+        name: "Hektaş Göztaşı (%25 Bakır Sülfat)",
+        brand: "Hektaş",
+        sku: "HEK-GOZ-25",
+        stockQuantity: 25,
+        unit: "Kg",
+        minStockAlert: 10,
+        unitPrice: 150,
+        expiryDate: "2028-12-31",
+        createdAt: timestamp,
+        updatedAt: timestamp
+      },
+      {
+        id: "inv-2",
+        categoryId: "cat-fertilizer",
+        name: "Genta Çinko-Bor Yaprak Gübresi",
+        brand: "Genta",
+        sku: "GEN-ZN-B-5L",
+        stockQuantity: 8,
+        unit: "Litre",
+        minStockAlert: 5,
+        unitPrice: 220,
+        expiryDate: "2027-06-30",
+        createdAt: timestamp,
+        updatedAt: timestamp
+      },
+      {
+        id: "inv-3",
+        categoryId: "cat-biological",
+        name: "Zeytin Sineği Yapışkan Sarı Tuzak",
+        brand: "Koppert",
+        sku: "KOP-YAP-TRAP",
+        stockQuantity: 4,
+        unit: "Adet",
+        minStockAlert: 15,
+        unitPrice: 35,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      },
+      {
+        id: "inv-4",
+        categoryId: "cat-tool",
+        name: "Şarjlı Budama Makası",
+        brand: "Makita",
+        sku: "MAK-BUD-01",
+        stockQuantity: 2,
+        unit: "Adet",
+        minStockAlert: 1,
+        unitPrice: 4500,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }
+    ];
+
+    // 5. WeatherHistory
+    this.data.weatherHistory = [
+      {
+        id: "weather-1",
+        recordDate: "2026-06-26",
+        tempMin: 14,
+        tempMax: 32,
+        humidity: 55,
+        windSpeed: 12,
+        precipitationMm: 0,
+        condition: "Açık ve Güneşli",
+        hasFrostRisk: false,
+        soilTemperature: 22,
+        createdAt: timestamp
+      },
+      {
+        id: "weather-2",
+        recordDate: "2026-06-27",
+        tempMin: 15,
+        tempMax: 31,
+        humidity: 60,
+        windSpeed: 8,
+        precipitationMm: 0,
+        condition: "Açık",
+        hasFrostRisk: false,
+        soilTemperature: 21.5,
+        createdAt: timestamp
+      },
+      {
+        id: "weather-3",
+        recordDate: "2026-06-28",
+        tempMin: 12,
+        tempMax: 28,
+        humidity: 65,
+        windSpeed: 14,
+        precipitationMm: 2.5,
+        condition: "Hafif Sağanak Yağışlı",
+        hasFrostRisk: false,
+        soilTemperature: 20,
+        createdAt: timestamp
+      },
+      {
+        id: "weather-4",
+        recordDate: "2026-06-29",
+        tempMin: 3.5,
+        tempMax: 21,
+        humidity: 75,
+        windSpeed: 18,
+        precipitationMm: 0,
+        condition: "Bulutlu ve Rüzgarlı",
+        hasFrostRisk: true,
+        soilTemperature: 12,
+        createdAt: timestamp
+      },
+      {
+        id: "weather-5",
+        recordDate: "2026-06-30",
+        tempMin: 6.2,
+        tempMax: 24,
+        humidity: 52,
+        windSpeed: 10,
+        precipitationMm: 0,
+        condition: "Parçalı Bulutlu",
+        hasFrostRisk: false,
+        soilTemperature: 15.5,
+        createdAt: timestamp
+      }
+    ];
+
+    // 6. Costs
+    this.data.costs = [
+      {
+        id: "cost-1",
+        parcelId: "parcel-1",
+        category: "Gübreleme",
+        amount: 3500,
+        costDate: "2026-05-10",
+        description: "Kuzey Yamaç parseli için organik taban gübresi alımı ve uygulaması.",
+        createdAt: timestamp
+      },
+      {
+        id: "cost-2",
+        parcelId: "parcel-3",
+        category: "İlaçlama",
+        amount: 1800,
+        costDate: "2026-05-18",
+        description: "Tepebağ parseli bakırlı ilaç uygulaması işçilik ve ilaç maliyeti.",
+        createdAt: timestamp
+      },
+      {
+        id: "cost-3",
+        parcelId: undefined,
+        category: "Yakıt",
+        amount: 1200,
+        costDate: "2026-05-22",
+        description: "Çiftlik traktörü akaryakıt alımı.",
+        createdAt: timestamp
+      }
+    ];
+
+    // 7. Sales
+    this.data.sales = [
+      {
+        id: "sale-1",
+        saleDate: "2026-06-10",
+        buyerName: "Bölgesel Gurme Marketler Zinciri",
+        productType: "Zeytinyağı (Sızma)",
+        quantityKg: 200,
+        unitPrice: 350,
+        totalRevenue: 70000,
+        isOrganikSaglikBrand: true,
+        notes: "Premium 'Organik Sağlık' markalı zeytinyağı satışı.",
+        createdAt: timestamp
+      },
+      {
+        id: "sale-2",
+        saleDate: "2026-06-18",
+        buyerName: "Mersin Tariş Zeytin Kooperatifi",
+        productType: "Yeşil Zeytin (Sarıulak)",
+        quantityKg: 150,
+        unitPrice: 180,
+        totalRevenue: 27000,
+        isOrganikSaglikBrand: false,
+        notes: "Sofralık Sarıulak zeytin teslimi.",
+        createdAt: timestamp
+      }
+    ];
+
+    // 8. Harvest
+    this.data.harvest = [
+      {
+        id: "harv-1",
+        parcelId: "parcel-1",
+        harvestDate: "2025-11-15",
+        quantityKg: 1200,
+        qualityGrade: "Sızmalık Elit",
+        personnelCount: 6,
+        laborCost: 4500,
+        transportCost: 800,
+        otherCosts: 1200,
+        totalCost: 6500,
+        notes: "Sarıulak çeşidi el ile hasat edildi.",
+        createdAt: timestamp
+      },
+      {
+        id: "harv-2",
+        parcelId: "parcel-2",
+        harvestDate: "2025-11-20",
+        quantityKg: 900,
+        qualityGrade: "Birinci Kalite Sofralık",
+        personnelCount: 4,
+        laborCost: 3200,
+        transportCost: 600,
+        otherCosts: 900,
+        totalCost: 4700,
+        notes: "Düşük asit oranına sahip sofralık Ayvalık zeytini.",
+        createdAt: timestamp
+      }
+    ];
+
+    // 9. Notifications
+    this.data.notifications = [
+      {
+        id: "notif-1",
+        title: "Kritik Stok Uyarısı",
+        message: "'Zeytin Sineği Yapışkan Sarı Tuzak' stoğunuz 4 adet kalmıştır. Güvenli sınır: 15 Adet.",
+        type: "LowStock",
+        isRead: false,
+        createdAt: timestamp
+      },
+      {
+        id: "notif-2",
+        title: "Düşük Sıcaklık ve Don Uyarısı",
+        message: "Meteorolojik tahminlere göre Değirmençay mevkisinde sıcaklık 3.5°C seviyesine inmiştir, don riski mevcuttur.",
+        type: "Frost",
+        isRead: false,
+        createdAt: timestamp
+      }
+    ];
+
+    // 10. AI recommendations (History)
+    this.data.aiRecommendations = [
+      {
+        id: "rec-1",
+        parcelId: "parcel-3",
+        recommendationType: "Hastalık",
+        content: `### Tepebağ Eski Bahçe - Hastalık Teşhisi ve Eylem Planı\n\n**Bulgular:** Gözlem kayıtlarına göre Gemlik çeşidindeki yaşlı zeytin ağaçlarında (özellikle TB-T02 no'lu ağaç) dairesel gri halkalar halinde **Halkalı Leke Hastalığı** (Spilocaea oleagina) belirtileri izlenmiştir.\n\n**Çözüm Önerileri:**\n1. **İlaçlama Zamanı:** Havadaki nispi nemin %60'ın üzerinde olduğu ve havaların serin gittiği bu dönem, hastalığın sporlanması için idealdir. Rüzgarsız ve yağışsız ilk gün ilkbahar koruyucu ilaçlaması yapılmalıdır.\n2. **Kullanılacak İlaç:** Envanterinizde mevcut olan **Hektaş Göztaşı (%25 Bakır Sülfat)** ile %1'lik Bordo Bulamacı hazırlayın. 100 litre suya 1 kg göztaşı ve 500 gr sönmüş kireç oranında karışım hazırlayarak ağaçların yaprakları tamamen ıslanacak şekilde (pülverize) uygulayın.\n3. **Kültürel Önlemler:** Ağaç içi havalandırmayı arttırmak için zayıf ve hastalıklı dalları bir sonraki budamada temizleyin ve dökülen yaprakları toplayıp imha edin.\n\n*Yapay Zeka Danışman Güven Skoru: %92*`,
+        confidenceScore: 0.92,
+        usedDocumentsCount: 1,
+        usedObservationsCount: 1,
+        usedWeatherCount: 5,
+        usedInventoryCount: 4,
+        createdDate: timestamp
+      }
+    ];
+
+    // 11. Uploaded Documents
+    this.data.uploadedDocuments = [
+      {
+        id: "doc-1",
+        fileName: "Değirmençay Zeytin Hastalıkları Rehberi.txt",
+        fileType: "txt",
+        fileSize: 1250,
+        uploadedBy: "user-admin-default",
+        uploadDate: timestamp,
+        summary: "Mersin Değirmençay yöresindeki zeytinliklerde görülen halkalı leke, zeytin sineği ve dal kanseri hastalıklarının teşhisi, kültürel önlemleri ve bakırlı ilaçlama rehberi."
+      },
+      {
+        id: "doc-2",
+        fileName: "Toroslar Don Önleme Metotları.txt",
+        fileType: "txt",
+        fileSize: 1680,
+        uploadedBy: "user-admin-default",
+        uploadDate: timestamp,
+        summary: "Toroslar eteklerindeki mikro-klimada bahar ayazları ve kış donlarına karşı yağmurlama sulama, dumanlama ve rüzgar perdeleri yardımıyla zeytin çiçeklerinin korunması."
+      }
+    ];
+
+    // 12. Vector Chunks
+    const makeEmbedding = () => Array.from({ length: 768 }, () => parseFloat((Math.random() * 0.1 - 0.05).toFixed(4)));
+    this.data.vectorChunks = [
+      {
+        id: "chunk-1",
+        documentId: "doc-1",
+        chunkIndex: 0,
+        content: "Zeytin halkalı lekesi (Spilocaea oleagina) yapraklarda dairesel gri ve koyu yeşil lekeler oluşturarak erken yaprak dökümüne ve dolaylı olarak ciddi verim kayıplarına yol açar. Mersin Değirmençay mevkisinde ilkbahar yağışları öncesinde koruyucu olarak bakır sülfat (Göztaşı) veya hazır bakırlı preparatlar uygulanmalıdır. Dozaj olarak %1'lik Bordo Bulamacı önerilir.",
+        embeddings: makeEmbedding()
+      },
+      {
+        id: "chunk-2",
+        documentId: "doc-1",
+        chunkIndex: 1,
+        content: "Zeytin sineği (Bactrocera oleae), zeytin danelerine yumurta bırakarak kurtlanmaya ve asitlik oranının yükselmesine yol açar. Mücadelede feromonlu sarı yapışkan tuzaklar popülasyon izlemek için çok etkilidir. Tuzak başına 4-5 adet sinek tespit edildiğinde ilaçlı mücadeleye geçilmelidir. Envanterdeki tuzaklar ağaçların güneydoğu yönüne asılmalıdır.",
+        embeddings: makeEmbedding()
+      },
+      {
+        id: "chunk-3",
+        documentId: "doc-2",
+        chunkIndex: 0,
+        content: "Mersin Toroslar bölgesinde kışın veya bahar başlangıcında kuzeyden esen soğuk rüzgarlarla ani gece donları (ayaz) oluşabilir. Don zararı özellikle çiçeklenme veya sürgün verme dönemindeki zeytinlikleri etkiler. Donu önlemek için gece yarısı damlama sulama sistema kesintisiz çalıştırılarak suyun donarken yaydığı ısı enerjisinden faydalanılır.",
+        embeddings: makeEmbedding()
+      },
+      {
+        id: "chunk-4",
+        documentId: "doc-2",
+        chunkIndex: 1,
+        content: "Bahçede saman, kuru ot ve yaş odunların kontrollü bir şekilde yakılmasıyla duman perdesi oluşturmak, soğuk havanın tabana çökmesini engelleyerek sıcaklığı 1-2 derece koruyabilir. Ayrıca rüzgar kıran çitler veya rüzgar makineleri de soğuk hava dalgalarını dağıtmakta etkilidir.",
+        embeddings: makeEmbedding()
+      }
+    ];
+
+    // 13. Activity logs
+    this.data.activityLogs = [
+      {
+        id: "log-1",
+        userId: "user-admin-default",
+        action: "DATABASE_SEED",
+        details: "Mersin Değirmençay yöresi zeytin tarımı örnek veritabanı başarıyla kuruldu.",
+        createdAt: timestamp
+      },
+      {
+        id: "log-2",
+        userId: "user-admin-default",
+        action: "LOGIN_SUCCESS",
+        details: "Çiftlik yöneticisi başarıyla oturum açtı.",
+        createdAt: timestamp
+      }
+    ];
   }
 
   /**

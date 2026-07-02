@@ -21,8 +21,16 @@ export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem("agri_token"));
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    const saved = localStorage.getItem("agri_active_tab");
+    return (saved as ActiveTab) || "dashboard";
+  });
   const [initializing, setInitializing] = useState(true);
+
+  const handleActiveTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    localStorage.setItem("agri_active_tab", tab);
+  };
 
   // Validate session on load
   useEffect(() => {
@@ -82,9 +90,13 @@ export default function App() {
       console.error(err);
     } finally {
       localStorage.removeItem("agri_token");
+      localStorage.removeItem("agri_active_tab");
+      localStorage.removeItem("agri_selected_parcel_id");
+      localStorage.removeItem("agri_current_report");
       setToken(null);
       setUser(null);
       setPermissions([]);
+      setActiveTab("dashboard");
     }
   };
 
@@ -106,7 +118,7 @@ export default function App() {
       {/* Navigation Sidebar */}
       <Sidebar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={handleActiveTabChange} 
         user={user} 
         onLogout={handleLogout} 
       />

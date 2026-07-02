@@ -15,7 +15,8 @@ import {
   HelpCircle,
   FileText,
   Sparkles,
-  MessageSquare
+  MessageSquare,
+  Upload
 } from "lucide-react";
 import { UploadedDocument } from "../types";
 
@@ -30,6 +31,62 @@ export default function DocumentHub() {
   const [fileType, setFileType] = useState("text/plain");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [fileFeedback, setFileFeedback] = useState("");
+  const [parsingFile, setParsingFile] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError("");
+    setFileFeedback("");
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const allowedExtensions = ["txt", "md", "pdf", "docx", "doc"];
+    if (!allowedExtensions.includes(extension || "")) {
+      setError("Yalnızca .txt, .md, .pdf, .doc ve .docx uzantılı dosyalar desteklenmektedir.");
+      return;
+    }
+
+    setParsingFile(true);
+    setFileFeedback("Dosya yükleniyor ve içeriği yapay zeka motoru ile analiz ediliyor, lütfen bekleyin...");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const headers = {
+        "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`
+      };
+
+      const res = await fetch("/api/ai/documents/parse", {
+        method: "POST",
+        headers,
+        body: formData
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Dosya işlenirken sunucuda bir hata oluştu.");
+      }
+
+      const data = await res.json();
+      setTextContent(data.text);
+      setFileName(data.fileName);
+      
+      let mappedType = "text/plain";
+      if (extension === "md") mappedType = "text/markdown";
+      else if (extension === "pdf") mappedType = "application/pdf";
+      setFileType(mappedType);
+
+      setFileFeedback(`"${file.name}" başarıyla çözümlendi! Dosya içerisindeki tüm metin (${data.text.length} karakter) aşağıdaki "Rehber Metin İçeriği" alanına otomatik olarak aktarıldı. Bilgileri inceleyip ardından kaydetme butonuna basabilirsiniz.`);
+    } catch (err: any) {
+      console.error(err);
+      setError(`Dosya okunurken hata oluştu: ${err.message || err}`);
+      setFileFeedback("");
+    } finally {
+      setParsingFile(false);
+    }
+  };
 
   // Chatbot Assistant State
   const [chatQuery, setChatQuery] = useState("");
@@ -90,6 +147,7 @@ export default function DocumentHub() {
 
       setFileName("");
       setTextContent("");
+      setFileFeedback("");
       setShowUploadForm(false);
       fetchDocuments();
     } catch (err: any) {
@@ -145,7 +203,7 @@ export default function DocumentHub() {
         throw new Error(data.error || "Yapay zeka yanıt üretemedi.");
       }
 
-      setChatMessages((prev) => [...prev, { sender: "bot", text: data.response }]);
+      setChatMessages((prev) => [...prev, { sender: "bot", text: data.response || data.text }]);
     } catch (err: any) {
       setChatMessages((prev) => [...prev, { sender: "bot", text: `Yanıt alınırken hata oluştu: ${err.message}` }]);
     } finally {
@@ -174,7 +232,13 @@ export default function DocumentHub() {
         </div>
         <button
           id="add-document-btn"
-          onClick={() => setShowUploadForm(!showUploadForm)}
+          onClick={() => {
+            setShowUploadForm(!showUploadForm);
+            setFileFeedback("");
+            setFileName("");
+            setTextContent("");
+            setError("");
+          }}
           className="self-start flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-[#556b2f] hover:bg-[#415324] rounded-2xl transition-all shadow-sm"
         >
           {showUploadForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -185,6 +249,46 @@ export default function DocumentHub() {
       {showUploadForm && (
         <form onSubmit={handleUploadDocument} className="bg-[#fcfdfc] p-6 rounded-3xl border border-[#e2e8df] space-y-4 max-w-3xl animate-slide-up shadow-sm">
           <h2 className="text-md font-bold text-[#1a2416]">RAG Vektör Dizini İçin Doküman Ekle</h2>
+          
+          {/* Drag & Drop File Selector Zone */}
+          <div className={`border-2 border-dashed rounded-2xl p-5 bg-[#fcfdfc] flex flex-col items-center justify-center text-center transition-colors relative group ${
+            parsingFile ? "border-[#556b2f] bg-[#f4f7f3]" : "border-[#cdd4ca] hover:border-[#556b2f]/60 cursor-pointer"
+          }`}>
+            {!parsingFile && (
+              <input 
+                type="file" 
+                accept=".txt,.md,.pdf,.docx,.doc"
+                onChange={handleFileChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+            )}
+            <div className={`p-3 rounded-2xl mb-2 transition-transform duration-200 ${
+              parsingFile ? "bg-[#556b2f] text-white animate-bounce" : "bg-[#f0f4ee] text-[#556b2f] group-hover:scale-105"
+            }`}>
+              {parsingFile ? (
+                <RefreshCw className="h-5 w-5 animate-spin" />
+              ) : (
+                <Upload className="h-5 w-5" />
+              )}
+            </div>
+            <p className="text-xs font-bold text-[#1a2416]">
+              {parsingFile ? "Dosya Çözümleniyor, Lütfen Bekleyin..." : "Bilgisayarınızdan bir dosya seçin veya buraya sürükleyin"}
+            </p>
+            <p className="text-[10px] text-[#80907a] mt-1">
+              {parsingFile ? "Yapay zeka motoru dosyadaki tüm metni çıkartıyor..." : "Desteklenen formatlar: .txt, .md, .pdf, .docx, .doc"}
+            </p>
+          </div>
+
+          {fileFeedback && (
+            <div className="text-xs bg-[#f4f7f3] text-[#2d3a2a] border border-[#dee5db] p-3 rounded-2xl flex items-start gap-2 animate-fade-in shadow-sm">
+              <Sparkles className="h-4 w-4 text-[#556b2f] shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-[#556b2f]">Dosya Bilgisi:</p>
+                <p className="text-[#5a6a55] mt-0.5">{fileFeedback}</p>
+              </div>
+            </div>
+          )}
+
           {error && <p className="text-xs font-bold text-red-600 bg-red-50 p-2.5 rounded-xl">{error}</p>}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -277,31 +381,55 @@ export default function DocumentHub() {
         </div>
 
         {/* Right: RAG Conversation Chat-bot */}
-        <div className="lg:col-span-2 bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl shadow-sm flex flex-col h-[550px]">
+        <div className="lg:col-span-2 bg-white border border-[#e2e8df] rounded-3xl shadow-sm flex flex-col h-[550px] overflow-hidden">
           {/* Chat Header */}
           <div className="px-6 py-4 border-b border-[#f0f4ee] flex items-center justify-between bg-[#fcfdfc] rounded-t-3xl">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-[#556b2f]" />
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 bg-[#f0f4ee] text-[#556b2f] rounded-xl">
+                <MessageSquare className="h-5 w-5" />
+              </div>
               <div>
                 <h2 className="font-bold text-base text-[#1a2416]">AgriTech RAG Tarım Asistanı</h2>
-                <p className="text-[10px] text-[#80907a] mt-0.5">Yüklediğiniz zirai dokümanlara dayanarak anlık akıllı sohbet</p>
+                <p className="text-[10px] text-[#80907a] mt-0.5">Yüklediğiniz zirai dökümanlara göre çalışan akıllı danışman</p>
               </div>
             </div>
-            <span className="h-2 w-2 bg-emerald-500 rounded-full animate-pulse" />
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-[#556b2f] bg-[#f0f4ee] px-2 py-0.5 rounded-full">RAG Aktif</span>
+              <span className="h-2 w-2 bg-emerald-500 rounded-full animate-pulse" />
+            </div>
           </div>
 
           {/* Chat Messages Log */}
-          <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-[#fcfdfc]">
+          <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-[#f4f7f3]">
+            {/* Guide Info Banner */}
+            <div className="bg-gradient-to-r from-white to-[#fcfdfc] border border-[#dee5db] rounded-2xl p-4 text-xs text-[#2d3a2a] leading-relaxed shadow-sm space-y-1.5">
+              <div className="flex items-center gap-2 text-[#556b2f] font-bold">
+                <Sparkles className="h-4 w-4" />
+                <span>RAG Bilgi Tabanı Nasıl Çalışır?</span>
+              </div>
+              <p className="text-[11px] text-[#5a6a55]">
+                Sol tarafa ekleyeceğiniz her zirai kitapçık veya ilaç prospektüsü akıllı vektör dizinine dönüştürülür. Sağdaki asistanımız, sorduğunuz soruları yanıtlarken <strong>doğrudan yüklediğiniz bu belgeleri</strong> referans alır.
+              </p>
+              {documents.length === 0 && (
+                <div className="text-[11px] bg-amber-50 text-amber-900 border border-amber-200/60 p-2.5 rounded-xl font-medium mt-2 flex items-start gap-1.5">
+                  <HelpCircle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Henüz doküman eklenmedi:</strong> Sol üstteki <strong>"Yeni Rehber Kitap Ekle"</strong> butonunu kullanarak kendi tarım kılavuzlarınızı sisteme ekleyebilirsiniz. Şu an asistan zeytin yetiştiriciliği konusunda genel bilgi birikimi ile yanıt vermektedir.
+                  </span>
+                </div>
+              )}
+            </div>
+
             {chatMessages.map((msg, index) => {
               const isBot = msg.sender === "bot";
               return (
                 <div key={index} className={`flex ${isBot ? "justify-start" : "justify-end"} animate-fade-in`}>
-                  <div className={`max-w-[80%] rounded-2xl p-4 text-xs leading-relaxed space-y-2 shadow-sm ${
+                  <div className={`max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed space-y-2 shadow-sm ${
                     isBot 
-                      ? "bg-[#f7f9f6] text-[#2d3a2a] rounded-bl-none border border-[#e2e8df]" 
+                      ? "bg-white text-[#2d3a2a] rounded-bl-none border border-[#dee5db]" 
                       : "bg-[#556b2f] text-white rounded-br-none"
                   }`}>
-                    <span className="block text-[9px] font-bold tracking-wider uppercase opacity-60 font-mono mb-1">
+                    <span className={`block text-[9px] font-bold tracking-wider uppercase opacity-65 font-mono mb-1 ${isBot ? "text-[#5a6a55]" : "text-[#d6e0d2]"}`}>
                       {isBot ? "Mersin AgriTech" : "Kullanıcı"}
                     </span>
                     <div className="markdown-body prose max-w-none text-xs leading-relaxed">
@@ -314,7 +442,7 @@ export default function DocumentHub() {
 
             {chatLoading && (
               <div className="flex justify-start">
-                <div className="bg-[#f7f9f6] border border-[#e2e8df] rounded-2xl rounded-bl-none p-4 flex items-center gap-2">
+                <div className="bg-white border border-[#dee5db] rounded-2xl rounded-bl-none p-4 flex items-center gap-2 shadow-sm">
                   <RefreshCw className="h-3.5 w-3.5 text-[#556b2f] animate-spin" />
                   <span className="text-[11px] font-semibold text-[#5a6a55]">Gemini tescilli zirai veritabanını tarıyor...</span>
                 </div>
