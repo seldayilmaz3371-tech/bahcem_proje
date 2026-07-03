@@ -252,7 +252,8 @@ export class AIService {
 
   /**
    * Generates a fully customized context-aware agricultural decision-support recommendation
-   * for a specific plot, integrating sensor data, live weather data, inventory stocks, and RAG articles.
+   * for a specific plot, integrating sensor data, live weather data, inventory stocks, RAG
+   * articles, and — optionally — up to 3 uploaded diagnosis photos.
    *
    * Weather grounding: this method combines two explicitly labeled sources —
    * (1) locally logged historical weather records ("Yerel Proje Verisi"), and
@@ -260,10 +261,27 @@ export class AIService {
    * ("Harici Web Verisi"). If the live API is unavailable, the prompt states
    * this explicitly rather than silently omitting it or fabricating values,
    * and the model is instructed to disclose which source(s) it relied on.
+   *
+   * Photo grounding: when diagnosis photos are supplied, the model is
+   * explicitly instructed to check the RAG document pool FIRST for a
+   * matching treatment before falling back to its own general knowledge —
+   * and to disclose in the generated report which of the two was actually
+   * used, satisfying the project's "never hallucinate, always distinguish
+   * sources" requirement. Uploaded photos are persisted permanently using
+   * the same Photo/Observation infrastructure as Saha Gözlemleri uploads
+   * (via a lightweight, auto-generated supporting Observation record), so
+   * they also appear in the parcel's observation history.
+   *
+   * @param parcelId Target parcel identifier
+   * @param userQuery Optional free-text question from the farmer
+   * @param photoFiles Optional array of up to 3 diagnosis photos (raw buffer + MIME type)
+   * @param requestedByUserId ID of the user submitting the request, required to persist photos
    */
   public async generateParcelRecommendation(
     parcelId: string,
-    userQuery?: string
+    userQuery?: string,
+    photoFiles?: Array<{ buffer: Buffer; mimeType: string }>,
+    requestedByUserId?: string
   ): Promise<AIRecommendation | null> {
     try {
       // 1. Retrieve plot details
@@ -306,14 +324,79 @@ export class AIService {
         ? stockAlerts.map((i) => `- ${i.name} (Stokta: ${i.stockQuantity} ${i.unit}, Kritik Seviye: ${i.minStockAlert} ${i.unit})`).join("\n")
         : "Tüm gübre ve ilaç stok seviyeleri güvenli eşiğin üzerindedir.";
 
-      // 5. Query RAG context using similarity vectors
-      const querySearchTerm = userQuery || `Mersin Toroslar Değirmençay zeytin yetiştiriciliği sulama gübreleme hastalık koruma`;
+      const hasPhotos = !!photoFiles && photoFiles.length > 0;
+
+      // 5. Query RAG context using similarity vectors. When diagnosis
+      // photos are attached, the search term is broadened toward
+      // disease/pest treatment so the retrieved chunks are the most
+      // relevant possible grounding source for a visual diagnosis.
+      const querySearchTerm = userQuery
+        ? userQuery
+        : hasPhotos
+          ? "zeytin hastalık zararlı teşhis ilaç tedavi bakır sülfat"
+          : "Mersin Toroslar Değirmençay zeytin yetiştiriciliği sulama gübreleme hastalık koruma";
       const similarChunks = await searchSimilarChunks(querySearchTerm, 3);
       const ragContext = similarChunks.length > 0
         ? similarChunks.map((m, idx) => `[RAG Kaynak ${idx + 1} - Güven Skoru: ${(m.score * 100).toFixed(1)}%]: ${m.chunk.content}`).join("\n")
         : "Bilgi deposunda zeytin tarımıyla ilgili eşleşen makale bulunamadı.";
 
-      // 6. Build highly customized expert prompt
+      // 5b. If diagnosis photos were attached, persist them permanently
+      // through the existing Observation/Photo infrastructure (identical
+      // to Saha Gözlemleri uploads) so they also appear in this parcel's
+      // observation history and become eligible for Fotoğraflı Gelişim
+      // Analizi later. A lightweight, auto-generated Observation record
+      // is created to satisfy Photo's required observationId link. A
+      // failure to persist a given photo is logged and skipped rather
+      // than aborting the whole recommendation.
+      let photosUsedCount = 0;
+      if (hasPhotos && requestedByUserId) {
+        const photoObservation = await observationRepository.create({
+          parcelId,
+          observerId: requestedByUserId,
+          observationDate: new Date().toISOString(),
+          activityType: "Genel Gözlem",
+          notes: `Yapay Zeka Karar Destek raporu için yüklenen teşhis fotoğrafı.${userQuery ? ` Soru: "${userQuery}"` : ""}`,
+          createdAt: new Date().toISOString(),
+        });
+
+        for (const file of photoFiles!) {
+          try {
+            const dataUrl = `data:${file.mimeType};base64,${file.buffer.toString("base64")}`;
+            const saved = photoStorageService.saveNewPhoto(dataUrl);
+            await photoRepository.create({
+              id: saved.photoId,
+              observationId: photoObservation.id,
+              originalUrl: saved.relativeUrl,
+              thumbnailUrl: saved.relativeUrl,
+              takenAt: new Date().toISOString(),
+              fileSize: saved.fileSizeBytes,
+              createdAt: new Date().toISOString(),
+            });
+            photosUsedCount++;
+          } catch (photoError) {
+            logger.error("AI", "Teşhis fotoğrafı kalıcı olarak kaydedilemedi, atlanıyor.", photoError);
+          }
+        }
+      }
+
+      // 6. Build the expert prompt. When diagnosis photos are present, an
+      // additional section instructs the model to analyze the attached
+      // images and to explicitly prioritize the RAG document pool for any
+      // treatment recommendation before falling back to its own general
+      // knowledge — and to disclose which of the two was actually used.
+      const photoInstructionBlock = hasPhotos
+        ? `
+=== YÜKLENEN TEŞHİS FOTOĞRAFLARI ===
+Çiftçi bu parsele ait ${photosUsedCount} adet fotoğraf yükledi. Bu fotoğrafları dikkatlice incele: yapraklarda leke/sararma, meyvede zararlı izi, genel bitki sağlığı gibi görsel olarak tespit edilebilecek belirtileri belirle.
+
+ÖNEMLİ TEŞHİS KURALI (MUTLAKA UYGULA):
+1. Fotoğrafta bir hastalık/zararlı belirtisi tespit edersen, ÖNCE yukarıdaki "BİLGİ DEPOSU VE RAG KAYNAKLARINDAN ALINAN BİLGİLER" bölümünde bu belirtiyle eşleşen bir tedavi/ilaç bilgisi olup olmadığına bak.
+2. Eşleşme BULURSAN: önerini bu dokümana dayandır ve raporunda açıkça "KAYNAK: RAG Doküman Havuzu (yüklediğiniz döküman)" yaz.
+3. Eşleşme BULAMAZSAN: kendi genel tarımsal bilgini kullanarak teşhis ve öneri yap, ama raporunda MUTLAKA açıkça "KAYNAK: Gemini Genel Bilgisi (Doküman Havuzunda bu teşhisle eşleşen bir kayıt bulunamadı)" yaz. Bunu asla RAG dokümanından geliyormuş gibi sunma.
+4. Fotoğrafta net bir belirti göremiyorsan, bunu dürüstçe belirt; var olmayan bir hastalık uydurma.
+`
+        : "";
+
       const prompt = `
 Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış yapay zeka destekli bir Tarım Danışmanısın (Mersin Tarım Asistanı).
 Aşağıdaki verilere dayanarak çiftçiye özel, bilimsel, pratik ve bölgesel (Toroslar mikro-klimasına uygun) tavsiyeler üreteceksin.
@@ -339,27 +422,47 @@ ${inventoryContext}
 
 === BİLGİ DEPOSU VE RAG KAYNAKLARINDAN ALINAN BİLGİLER (KAYNAK: RAG - Yüklenen Dokümanlar) ===
 ${ragContext}
-
+${photoInstructionBlock}
 === KULLANICI SORUSU ===
 "${userQuery || "Bu parsel için genel durum analizi ve gelecek haftaki tarımsal faaliyet planı nedir?"}"
 
 Senden istenenler:
-1. **Analiz ve Teşhis**: Gözlemlerde belirtilen hastalık, zararlı (örn. Zeytin sineği, halkalı leke, dökülme) veya besin eksikliklerini değerlendir.
+1. **Analiz ve Teşhis**: Gözlemlerde ve${hasPhotos ? " yüklenen fotoğraflarda" : ""} belirtilen hastalık, zararlı (örn. Zeytin sineği, halkalı leke, dökülme) veya besin eksikliklerini değerlendir.
 2. **Eylem Planı**: Sulama, gübreleme, ilaçlama veya budama için somut tavsiyeler ver. Don riski değerlendirmeni MUTLAKA "METEOROLOJİ KAYNAK 2" bölümündeki canlı tahmine dayandır (eğer o bölüm veri alınamadığını belirtiyorsa, bunu açıkça söyle ve sadece geçmiş kayıtlara dayandığını belirt). Don riski varsa, Toroslar/Değirmençay bölgesinde don önleme için yapılacakları vurgula.
 3. **Uygulama Dozajı**: Envanterde bulunan ilaç ve gübrelerin, parsel büyüklüğüne ve ağaç sayısına göre doğru dozajlarını hesapla.
 4. **Hasat Öngörüsü**: Eğer hasat dönemi yaklaşıyorsa, son ilaçlama ile hasat arasındaki bekleme sürelerine (PH) dikkat çek.
-5. **Kaynak Beyanı**: Yanıtının sonunda kısa bir "Kullanılan Kaynaklar" notu ekle; hangi bölümler için Yerel Proje Verisi, hangi bölümler için Harici Web Verisi (Open-Meteo) ve hangi bölümler için RAG dokümanlarını kullandığını belirt.
+5. **Kaynak Beyanı**: Yanıtının sonunda kısa bir "Kullanılan Kaynaklar" notu ekle; hangi bölümler için Yerel Proje Verisi, hangi bölümler için Harici Web Verisi (Open-Meteo), hangi bölümler için RAG dokümanlarını${hasPhotos ? " ve fotoğraf analizi için hangi kaynağı (RAG veya Gemini genel bilgisi)" : ""} kullandığını belirt.
 
 Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi bir Türkçe tonuyla yaz.
 `;
 
       const client = getGeminiClient();
-      const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-      });
 
-      if (!response.text) {
+      // When diagnosis photos are attached, send a multimodal request
+      // (text + inline image data). Otherwise, behavior is unchanged: a
+      // pure text-generation call, exactly as before this feature existed.
+      let responseText: string | undefined;
+      if (hasPhotos) {
+        const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [
+          { text: prompt },
+        ];
+        for (const file of photoFiles!) {
+          parts.push({ inlineData: { data: file.buffer.toString("base64"), mimeType: file.mimeType } });
+        }
+        const response = await client.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: parts,
+        });
+        responseText = response.text;
+      } else {
+        const response = await client.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+        });
+        responseText = response.text;
+      }
+
+      if (!responseText) {
         throw new Error("Yapay zeka asistanından boş bir cevap döndü.");
       }
 
@@ -373,6 +476,13 @@ Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi
       if (!liveWeather.available) {
         score = Math.max(0.5, score - 0.1);
       }
+      // Photo-based diagnoses without any matching RAG document are
+      // inherently less certain than a text-grounded recommendation, since
+      // the visual diagnosis then relies solely on the model's general
+      // knowledge rather than the farmer's own reference material.
+      if (hasPhotos && similarChunks.length === 0) {
+        score = Math.max(0.5, score - 0.15);
+      }
 
       // 8. Create recommendation record in DB. usedWeatherCount reflects the
       // combined number of weather data points (local historical + live
@@ -380,8 +490,8 @@ Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi
       const timestamp = new Date().toISOString();
       const recommendation = await aiRecommendationRepository.create({
         parcelId,
-        recommendationType: "Genel",
-        content: response.text.trim(),
+        recommendationType: hasPhotos ? "Hastalık" : "Genel",
+        content: responseText.trim(),
         confidenceScore: parseFloat(score.toFixed(2)),
         usedDocumentsCount: similarChunks.length,
         usedObservationsCount: parcelObservations.length,
@@ -392,7 +502,7 @@ Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi
 
       logger.info(
         "AI",
-        `Generated customized expert advisory report for parcel: '${parcel.name}'. Canlı hava durumu kullanıldı: ${liveWeather.available ? "EVET" : "HAYIR"}.`
+        `Generated customized expert advisory report for parcel: '${parcel.name}'. Canlı hava durumu kullanıldı: ${liveWeather.available ? "EVET" : "HAYIR"}. Teşhis fotoğrafı sayısı: ${photosUsedCount}.`
       );
       return recommendation;
     } catch (error) {

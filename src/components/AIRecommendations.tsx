@@ -15,9 +15,14 @@ import {
   HelpCircle,
   Clock,
   ChevronRight,
-  Download
+  Download,
+  Camera,
+  Image as ImageIcon,
+  X
 } from "lucide-react";
 import { Parcel, AIRecommendation } from "../types";
+
+const MAX_DIAGNOSIS_PHOTOS = 3;
 
 export default function AIRecommendations() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
@@ -25,6 +30,13 @@ export default function AIRecommendations() {
     return localStorage.getItem("agri_selected_parcel_id") || "";
   });
   const [userQuery, setUserQuery] = useState("");
+
+  // Up to MAX_DIAGNOSIS_PHOTOS diagnosis photos attached to the next
+  // report request. photoFiles holds the actual File objects sent to the
+  // server; photoPreviews holds parallel local base64 previews only (never
+  // sent to the server — the server receives the raw files via FormData).
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   
   const [generating, setGenerating] = useState(false);
   const [currentReport, setCurrentReport] = useState<AIRecommendation | null>(() => {
@@ -104,6 +116,29 @@ export default function AIRecommendations() {
     }
   }, [selectedParcelId]);
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // Allow re-selecting the same file consecutively
+    if (!file) return;
+
+    if (photoFiles.length >= MAX_DIAGNOSIS_PHOTOS) {
+      setError(`En fazla ${MAX_DIAGNOSIS_PHOTOS} teşhis fotoğrafı ekleyebilirsiniz.`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPhotoFiles((prev) => [...prev, file]);
+      setPhotoPreviews((prev) => [...prev, reader.result as string]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setPhotoFiles((prev) => prev.filter((_, i) => i !== index));
+    setPhotoPreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleGenerateReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedParcelId) {
@@ -116,17 +151,24 @@ export default function AIRecommendations() {
     saveAndSetCurrentReport(null);
 
     try {
-      const headers = { 
-        "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
-        "Content-Type": "application/json"
-      };
+      const resolvedQuery = userQuery || "Mevcut tarla gözlemleri, hava durumu ve stok envanter seviyelerine göre genel tarımsal durum analizi ve gelecek haftalık faaliyet reçetesi üret.";
+
+      // FormData is used unconditionally (even with zero photos) so the
+      // server-side route can rely on a single, consistent multipart
+      // request shape via Multer.
+      const formData = new FormData();
+      formData.append("userQuery", resolvedQuery);
+      photoFiles.forEach((file) => formData.append("photos", file));
 
       const res = await fetch(`/api/ai/recommend/${selectedParcelId}`, {
         method: "POST",
-        headers,
-        body: JSON.stringify({
-          userQuery: userQuery || "Mevcut tarla gözlemleri, hava durumu ve stok envanter seviyelerine göre genel tarımsal durum analizi ve gelecek haftalık faaliyet reçetesi üret."
-        })
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`
+          // Intentionally no Content-Type header: the browser sets the
+          // correct "multipart/form-data; boundary=..." automatically for
+          // FormData bodies. Setting it manually would break the upload.
+        },
+        body: formData
       });
 
       const data = await res.json();
@@ -136,6 +178,8 @@ export default function AIRecommendations() {
 
       saveAndSetCurrentReport(data);
       setUserQuery("");
+      setPhotoFiles([]);
+      setPhotoPreviews([]);
       fetchParcelHistory(selectedParcelId); // Refresh history feed
     } catch (err: any) {
       setError(err.message || "Gemini API bağlantısında veya sunucu işleminde bir sorun oluştu.");
@@ -198,6 +242,69 @@ export default function AIRecommendations() {
                   placeholder="İlaçlama dozajı, don önlemleri, gübreleme takvimi veya verim artırma yolları hakkında sormak istediğiniz konuyu yazın..."
                   className="w-full px-4 py-3 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:ring-2 focus:ring-[#556b2f]"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">
+                  Teşhis Fotoğrafı (İsteğe Bağlı, En Fazla {MAX_DIAGNOSIS_PHOTOS})
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl cursor-pointer transition-all border ${
+                    photoFiles.length >= MAX_DIAGNOSIS_PHOTOS
+                      ? "bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed"
+                      : "bg-[#f0f4ee] hover:bg-[#e4ebdf] text-[#556b2f] border-[#dee5db]"
+                  }`}>
+                    <Camera className="h-3.5 w-3.5" />
+                    <span>Kamerayla Çek</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhotoSelect}
+                      disabled={photoFiles.length >= MAX_DIAGNOSIS_PHOTOS}
+                      className="hidden"
+                    />
+                  </label>
+
+                  <label className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl cursor-pointer transition-all border ${
+                    photoFiles.length >= MAX_DIAGNOSIS_PHOTOS
+                      ? "bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed"
+                      : "bg-[#f0f4ee] hover:bg-[#e4ebdf] text-[#556b2f] border-[#dee5db]"
+                  }`}>
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    <span>Galeriden Seç</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoSelect}
+                      disabled={photoFiles.length >= MAX_DIAGNOSIS_PHOTOS}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {photoPreviews.length > 0 && (
+                  <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                    {photoPreviews.map((preview, index) => (
+                      <div key={index} className="relative h-14 w-14 rounded-lg overflow-hidden border border-[#cdd4ca]">
+                        <img src={preview} alt={`Teşhis fotoğrafı ${index + 1}`} className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(index)}
+                          title="Fotoğrafı kaldır"
+                          aria-label="Fotoğrafı kaldır"
+                          className="absolute top-0 right-0 p-0.5 bg-black/60 hover:bg-red-700 text-white rounded-bl transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-[10px] text-[#80907a] italic mt-1.5 leading-relaxed">
+                  Fotoğraf eklerseniz, Gemini önce Doküman Havuzunuzda (RAG) eşleşen bir tedavi arar; bulamazsa genel bilgisini kullanır ve raporda bunu açıkça belirtir. Fotoğraflar kalıcı olarak Saha Gözlemleri geçmişine de kaydedilir.
+                </p>
               </div>
 
               {/* Suggestions shortcuts */}

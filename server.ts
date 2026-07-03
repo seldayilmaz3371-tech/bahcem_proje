@@ -52,7 +52,10 @@ import mammoth from "mammoth";
 
 const app = express();
 const PORT = 3000;
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB per file
+});
 
 // Enable JSON parsing with large limits to support photo/document payloads
 app.use(express.json({ limit: "15mb" }));
@@ -1040,9 +1043,30 @@ app.delete("/api/ai/documents/:id", requireAuth, asyncHandler(async (req, res) =
 }));
 
 // Generate Contextual AI expert advice for a single parcel
-app.post("/api/ai/recommend/:parcelId", requireAuth, asyncHandler(async (req, res) => {
+// Generate Contextual AI expert advice for a single parcel. Accepts an
+// optional userQuery field and up to 3 diagnosis photos (field name
+// "photos") via multipart/form-data. When photos are attached, the
+// recommendation is grounded in a multimodal (text + vision) analysis
+// that prioritizes the RAG document pool before falling back to the
+// model's general knowledge — see AIService.generateParcelRecommendation.
+app.post("/api/ai/recommend/:parcelId", requireAuth, upload.array("photos", 3), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { userQuery } = req.body;
-  const result = await aiService.generateParcelRecommendation(req.params.parcelId, userQuery);
+  const uploadedFiles = (req.files as Express.Multer.File[]) || [];
+
+  for (const file of uploadedFiles) {
+    if (!file.mimetype.startsWith("image/")) {
+      return res.status(400).json({ error: "Sadece görsel dosyaları (JPEG, PNG, WEBP vb.) teşhis fotoğrafı olarak yüklenebilir." });
+    }
+  }
+
+  const photoFiles = uploadedFiles.map((file) => ({ buffer: file.buffer, mimeType: file.mimetype }));
+
+  const result = await aiService.generateParcelRecommendation(
+    req.params.parcelId,
+    userQuery,
+    photoFiles.length > 0 ? photoFiles : undefined,
+    req.user.id
+  );
   if (!result) {
     return res.status(500).json({ error: "Yapay zeka tavsiye raporu oluşturulamadı. Lütfen API anahtarınızı veya internet bağlantınızı kontrol edin." });
   }
@@ -1117,6 +1141,26 @@ app.post("/api/ai/growth-analysis/:parcelId", requireAuth, asyncHandler(async (r
 
   res.status(201).json(result);
 }));
+
+// ==========================================
+// Dedicated error handler for Multer (file upload) failures — e.g. more
+// than the allowed number of files, or a file exceeding the configured
+// size limit. Placed after all routes so it only intercepts errors that
+// bubble up from the upload middleware; all other errors continue to be
+// handled by each route's own asyncHandler wrapper.
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof multer.MulterError) {
+    logger.error("SYSTEM", `Dosya yükleme hatası: ${err.code}`, err);
+    if (err.code === "LIMIT_UNEXPECTED_FILE" || err.code === "LIMIT_FILE_COUNT") {
+      return res.status(400).json({ error: "İzin verilenden fazla dosya yüklemeye çalıştınız." });
+    }
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "Yüklenen dosyalardan biri izin verilen boyut sınırını (8 MB) aşıyor." });
+    }
+    return res.status(400).json({ error: "Dosya yükleme sırasında bir hata oluştu." });
+  }
+  next(err);
+});
 
 // ==========================================
 // 8. VITE AND DEVELOPMENT CLIENT BINDING
