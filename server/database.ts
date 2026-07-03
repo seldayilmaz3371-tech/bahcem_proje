@@ -51,6 +51,11 @@ class DatabaseManager {
 
   /**
    * Reads data from file or seeds if database file is missing or corrupted.
+   * If the file exists but fails to parse (corruption), the corrupted
+   * file is preserved in a quarantine folder rather than being silently
+   * discarded, and the most recent automated backup snapshot (if any) is
+   * used to recover instead of immediately wiping all data. Only when no
+   * usable backup exists does the system fall back to a fresh seed.
    */
   private initializeDatabase(): void {
     try {
@@ -69,8 +74,122 @@ class DatabaseManager {
         this.seedInitialDatabase();
       }
     } catch (error) {
-      logger.error("DATABASE", "Fatal error during database initialization. Restoring with a clean seed to prevent crashes.", error);
-      this.seedInitialDatabase();
+      logger.error(
+        "DATABASE",
+        "Fatal error during database initialization: the database file appears to be corrupted.",
+        error
+      );
+      this.quarantineCorruptedFile();
+      this.recoverFromCorruption();
+    }
+  }
+
+  /**
+   * Copies a corrupted database file aside into a dedicated quarantine
+   * folder (timestamped, never overwritten) instead of silently
+   * discarding it. This preserves the raw bytes for potential manual
+   * forensic recovery even in the rare case where automated recovery
+   * below is also unsuccessful.
+   */
+  private quarantineCorruptedFile(): void {
+    try {
+      if (!fs.existsSync(this.dbPath)) return;
+
+      const quarantineDir = path.join(path.dirname(this.dbPath), "corrupted");
+      if (!fs.existsSync(quarantineDir)) {
+        fs.mkdirSync(quarantineDir, { recursive: true });
+      }
+
+      const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const quarantinePath = path.join(quarantineDir, `tarim_hafizasi_corrupted_${safeTimestamp}.json`);
+      fs.copyFileSync(this.dbPath, quarantinePath);
+
+      logger.warn(
+        "DATABASE",
+        `Bozuk veritabanı dosyası incelenmek üzere korumaya alındı: ${quarantinePath}`
+      );
+    } catch (error) {
+      logger.error("DATABASE", "Bozuk veritabanı dosyası korumaya alınırken bir hata oluştu.", error);
+    }
+  }
+
+  /**
+   * Attempts to recover from a corrupted database file by loading the
+   * most recent valid automated backup snapshot (written by
+   * `BackupService`). If a usable snapshot is found, it is adopted as the
+   * live database and immediately persisted back to the primary database
+   * path, self-healing the corruption. If no valid snapshot exists at
+   * all, this falls back to seeding a fresh empty database as an
+   * absolute last resort, with a prominent log warning that real data
+   * may have been lost and manual recovery from the quarantine folder
+   * or a Google Drive backup may be required.
+   */
+  private recoverFromCorruption(): void {
+    const recoveredData = this.readLatestValidSnapshot();
+
+    if (recoveredData) {
+      this.data = recoveredData;
+      this.runMigrations();
+      this.saveImmediate();
+      logger.warn(
+        "DATABASE",
+        "KURTARMA BAŞARILI: Veritabanı bozuktu, en son otomatik yedekten geri yüklendi. " +
+          "Yedek alma zamanı ile bozulma anı arasındaki en yeni değişiklikler kaybolmuş olabilir."
+      );
+      return;
+    }
+
+    logger.error(
+      "DATABASE",
+      "KRİTİK: Veritabanı bozuk ve geri yüklenebilecek geçerli bir otomatik yedek bulunamadı. " +
+        "Sistem boş bir veritabanıyla başlatılıyor. Bozuk dosya 'data/corrupted' klasöründe saklandı; " +
+        "mümkünse manuel kurtarma için incelenmelidir."
+    );
+    this.seedInitialDatabase();
+  }
+
+  /**
+   * Scans the automated backup snapshots directory (`config.backup.directory`)
+   * for the most recent, structurally valid JSON snapshot and returns its
+   * parsed contents. Snapshot filenames use a sortable ISO-based timestamp
+   * (see `BackupService.createBackup`), so the lexicographically greatest
+   * filename is always the most recent snapshot. If the newest snapshot is
+   * itself unreadable, progressively older snapshots are tried until a
+   * valid one is found or none remain.
+   *
+   * Deliberately implemented here via plain filesystem access, rather than
+   * depending on `BackupService`, to preserve the Database layer's
+   * independence from the Services layer above it.
+   * @returns The parsed database schema from the newest valid snapshot, or null
+   */
+  private readLatestValidSnapshot(): DatabaseSchema | null {
+    try {
+      const snapshotsDir = path.join(path.resolve(config.backup.directory), "snapshots");
+      if (!fs.existsSync(snapshotsDir)) {
+        return null;
+      }
+
+      const snapshotFiles = fs
+        .readdirSync(snapshotsDir)
+        .filter((name) => name.startsWith("tarim_hafizasi_") && name.endsWith(".json"))
+        .sort()
+        .reverse(); // Most recent timestamp first
+
+      for (const fileName of snapshotFiles) {
+        try {
+          const content = fs.readFileSync(path.join(snapshotsDir, fileName), "utf8");
+          const parsed = JSON.parse(content) as DatabaseSchema;
+          logger.info("DATABASE", `Kurtarma için kullanılacak geçerli yedek bulundu: ${fileName}`);
+          return parsed;
+        } catch {
+          logger.warn("DATABASE", `Yedek dosyası da bozuk, bir öncekine geçiliyor: ${fileName}`);
+        }
+      }
+
+      return null;
+    } catch (error) {
+      logger.error("DATABASE", "Yedek dosyaları taranırken bir hata oluştu.", error);
+      return null;
     }
   }
 
@@ -199,6 +318,24 @@ class DatabaseManager {
         { id: "cat-biological", name: "Biyolojik Ürün", description: "Faydalı böcekler veya organik tuzaklar." },
         { id: "cat-tool", name: "Alet/Ekipman", description: "Tarım aletleri ve sarf malzemeleri." }
       ];
+      mutated = true;
+    }
+
+    // Backfill: observations recorded before the activityType field existed
+    // default to "Genel Gözlem" so existing data keeps working without
+    // requiring the farmer to re-classify old entries.
+    let backfilledObservationCount = 0;
+    for (const observation of this.data.observations) {
+      if (!observation.activityType) {
+        observation.activityType = "Genel Gözlem";
+        backfilledObservationCount++;
+      }
+    }
+    if (backfilledObservationCount > 0) {
+      logger.warn(
+        "DATABASE",
+        `Migration: ${backfilledObservationCount} eski saha gözlemi kaydına varsayılan faaliyet türü ("Genel Gözlem") atandı.`
+      );
       mutated = true;
     }
 
@@ -381,6 +518,7 @@ class DatabaseManager {
         treeId: "tree-1-2",
         observerId: "user-admin-default",
         observationDate: "2026-06-15",
+        activityType: "Sulama",
         notes: "KY-T02 ağacının altındaki damlama memesi tıkanmıştı. Temizlenerek su akışı yeniden sağlandı. Yapraklarda hafif sararma başlangıcı var.",
         createdAt: timestamp
       },
@@ -390,6 +528,7 @@ class DatabaseManager {
         treeId: "tree-3-2",
         observerId: "user-admin-default",
         observationDate: "2026-06-20",
+        activityType: "Genel Gözlem",
         notes: "Tepebağ parselindeki Gemlik çeşidi ağaçta dairesel gri halkalar (Halkalı Leke belirtileri) gözlendi. Bakırlı ilaç (Bordo bulamacı) uygulaması ilk serin günde yapılacaktır.",
         createdAt: timestamp
       },
@@ -399,6 +538,7 @@ class DatabaseManager {
         treeId: "tree-2-3",
         observerId: "user-admin-default",
         observationDate: "2026-06-25",
+        activityType: "Genel Gözlem",
         notes: "Zeytin sineği popülasyon tespiti için asılan feromonlu sarı yapışkan tuzaklar incelendi. Tuzak başına ortalama 1 adet sinek sayıldı, henüz mücadele eşiğinin altında.",
         createdAt: timestamp
       }

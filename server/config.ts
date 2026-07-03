@@ -23,6 +23,8 @@ export interface AppConfig {
   backup: {
     directory: string;
     intervalHours: number;
+    maxSnapshotsToKeep: number;
+    googleDriveSyncPath: string;
   };
   storage: {
     photosDirectory: string;
@@ -66,6 +68,19 @@ class ConfigManager {
     const backupDir = process.env.BACKUP_DIR || path.join(process.cwd(), "backups");
     const backupInterval = parseInt(process.env.BACKUP_INTERVAL_HOURS || "24", 10);
 
+    // Maximum number of timestamped database snapshots to retain before
+    // the oldest ones are automatically pruned. Prevents the backups
+    // folder from growing without bound over time.
+    const backupMaxSnapshots = parseInt(process.env.BACKUP_MAX_SNAPSHOTS || "30", 10);
+
+    // Optional absolute path to a locally synced Google Drive folder
+    // (created by the Google Drive for Desktop application). When set,
+    // every backup is additionally copied into this folder, and Google
+    // Drive's own client uploads it to the cloud automatically. No
+    // Google API credentials are required with this approach. Left empty
+    // to disable cloud mirroring and keep backups local-only.
+    const googleDriveSyncPath = (process.env.GOOGLE_DRIVE_BACKUP_PATH || "").trim();
+
     // Controls whether the bundled Mersin Değirmençay showcase/demo data
     // (sample parcels, trees, costs, sales, harvests, notifications, etc.)
     // is automatically generated on a fresh/empty database. Defaults to
@@ -100,6 +115,8 @@ class ConfigManager {
       backup: {
         directory: backupDir,
         intervalHours: backupInterval,
+        maxSnapshotsToKeep: backupMaxSnapshots,
+        googleDriveSyncPath,
       },
       storage: {
         photosDirectory,

@@ -28,6 +28,7 @@ import {
 import { uploadedDocumentRepository, aiRecommendationRepository } from "./server/repositories/ai.repository";
 import { weatherService } from "./server/services/weather.service";
 import { photoStorageService } from "./server/services/photo-storage.service";
+import { backupService } from "./server/services/backup.service";
 import { 
   UserRole,
   User,
@@ -1133,6 +1134,11 @@ async function startServer() {
   } catch (error) {
     logger.error("SYSTEM", "Eski fotoğrafları dosya sistemine taşıma işlemi sırasında bir hata oluştu.", error);
   }
+
+  // Starts the recurring automated backup schedule (immediate first backup,
+  // then repeating per BACKUP_INTERVAL_HOURS), with optional Google Drive
+  // Desktop folder mirroring if GOOGLE_DRIVE_BACKUP_PATH is configured.
+  backupService.startAutomaticBackupSchedule();
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
