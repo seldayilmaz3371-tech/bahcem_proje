@@ -74,12 +74,21 @@ export interface TreeCountChangeLog {
   createdAt: string;
 }
 
+export type ObservationActivityType =
+  | "Genel Gözlem"
+  | "İlaçlama"
+  | "Sulama"
+  | "Budama"
+  | "Gübreleme"
+  | "Biçme";
+
 export interface Observation {
   id: string;
   parcelId: string;
   treeId?: string;
   observerId: string;
   observationDate: string;
+  activityType: ObservationActivityType;
   notes: string;
   audioNotePath?: string;
   createdAt: string;

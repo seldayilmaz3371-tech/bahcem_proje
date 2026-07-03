@@ -60,6 +60,7 @@ export default function ObservationLog() {
   const [selectedParcelId, setSelectedParcelId] = useState("");
   const [selectedTreeId, setSelectedTreeId] = useState("");
   const [activityType, setActivityType] = useState<ObservationActivityType>("Genel Gözlem");
+  const [observationDate, setObservationDate] = useState(new Date().toISOString().split("T")[0]);
   const [notes, setNotes] = useState("");
 
   // List filter (by activity type). "Tümü" (All) is represented as null.
@@ -174,6 +175,16 @@ export default function ObservationLog() {
       return;
     }
 
+    const todayDateStr = new Date().toISOString().split("T")[0];
+    if (!observationDate) {
+      setError("Gözlem tarihi zorunludur.");
+      return;
+    }
+    if (observationDate > todayDateStr) {
+      setError("Gözlem tarihi gelecekte bir tarih olamaz.");
+      return;
+    }
+
     setSaving(true);
     try {
       const headers = { 
@@ -189,6 +200,7 @@ export default function ObservationLog() {
           parcelId: selectedParcelId,
           treeId: selectedTreeId || undefined,
           activityType,
+          observationDate,
           notes,
           audioNotePath: simulatedAudioPath || undefined
         })
@@ -199,7 +211,10 @@ export default function ObservationLog() {
         throw new Error(obsData.error || "Gözlem kaydedilemedi.");
       }
 
-      // 2. If photo is uploaded, post it to photo endpoint
+      // 2. If photo is uploaded, post it to photo endpoint. The photo's
+      // takenAt date is kept in sync with the observation date, so a
+      // gallery photo attached to a retroactively logged entry is
+      // correctly dated to the day the activity actually happened.
       if (base64Photo) {
         const photoRes = await fetch("/api/observations/upload-photo", {
           method: "POST",
@@ -207,6 +222,7 @@ export default function ObservationLog() {
           body: JSON.stringify({
             observationId: obsData.id,
             base64Data: base64Photo,
+            takenAt: observationDate,
             label: "Saha Gözlemi Görseli"
           })
         });
@@ -219,6 +235,7 @@ export default function ObservationLog() {
       setSelectedParcelId("");
       setSelectedTreeId("");
       setActivityType("Genel Gözlem");
+      setObservationDate(new Date().toISOString().split("T")[0]);
       setNotes("");
       setBase64Photo(null);
       setSimulatedAudioPath(null);
@@ -274,7 +291,7 @@ export default function ObservationLog() {
           <h2 className="text-md font-bold text-[#1a2416]">Yeni Saha Gözlem Kaydı</h2>
           {error && <p className="text-xs font-bold text-red-600 bg-red-50 p-3 rounded-xl">{error}</p>}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Gözlem Yapılan Parsel</label>
               <select
@@ -302,6 +319,20 @@ export default function ObservationLog() {
                   <option key={t.id} value={t.id}>{t.treeNumber} ({t.variety})</option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Gözlem / Fotoğraf Tarihi</label>
+              <input
+                type="date"
+                value={observationDate}
+                max={new Date().toISOString().split("T")[0]}
+                onChange={(e) => setObservationDate(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:ring-2 focus:ring-[#556b2f]"
+              />
+              <p className="text-[10px] text-[#80907a] italic mt-1">
+                Galeriden eski bir fotoğraf eklerken bu tarihi geçmişe alarak faaliyeti gerçek gününe kaydedebilirsiniz.
+              </p>
             </div>
           </div>
 
