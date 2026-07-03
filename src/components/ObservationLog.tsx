@@ -18,9 +18,31 @@ import {
   Calendar,
   AlertCircle,
   RefreshCw,
-  Clock
+  Clock,
+  SprayCan,
+  Droplet,
+  Scissors,
+  Sprout,
+  Wheat
 } from "lucide-react";
-import { Observation, Parcel, Tree, Photo } from "../types";
+import { Observation, Parcel, Tree, Photo, ObservationActivityType } from "../types";
+
+/**
+ * Centralized display configuration (icon, label, and color classes) for
+ * each field activity type. Kept as a single source of truth so the form
+ * selector, the list filter pills, and the history card badges never fall
+ * out of sync with one another.
+ */
+const ACTIVITY_TYPE_CONFIG: Record<ObservationActivityType, { icon: typeof Eye; badgeClass: string; pillActiveClass: string }> = {
+  "Genel Gözlem": { icon: Eye, badgeClass: "bg-stone-100 text-stone-700 border-stone-200", pillActiveClass: "bg-stone-700 text-white border-stone-700" },
+  "İlaçlama": { icon: SprayCan, badgeClass: "bg-red-50 text-red-700 border-red-200", pillActiveClass: "bg-red-700 text-white border-red-700" },
+  "Sulama": { icon: Droplet, badgeClass: "bg-blue-50 text-blue-700 border-blue-200", pillActiveClass: "bg-blue-700 text-white border-blue-700" },
+  "Budama": { icon: Scissors, badgeClass: "bg-purple-50 text-purple-700 border-purple-200", pillActiveClass: "bg-purple-700 text-white border-purple-700" },
+  "Gübreleme": { icon: Sprout, badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200", pillActiveClass: "bg-emerald-700 text-white border-emerald-700" },
+  "Biçme": { icon: Wheat, badgeClass: "bg-amber-50 text-amber-700 border-amber-200", pillActiveClass: "bg-amber-700 text-white border-amber-700" }
+};
+
+const ALL_ACTIVITY_TYPES: ObservationActivityType[] = ["Genel Gözlem", "İlaçlama", "Sulama", "Budama", "Gübreleme", "Biçme"];
 
 export default function ObservationLog() {
   const [observations, setObservations] = useState<Observation[]>([]);
@@ -33,7 +55,11 @@ export default function ObservationLog() {
   const [showForm, setShowForm] = useState(false);
   const [selectedParcelId, setSelectedParcelId] = useState("");
   const [selectedTreeId, setSelectedTreeId] = useState("");
+  const [activityType, setActivityType] = useState<ObservationActivityType>("Genel Gözlem");
   const [notes, setNotes] = useState("");
+
+  // List filter (by activity type). "Tümü" (All) is represented as null.
+  const [activeFilter, setActiveFilter] = useState<ObservationActivityType | null>(null);
   
   // Photo Simulation
   const [base64Photo, setBase64Photo] = useState<string | null>(null);
@@ -148,6 +174,7 @@ export default function ObservationLog() {
         body: JSON.stringify({
           parcelId: selectedParcelId,
           treeId: selectedTreeId || undefined,
+          activityType,
           notes,
           audioNotePath: simulatedAudioPath || undefined
         })
@@ -177,6 +204,7 @@ export default function ObservationLog() {
       // Reset
       setSelectedParcelId("");
       setSelectedTreeId("");
+      setActivityType("Genel Gözlem");
       setNotes("");
       setBase64Photo(null);
       setSimulatedAudioPath(null);
@@ -193,6 +221,10 @@ export default function ObservationLog() {
   // Helper mapping helper functions
   const getParcelName = (id: string) => parcels.find(p => p.id === id)?.name || "Bilinmeyen Parsel";
   const getTreeNumber = (id: string) => trees.find(t => t.id === id)?.treeNumber || "Genel Gözlem";
+
+  const filteredObservations = activeFilter
+    ? observations.filter((obs) => obs.activityType === activeFilter)
+    : observations;
 
   if (loading) {
     return (
@@ -256,6 +288,31 @@ export default function ObservationLog() {
                   <option key={t.id} value={t.id}>{t.treeNumber} ({t.variety})</option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-2">Faaliyet Türü</label>
+            <div className="flex flex-wrap gap-2">
+              {ALL_ACTIVITY_TYPES.map((type) => {
+                const config = ACTIVITY_TYPE_CONFIG[type];
+                const Icon = config.icon;
+                const isActive = activityType === type;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    id={`activity-type-${type}`}
+                    onClick={() => setActivityType(type)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                      isActive ? config.pillActiveClass : "bg-white text-[#5a6a55] border-[#cdd4ca] hover:border-[#556b2f]/40"
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span>{type}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -354,25 +411,64 @@ export default function ObservationLog() {
 
       {/* Observation History Feed */}
       <div className="space-y-4">
-        <h2 className="text-sm font-bold text-[#5a6a55] uppercase tracking-wider">Geçmiş Saha Günlükleri ve Teşhisler</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 className="text-sm font-bold text-[#5a6a55] uppercase tracking-wider">Geçmiş Saha Günlükleri ve Teşhisler</h2>
+          <div className="flex flex-wrap gap-2">
+            <button
+              id="activity-filter-all"
+              onClick={() => setActiveFilter(null)}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all ${
+                activeFilter === null ? "bg-[#556b2f] text-white border-[#556b2f]" : "bg-white text-[#5a6a55] border-[#cdd4ca] hover:border-[#556b2f]/40"
+              }`}
+            >
+              Tümü ({observations.length})
+            </button>
+            {ALL_ACTIVITY_TYPES.map((type) => {
+              const count = observations.filter((obs) => obs.activityType === type).length;
+              const config = ACTIVITY_TYPE_CONFIG[type];
+              const Icon = config.icon;
+              const isActive = activeFilter === type;
+              return (
+                <button
+                  key={type}
+                  id={`activity-filter-${type}`}
+                  onClick={() => setActiveFilter(type)}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all ${
+                    isActive ? config.pillActiveClass : "bg-white text-[#5a6a55] border-[#cdd4ca] hover:border-[#556b2f]/40"
+                  }`}
+                >
+                  <Icon className="h-3 w-3" />
+                  <span>{type} ({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {observations.length > 0 ? (
-            observations.map((obs) => {
+          {filteredObservations.length > 0 ? (
+            filteredObservations.map((obs) => {
               // Find matching photo
               const obsPhoto = photos.find(p => p.observationId === obs.id);
+              const typeConfig = ACTIVITY_TYPE_CONFIG[obs.activityType] || ACTIVITY_TYPE_CONFIG["Genel Gözlem"];
+              const TypeIcon = typeConfig.icon;
               return (
                 <div id={`obs-card-${obs.id}`} key={obs.id} className="bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
                   <div className="space-y-3">
-                    <div className="flex justify-between items-start">
+                    <div className="flex justify-between items-start gap-2">
                       <span className="text-xs bg-[#f0f4ee] text-[#556b2f] px-2.5 py-1 rounded-full font-bold">
                         {getParcelName(obs.parcelId)}
                       </span>
-                      <span className="text-[10px] font-mono text-[#80907a] flex items-center gap-0.5">
+                      <span className="text-[10px] font-mono text-[#80907a] flex items-center gap-0.5 shrink-0">
                         <Calendar className="h-3 w-3" />
                         {new Date(obs.observationDate).toLocaleDateString("tr-TR")}
                       </span>
                     </div>
+
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${typeConfig.badgeClass}`}>
+                      <TypeIcon className="h-3 w-3" />
+                      {obs.activityType}
+                    </span>
 
                     <p className="text-xs text-[#1a2416] leading-relaxed font-medium">
                       {obs.notes}
@@ -380,7 +476,7 @@ export default function ObservationLog() {
 
                     {obs.treeId && (
                       <div className="text-[11px] font-mono bg-stone-100 text-[#556b2f] px-2 py-0.5 rounded inline-block">
-                        Ağaç Referans: <span className="font-bold">{obs.treeId}</span>
+                        Ağaç Referans: <span className="font-bold">{getTreeNumber(obs.treeId)}</span>
                       </div>
                     )}
                   </div>
@@ -412,7 +508,9 @@ export default function ObservationLog() {
           ) : (
             <div className="p-12 text-center border-2 border-dashed border-[#e2e8df] rounded-3xl col-span-3 bg-[#fcfdfc]">
               <Eye className="h-10 w-10 text-[#80907a] mx-auto mb-2" />
-              <p className="text-xs text-[#5a6a55] italic">Kayıtlı saha gözlem raporu bulunmamaktadır.</p>
+              <p className="text-xs text-[#5a6a55] italic">
+                {activeFilter ? `"${activeFilter}" türünde kayıtlı saha gözlem raporu bulunmamaktadır.` : "Kayıtlı saha gözlem raporu bulunmamaktadır."}
+              </p>
             </div>
           )}
         </div>

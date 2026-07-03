@@ -4,7 +4,7 @@
  */
 
 import { BaseRepository } from "./base.repository";
-import { Observation, Photo } from "../models";
+import { Observation, ObservationActivityType, Photo } from "../models";
 import { db } from "../database";
 
 /**
@@ -28,6 +28,15 @@ export class ObservationRepository extends BaseRepository<Observation> {
    */
   public async getByTreeId(treeId: string): Promise<Observation[]> {
     const list = await this.find((obs) => obs.treeId === treeId);
+    return list.sort((a, b) => new Date(b.observationDate).getTime() - new Date(a.observationDate).getTime());
+  }
+
+  /**
+   * Retrieves observations of a specific field activity type (e.g. İlaçlama,
+   * Sulama, Budama, Gübreleme, Biçme), sorted chronologically.
+   */
+  public async getByActivityType(activityType: ObservationActivityType): Promise<Observation[]> {
+    const list = await this.find((obs) => obs.activityType === activityType);
     return list.sort((a, b) => new Date(b.observationDate).getTime() - new Date(a.observationDate).getTime());
   }
 }

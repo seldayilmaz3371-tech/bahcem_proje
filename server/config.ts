@@ -18,6 +18,7 @@ export interface AppConfig {
   database: {
     type: string;
     path: string;
+    seedSampleData: boolean;
   };
   backup: {
     directory: string;
@@ -61,7 +62,14 @@ class ConfigManager {
     const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "tarim_hafizasi.json");
     const backupDir = process.env.BACKUP_DIR || path.join(process.cwd(), "backups");
     const backupInterval = parseInt(process.env.BACKUP_INTERVAL_HOURS || "24", 10);
-    
+
+    // Controls whether the bundled Mersin Değirmençay showcase/demo data
+    // (sample parcels, trees, costs, sales, harvests, notifications, etc.)
+    // is automatically generated on a fresh/empty database. Defaults to
+    // "false" so production deployments always start with a clean,
+    // user-owned dataset. Set to "true" only for local demos or onboarding.
+    const seedSampleData = (process.env.SEED_SAMPLE_DATA || "false").trim().toLowerCase() === "true";
+
     // Geographic defaults for Mersin Toroslar, Değirmençay
     const lat = parseFloat(process.env.DEFAULT_LATITUDE || "36.8741");
     const lng = parseFloat(process.env.DEFAULT_LONGITUDE || "34.4512");
@@ -78,6 +86,7 @@ class ConfigManager {
       database: {
         type: dbType,
         path: dbPath,
+        seedSampleData,
       },
       backup: {
         directory: backupDir,

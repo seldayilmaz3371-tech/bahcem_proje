@@ -82,6 +82,41 @@ export interface Tree {
 }
 
 /**
+ * Reason categories for a manual tree/plant count adjustment. Kept as a
+ * closed set (validated server-side) so historical change logs remain
+ * consistent and reportable, while still allowing free-text detail via
+ * the accompanying `notes` field.
+ */
+export type TreeCountChangeReason =
+  | "Dikim (Yeni Ekim)"
+  | "Kesim/Budama"
+  | "Don/Hastalık Kaybı"
+  | "Sayım Düzeltmesi"
+  | "Diğer";
+
+/**
+ * 4b. TreeCountChangeLogs Table Schema
+ * Records every manual adjustment made to a parcel's aggregate treeCount
+ * (as opposed to individually tracked Tree records). Each entry is an
+ * immutable historical fact: once created, it is never edited or deleted,
+ * preserving an accurate audit trail of how and why a parcel's tree/plant
+ * count changed over time. Past Harvest and ProfitReport records are never
+ * recalculated when a new entry is added here.
+ */
+export interface TreeCountChangeLog {
+  id: string;
+  parcelId: string; // Foreign Key to Parcels
+  previousCount: number; // treeCount value immediately before this change
+  newCount: number; // treeCount value immediately after this change
+  delta: number; // newCount - previousCount (positive = increase, negative = decrease)
+  reason: TreeCountChangeReason;
+  notes?: string;
+  changedBy: string; // Foreign Key to Users
+  changeDate: string; // Effective date of the change, as reported by the user (ISO date)
+  createdAt: string; // When this log entry was recorded in the system
+}
+
+/**
  * 5. Observations Table Schema (Gözlem Modülü)
  */
 export interface Observation {
@@ -372,6 +407,7 @@ export interface DatabaseSchema {
   roles: Role[];
   parcels: Parcel[];
   trees: Tree[];
+  treeCountChangeLogs: TreeCountChangeLog[];
   observations: Observation[];
   photos: Photo[];
   inventory: InventoryItem[];

@@ -16,9 +16,12 @@ import {
   Calendar,
   Layers,
   ChevronRight,
-  Info
+  Info,
+  History,
+  TrendingUp,
+  TrendingDown
 } from "lucide-react";
-import { Parcel, Tree, CropType } from "../types";
+import { Parcel, Tree, CropType, TreeCountChangeLog, TreeCountChangeReason } from "../types";
 
 export default function ParcelManager() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
@@ -40,6 +43,16 @@ export default function ParcelManager() {
   const [treeVariety, setTreeVariety] = useState("Sarıulak");
   const [plantingYear, setPlanttingYear] = useState("2016");
   const [treeNotes, setTreeNotes] = useState("");
+
+  // Manual Tree/Plant Count Change Form & History
+  const [treeCountChanges, setTreeCountChanges] = useState<TreeCountChangeLog[]>([]);
+  const [showTreeCountChangeForm, setShowTreeCountChangeForm] = useState(false);
+  const [newTreeCount, setNewTreeCount] = useState("");
+  const [changeReason, setChangeReason] = useState<TreeCountChangeReason>("Dikim (Yeni Ekim)");
+  const [changeNotes, setChangeNotes] = useState("");
+  const [changeDate, setChangeDate] = useState(new Date().toISOString().split("T")[0]);
+  const [countChangeError, setCountChangeError] = useState("");
+  const [savingCountChange, setSavingCountChange] = useState(false);
 
   const [error, setError] = useState("");
 
@@ -78,6 +91,18 @@ export default function ParcelManager() {
     }
   };
 
+  const fetchTreeCountChanges = async (parcelId: string) => {
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/parcels/${parcelId}/tree-count-changes`, { headers });
+      if (res.ok) {
+        setTreeCountChanges(await res.json());
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     fetchParcels();
   }, []);
@@ -85,7 +110,11 @@ export default function ParcelManager() {
   const handleSelectParcel = (parcel: Parcel) => {
     setSelectedParcel(parcel);
     fetchTrees(parcel.id);
+    fetchTreeCountChanges(parcel.id);
     setTreeVariety(parcel.cropType === "Zeytin" ? "Sarıulak" : "");
+    setShowTreeCountChangeForm(false);
+    setNewTreeCount("");
+    setCountChangeError("");
   };
 
   const handleAddParcel = async (e: React.FormEvent) => {
@@ -216,6 +245,64 @@ export default function ParcelManager() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleAddTreeCountChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCountChangeError("");
+    if (!selectedParcel) return;
+
+    if (newTreeCount === "") {
+      setCountChangeError("Yeni sayı zorunludur.");
+      return;
+    }
+    const parsedNewCount = parseInt(newTreeCount, 10);
+    if (isNaN(parsedNewCount) || parsedNewCount < 0) {
+      setCountChangeError("Yeni sayı sıfır veya pozitif bir tam sayı olmalıdır.");
+      return;
+    }
+    if (parsedNewCount === selectedParcel.treeCount) {
+      setCountChangeError(`Yeni sayı, mevcut sayıyla (${selectedParcel.treeCount}) aynı. Değişiklik kaydı oluşturmak için farklı bir değer girin.`);
+      return;
+    }
+
+    setSavingCountChange(true);
+    try {
+      const headers = { 
+        "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
+        "Content-Type": "application/json"
+      };
+      const res = await fetch(`/api/parcels/${selectedParcel.id}/tree-count-changes`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          newCount: parsedNewCount,
+          reason: changeReason,
+          notes: changeNotes,
+          changeDate
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Sayı değişikliği kaydedilemedi.");
+      }
+
+      setNewTreeCount("");
+      setChangeNotes("");
+      setChangeReason("Dikim (Yeni Ekim)");
+      setChangeDate(new Date().toISOString().split("T")[0]);
+      setShowTreeCountChangeForm(false);
+
+      // Refresh the change history, the selected parcel's updated count, and the parcel list badges
+      await fetchTreeCountChanges(selectedParcel.id);
+      await fetchParcels();
+      setSelectedParcel((prev) => prev ? { ...prev, treeCount: parsedNewCount } : prev);
+    } catch (err: any) {
+      setCountChangeError(err.message);
+    } finally {
+      setSavingCountChange(false);
     }
   };
 
@@ -412,6 +499,120 @@ export default function ParcelManager() {
                   {showTreeForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                   <span>{showTreeForm ? "Kapat" : `Yeni ${plantLabel} Tanımla`}</span>
                 </button>
+              </div>
+
+              {/* Manual Tree/Plant Count Change Section */}
+              <div className="bg-[#f7f9f6] border border-[#e2e8df] rounded-2xl p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xs font-bold text-[#80907a] uppercase tracking-wider">Güncel {plantLabel} Sayısı</h3>
+                    <p className="text-2xl font-bold font-display text-[#1a2416] mt-0.5">
+                      {selectedParcel.treeCount} <span className="text-xs font-normal text-[#5a6a55]">{plantLabel}</span>
+                    </p>
+                  </div>
+                  <button
+                    id="update-tree-count-btn"
+                    onClick={() => { setShowTreeCountChangeForm(!showTreeCountChangeForm); setCountChangeError(""); }}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#556b2f] hover:bg-[#415324] rounded-xl transition-all shadow-sm self-start"
+                  >
+                    {showTreeCountChangeForm ? <X className="h-3.5 w-3.5" /> : <Edit3 className="h-3.5 w-3.5" />}
+                    <span>{showTreeCountChangeForm ? "Kapat" : "Sayıyı Güncelle"}</span>
+                  </button>
+                </div>
+
+                {showTreeCountChangeForm && (
+                  <form onSubmit={handleAddTreeCountChange} className="border-t border-[#e2e8df] pt-4 space-y-4 animate-slide-up">
+                    {countChangeError && <p className="text-xs font-bold text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-100">{countChangeError}</p>}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Yeni {plantLabel} Sayısı</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={newTreeCount}
+                          onChange={(e) => setNewTreeCount(e.target.value)}
+                          placeholder={String(selectedParcel.treeCount)}
+                          className="w-full px-3 py-2 bg-white border border-[#cdd4ca] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Değişiklik Nedeni</label>
+                        <select
+                          value={changeReason}
+                          onChange={(e) => setChangeReason(e.target.value as TreeCountChangeReason)}
+                          className="w-full px-3 py-2 bg-white border border-[#cdd4ca] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+                        >
+                          <option value="Dikim (Yeni Ekim)">Dikim (Yeni Ekim)</option>
+                          <option value="Kesim/Budama">Kesim/Budama</option>
+                          <option value="Don/Hastalık Kaybı">Don/Hastalık Kaybı</option>
+                          <option value="Sayım Düzeltmesi">Sayım Düzeltmesi</option>
+                          <option value="Diğer">Diğer</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Değişiklik Tarihi</label>
+                        <input
+                          type="date"
+                          value={changeDate}
+                          onChange={(e) => setChangeDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-[#cdd4ca] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Not (İsteğe Bağlı)</label>
+                      <input
+                        type="text"
+                        value={changeNotes}
+                        onChange={(e) => setChangeNotes(e.target.value)}
+                        placeholder="Örn: Kuzey sırada 5 yeni fide dikildi."
+                        className="w-full px-3 py-2 bg-white border border-[#cdd4ca] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+                      />
+                    </div>
+
+                    <p className="text-[10px] text-[#80907a] italic leading-relaxed">
+                      Not: Bu değişiklik, geçmiş hasat ve verim raporlarını yeniden hesaplamaz — geçmiş kayıtlar o dönemki değerleriyle sabit kalır. Ayrıca, "Yeni {plantLabel} Tanımla" ile tekil kayıt eklemeye/silmeye devam ederseniz, sayı otomatik olarak gerçek kayıt adedine göre güncellenmeye devam eder.
+                    </p>
+
+                    <button
+                      type="submit"
+                      disabled={savingCountChange}
+                      className="px-4 py-2 text-xs font-bold text-white bg-[#556b2f] hover:bg-[#415324] rounded-xl transition-all shadow-sm disabled:opacity-50"
+                    >
+                      {savingCountChange ? "Kaydediliyor..." : "Değişikliği Kaydet"}
+                    </button>
+                  </form>
+                )}
+
+                {treeCountChanges.length > 0 && (
+                  <div className="border-t border-[#e2e8df] pt-4 space-y-2">
+                    <h3 className="text-[10px] font-bold text-[#80907a] uppercase tracking-wider flex items-center gap-1">
+                      <History className="h-3.5 w-3.5" /> Değişiklik Geçmişi ({treeCountChanges.length})
+                    </h3>
+                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                      {treeCountChanges.map((log) => (
+                        <div id={`tree-count-change-${log.id}`} key={log.id} className="flex items-center justify-between gap-3 text-xs bg-white border border-[#e2e8df] rounded-xl px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-[#1a2416]">
+                              {log.previousCount} → {log.newCount} <span className="text-[#80907a] font-normal">({log.reason})</span>
+                            </p>
+                            {log.notes && <p className="text-[10px] text-[#5a6a55] truncate mt-0.5">{log.notes}</p>}
+                            <p className="text-[10px] text-[#80907a] font-mono mt-0.5">{new Date(log.changeDate).toLocaleDateString("tr-TR")}</p>
+                          </div>
+                          <span className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold ${
+                            log.delta > 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                          }`}>
+                            {log.delta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                            {log.delta > 0 ? "+" : ""}{log.delta}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {showTreeForm && (

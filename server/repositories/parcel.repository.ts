@@ -4,7 +4,7 @@
  */
 
 import { BaseRepository } from "./base.repository";
-import { Parcel, Tree } from "../models";
+import { Parcel, Tree, TreeCountChangeLog } from "../models";
 import { db } from "../database";
 
 /**
@@ -53,5 +53,29 @@ export class TreeRepository extends BaseRepository<Tree> {
   }
 }
 
+/**
+ * Repository to manage the immutable audit trail of manual tree/plant count
+ * adjustments made to a parcel (as opposed to individually tracked Tree
+ * records). Entries are append-only: once created, a change log record is
+ * never edited or deleted, preserving an accurate historical record of how
+ * and why a parcel's tree/plant count evolved over time.
+ */
+export class TreeCountChangeLogRepository extends BaseRepository<TreeCountChangeLog> {
+  constructor() {
+    super("treeCountChangeLogs");
+  }
+
+  /**
+   * Retrieves the full change history for a single parcel, most recent
+   * effective change date first.
+   * @param parcelId Unique parcel ID
+   */
+  public async getByParcelId(parcelId: string): Promise<TreeCountChangeLog[]> {
+    const logs = await this.find((log) => log.parcelId === parcelId);
+    return logs.sort((a, b) => new Date(b.changeDate).getTime() - new Date(a.changeDate).getTime());
+  }
+}
+
 export const parcelRepository = new ParcelRepository();
 export const treeRepository = new TreeRepository();
+export const treeCountChangeLogRepository = new TreeCountChangeLogRepository();

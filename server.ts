@@ -10,7 +10,7 @@ import { authService } from "./server/services/auth.service";
 import { settingService } from "./server/services/setting.service";
 import { aiService } from "./server/services/ai.service";
 import { userRepository } from "./server/repositories/user.repository";
-import { parcelRepository, treeRepository } from "./server/repositories/parcel.repository";
+import { parcelRepository, treeRepository, treeCountChangeLogRepository } from "./server/repositories/parcel.repository";
 import { observationRepository, photoRepository } from "./server/repositories/observation.repository";
 import { 
   inventoryItemRepository, 
@@ -26,6 +26,7 @@ import {
   profitReportRepository 
 } from "./server/repositories/finance.repository";
 import { uploadedDocumentRepository, aiRecommendationRepository } from "./server/repositories/ai.repository";
+import { weatherService } from "./server/services/weather.service";
 import { 
   UserRole,
   User,
@@ -319,33 +320,22 @@ app.post("/api/parcels/:id/trees", requireAuth, asyncHandler(async (req: Authent
     return res.status(400).json({ error: "Ağaç numarası (örn. T-12) zorunludur." });
   }
 
-  const parcelId = req.params.id;
-  const parcel = await parcelRepository.getById(parcelId);
-  if (!parcel) {
-    return res.status(404).json({ error: "Ağacın ekleneceği parsel bulunamadı." });
-  }
-
-  const duplicate = await treeRepository.getByTreeNumber(parcelId, treeNumber);
-  if (duplicate) {
-    return res.status(400).json({ error: `Bu parselde '${treeNumber}' numaralı ağaç zaten kayıtlıdır.` });
-  }
-
   const newTree = await treeRepository.create({
-    parcelId,
+    parcelId: req.params.id,
     treeNumber,
-    variety: variety || "Ayvalık",
-    plantingYear: plantingYear ? parseInt(plantingYear) : 2015,
+    variety: variety || "Bilinmeyen",
+    plantingYear: plantingYear ? parseInt(plantingYear) : new Date().getFullYear(),
     notes: notes || "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   });
 
-  await parcelRepository.syncTreeCount(parcelId);
+  await parcelRepository.syncTreeCount(req.params.id);
 
   await activityLogRepository.writeLog(
     req.user.id,
     "TREE_CREATE",
-    `Parsele (${parcel.name}) yeni ağaç kaydedildi: '${treeNumber}'`
+    `Yeni ağaç kaydı eklendi: '${treeNumber}' (${variety || "Bilinmeyen"})`
   );
 
   res.status(201).json(newTree);
@@ -384,6 +374,85 @@ app.delete("/api/trees/:id", requireAuth, asyncHandler(async (req: Authenticated
   );
 
   res.json({ success: true });
+}));
+
+// Manual Tree/Plant Count Adjustment History
+// Tracks aggregate count changes (e.g. bulk plantings, storm/frost losses,
+// manual recount corrections) independently of individually registered
+// Tree records. Every entry is immutable once created, forming a permanent
+// audit trail; past Harvest and ProfitReport records are never recalculated
+// as a result of these adjustments.
+const VALID_TREE_COUNT_CHANGE_REASONS: readonly string[] = [
+  "Dikim (Yeni Ekim)",
+  "Kesim/Budama",
+  "Don/Hastalık Kaybı",
+  "Sayım Düzeltmesi",
+  "Diğer"
+];
+
+app.get("/api/parcels/:id/tree-count-changes", requireAuth, asyncHandler(async (req, res) => {
+  const parcel = await parcelRepository.getById(req.params.id);
+  if (!parcel) {
+    return res.status(404).json({ error: "Parsel bulunamadı." });
+  }
+
+  const logs = await treeCountChangeLogRepository.getByParcelId(req.params.id);
+  res.json(logs);
+}));
+
+app.post("/api/parcels/:id/tree-count-changes", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { newCount, reason, notes, changeDate } = req.body;
+
+  const parcel = await parcelRepository.getById(req.params.id);
+  if (!parcel) {
+    return res.status(404).json({ error: "Parsel bulunamadı." });
+  }
+
+  if (newCount === undefined || newCount === null || newCount === "") {
+    return res.status(400).json({ error: "Yeni ağaç/bitki sayısı zorunludur." });
+  }
+  const parsedNewCount = parseInt(newCount, 10);
+  if (isNaN(parsedNewCount) || parsedNewCount < 0) {
+    return res.status(400).json({ error: "Yeni sayı sıfır veya pozitif bir tam sayı olmalıdır." });
+  }
+  if (!reason || !VALID_TREE_COUNT_CHANGE_REASONS.includes(reason)) {
+    return res.status(400).json({ error: `Geçersiz değişiklik nedeni. İzin verilen değerler: ${VALID_TREE_COUNT_CHANGE_REASONS.join(", ")}.` });
+  }
+  if (!changeDate) {
+    return res.status(400).json({ error: "Değişiklik tarihi zorunludur." });
+  }
+  if (parsedNewCount === parcel.treeCount) {
+    return res.status(400).json({ error: "Yeni sayı, parselin mevcut sayısıyla aynı. Bir değişiklik kaydı oluşturmak için farklı bir değer girin." });
+  }
+
+  const previousCount = parcel.treeCount;
+  const delta = parsedNewCount - previousCount;
+  const plantLabel = parcel.cropType === "Zeytin" ? "ağaç" : "bitki";
+
+  const changeLog = await treeCountChangeLogRepository.create({
+    parcelId: req.params.id,
+    previousCount,
+    newCount: parsedNewCount,
+    delta,
+    reason,
+    notes: notes || "",
+    changedBy: req.user.id,
+    changeDate,
+    createdAt: new Date().toISOString()
+  });
+
+  await parcelRepository.update(req.params.id, {
+    treeCount: parsedNewCount,
+    updatedAt: new Date().toISOString()
+  });
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "TREE_COUNT_CHANGE",
+    `'${parcel.name}' parselinde ${plantLabel} sayısı ${previousCount} → ${parsedNewCount} olarak güncellendi (${delta > 0 ? "+" : ""}${delta}). Neden: ${reason}`
+  );
+
+  res.status(201).json(changeLog);
 }));
 
 // ==========================================
@@ -578,6 +647,25 @@ app.post("/api/finance/costs", requireAuth, asyncHandler(async (req: Authenticat
   res.status(201).json(newCost);
 }));
 
+// Removes a single expense/cost record. Used when a wrong amount or
+// incorrect information was entered by mistake.
+app.delete("/api/finance/costs/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const exists = await costRepository.getById(req.params.id);
+  if (!exists) {
+    return res.status(404).json({ error: "Silinmek istenen gider kaydı bulunamadı." });
+  }
+
+  await costRepository.delete(req.params.id);
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "COST_DELETE",
+    `Gider kaydı silindi: ${exists.amount} TL (${exists.category})`
+  );
+
+  res.json({ success: true, message: "Gider kaydı başarıyla silindi." });
+}));
+
 // Sales API
 app.get("/api/finance/sales", requireAuth, asyncHandler(async (req, res) => {
   const list = await saleRepository.getAll();
@@ -611,6 +699,25 @@ app.post("/api/finance/sales", requireAuth, asyncHandler(async (req: Authenticat
   );
 
   res.status(201).json(newSale);
+}));
+
+// Removes a single sale/revenue record. Used when a wrong amount or
+// incorrect information was entered by mistake.
+app.delete("/api/finance/sales/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const exists = await saleRepository.getById(req.params.id);
+  if (!exists) {
+    return res.status(404).json({ error: "Silinmek istenen satış kaydı bulunamadı." });
+  }
+
+  await saleRepository.delete(req.params.id);
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "SALE_DELETE",
+    `Satış kaydı silindi: ${exists.totalRevenue} TL (${exists.productType})`
+  );
+
+  res.json({ success: true, message: "Satış kaydı başarıyla silindi." });
 }));
 
 // Harvest Logs API
@@ -653,6 +760,25 @@ app.post("/api/finance/harvests", requireAuth, asyncHandler(async (req: Authenti
   );
 
   res.status(201).json(newHarvest);
+}));
+
+// Removes a single harvest record. Used when a wrong amount or incorrect
+// information was entered by mistake.
+app.delete("/api/finance/harvests/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const exists = await harvestRepository.getById(req.params.id);
+  if (!exists) {
+    return res.status(404).json({ error: "Silinmek istenen hasat kaydı bulunamadı." });
+  }
+
+  await harvestRepository.delete(req.params.id);
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "HARVEST_DELETE",
+    `Hasat kaydı silindi: ${exists.quantityKg} Kg (${exists.qualityGrade})`
+  );
+
+  res.json({ success: true, message: "Hasat kaydı başarıyla silindi." });
 }));
 
 // Annual ROI and Profitability Analysis Reports
@@ -708,6 +834,23 @@ app.post("/api/weather/record", requireAuth, asyncHandler(async (req, res) => {
   });
 
   res.status(201).json(newRecord);
+}));
+
+// Live, real-time weather forecast sourced from the Open-Meteo external API.
+// Never returns fabricated data: if the external API is unreachable, this
+// endpoint responds with 503 and a clear error rather than synthetic values.
+// Pass ?refresh=true to bypass the service's short-lived in-memory cache.
+app.get("/api/weather/live-forecast", requireAuth, asyncHandler(async (req, res) => {
+  const forceRefresh = req.query.refresh === "true";
+  try {
+    const forecast = await weatherService.getLiveForecast(forceRefresh);
+    res.json(forecast);
+  } catch (error: any) {
+    logger.error("WEATHER", "Canlı hava durumu API isteği başarısız oldu.", error);
+    res.status(503).json({
+      error: "Canlı hava durumu verisi şu anda alınamıyor. Lütfen internet bağlantınızı kontrol edip birkaç dakika sonra tekrar deneyin."
+    });
+  }
 }));
 
 // System activity log tracking logs

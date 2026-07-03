@@ -16,6 +16,7 @@ import { db } from "../database";
 import { logger } from "../logger";
 import { UploadedDocument, VectorChunk, AIRecommendation, WeatherRecord, Photo } from "../models";
 import { AgriUtils } from "../utils";
+import { weatherService } from "./weather.service";
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -231,7 +232,14 @@ export class AIService {
 
   /**
    * Generates a fully customized context-aware agricultural decision-support recommendation
-   * for a specific plot, integrating sensor data, weather data, inventory stocks, and RAG articles.
+   * for a specific plot, integrating sensor data, live weather data, inventory stocks, and RAG articles.
+   *
+   * Weather grounding: this method combines two explicitly labeled sources —
+   * (1) locally logged historical weather records ("Yerel Proje Verisi"), and
+   * (2) a live, real-time forecast fetched from the Open-Meteo external API
+   * ("Harici Web Verisi"). If the live API is unavailable, the prompt states
+   * this explicitly rather than silently omitting it or fabricating values,
+   * and the model is instructed to disclose which source(s) it relied on.
    */
   public async generateParcelRecommendation(
     parcelId: string,
@@ -255,16 +263,21 @@ export class AIService {
         ? parcelObservations.map((o, idx) => `[Gözlem ${idx + 1} - Tarih: ${o.observationDate}]: ${o.notes}`).join("\n")
         : "Bu parsel için yakın zamanda kaydedilmiş gözlem raporu bulunmuyor.";
 
-      // 3. Fetch weather history records
+      // 3. Fetch locally logged historical weather records (Yerel Proje Verisi)
       const rawDb = await db.readRaw();
       const weatherHistory = rawDb.weatherHistory || [];
       const recentWeather = weatherHistory
         .sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime())
         .slice(0, 5);
 
-      const weatherContext = recentWeather.length > 0
+      const localWeatherContext = recentWeather.length > 0
         ? recentWeather.map((w) => `[Tarih: ${w.recordDate}]: En Yüksek Sıcaklık: ${w.tempMax}°C, En Düşük Sıcaklık: ${w.tempMin}°C, Nem: %${w.humidity}, Don Riski Var Mı: ${w.hasFrostRisk ? "EVET" : "HAYIR"}`).join("\n")
-        : "Yakın zamana ait meteorolojik veri bulunmamaktadır.";
+        : "Yerel veritabanında manuel olarak kaydedilmiş yakın zamana ait meteorolojik veri bulunmamaktadır.";
+
+      // 3b. Fetch live, real-time forecast from the Open-Meteo external API
+      // (Harici Web Verisi). Never fails the entire recommendation if the
+      // external API is down — degrades gracefully with an explicit notice.
+      const liveWeather = await weatherService.getWeatherSummaryForAI();
 
       // 4. Fetch under-stocked inventory alerts
       const allInventory = await inventoryItemRepository.getAll();
@@ -285,23 +298,26 @@ export class AIService {
 Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış yapay zeka destekli bir Tarım Danışmanısın (Mersin Tarım Asistanı).
 Aşağıdaki verilere dayanarak çiftçiye özel, bilimsel, pratik ve bölgesel (Toroslar mikro-klimasına uygun) tavsiyeler üreteceksin.
 
-=== ÇİFTLİK VE PARSEL BİLGİLERİ ===
+=== ÇİFTLİK VE PARSEL BİLGİLERİ (KAYNAK: Yerel Proje Verisi) ===
 Parsel Adı: ${parcel.name}
 Alan: ${parcel.areaDekar} Dekar
 Ağaç Sayısı: ${parcel.treeCount} adet zeytin ağacı
 Toprak Yapısı: ${parcel.soilType}
 Sulama Yöntemi: ${parcel.irrigationType}
 
-=== SON GÖZLEMLER VE SAHA RAPORLARI ===
+=== SON GÖZLEMLER VE SAHA RAPORLARI (KAYNAK: Yerel Proje Verisi) ===
 ${observationsContext}
 
-=== GÜNCEL METEOROLOJİ VE DON RİSKİ ===
-${weatherContext}
+=== METEOROLOJİ KAYNAK 1: GEÇMİŞ KAYITLAR (KAYNAK: Yerel Proje Verisi - Manuel Girilen Geçmiş Ölçümler) ===
+${localWeatherContext}
 
-=== ENVANTER VE STOK DURUMU (Kritik Stok Uyarısı Olan Ürünler) ===
+=== METEOROLOJİ KAYNAK 2: CANLI GÜNCEL TAHMİN (KAYNAK: Harici Web Verisi - Open-Meteo API) ===
+${liveWeather.text}
+
+=== ENVANTER VE STOK DURUMU (KAYNAK: Yerel Proje Verisi) ===
 ${inventoryContext}
 
-=== BİLGİ DEPOSU VE RAG KAYNAKLARINDAN ALINAN BİLGİLER ===
+=== BİLGİ DEPOSU VE RAG KAYNAKLARINDAN ALINAN BİLGİLER (KAYNAK: RAG - Yüklenen Dokümanlar) ===
 ${ragContext}
 
 === KULLANICI SORUSU ===
@@ -309,9 +325,10 @@ ${ragContext}
 
 Senden istenenler:
 1. **Analiz ve Teşhis**: Gözlemlerde belirtilen hastalık, zararlı (örn. Zeytin sineği, halkalı leke, dökülme) veya besin eksikliklerini değerlendir.
-2. **Eylem Planı**: Sulama, gübreleme, ilaçlama veya budama için somut tavsiyeler ver. Eğer don riski varsa, Toroslar/Değirmençay bölgesinde don önleme için yapılacakları vurgula.
+2. **Eylem Planı**: Sulama, gübreleme, ilaçlama veya budama için somut tavsiyeler ver. Don riski değerlendirmeni MUTLAKA "METEOROLOJİ KAYNAK 2" bölümündeki canlı tahmine dayandır (eğer o bölüm veri alınamadığını belirtiyorsa, bunu açıkça söyle ve sadece geçmiş kayıtlara dayandığını belirt). Don riski varsa, Toroslar/Değirmençay bölgesinde don önleme için yapılacakları vurgula.
 3. **Uygulama Dozajı**: Envanterde bulunan ilaç ve gübrelerin, parsel büyüklüğüne ve ağaç sayısına göre doğru dozajlarını hesapla.
 4. **Hasat Öngörüsü**: Eğer hasat dönemi yaklaşıyorsa, son ilaçlama ile hasat arasındaki bekleme sürelerine (PH) dikkat çek.
+5. **Kaynak Beyanı**: Yanıtının sonunda kısa bir "Kullanılan Kaynaklar" notu ekle; hangi bölümler için Yerel Proje Verisi, hangi bölümler için Harici Web Verisi (Open-Meteo) ve hangi bölümler için RAG dokümanlarını kullandığını belirt.
 
 Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi bir Türkçe tonuyla yaz.
 `;
@@ -331,8 +348,15 @@ Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi
       if (similarChunks.length > 0) {
         score = Math.max(score, similarChunks[0].score);
       }
+      // Slightly reduce confidence when live weather grounding was unavailable,
+      // since frost-risk advice then relies solely on potentially stale local records.
+      if (!liveWeather.available) {
+        score = Math.max(0.5, score - 0.1);
+      }
 
-      // 8. Create recommendation record in DB
+      // 8. Create recommendation record in DB. usedWeatherCount reflects the
+      // combined number of weather data points (local historical + live
+      // forecast days) that actually grounded this recommendation.
       const timestamp = new Date().toISOString();
       const recommendation = await aiRecommendationRepository.create({
         parcelId,
@@ -341,12 +365,15 @@ Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi
         confidenceScore: parseFloat(score.toFixed(2)),
         usedDocumentsCount: similarChunks.length,
         usedObservationsCount: parcelObservations.length,
-        usedWeatherCount: recentWeather.length,
+        usedWeatherCount: recentWeather.length + liveWeather.daysUsed,
         usedInventoryCount: allInventory.length,
         createdDate: timestamp,
       });
 
-      logger.info("AI", `Generated customized expert advisory report for parcel: '${parcel.name}'`);
+      logger.info(
+        "AI",
+        `Generated customized expert advisory report for parcel: '${parcel.name}'. Canlı hava durumu kullanıldı: ${liveWeather.available ? "EVET" : "HAYIR"}.`
+      );
       return recommendation;
     } catch (error) {
       logger.error("AI", `Failed to generate recommendation for parcel ID: '${parcelId}'`, error);

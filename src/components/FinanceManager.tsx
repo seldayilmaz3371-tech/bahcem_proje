@@ -15,7 +15,8 @@ import {
   Calendar,
   Layers,
   Award,
-  BookOpen
+  BookOpen,
+  Trash2
 } from "lucide-react";
 import { Cost, Sale, Harvest, Parcel } from "../types";
 
@@ -61,6 +62,12 @@ export default function FinanceManager() {
 
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Deletion state: tracks which record is currently being deleted (to
+  // disable its button and show a spinner) and surfaces any deletion error
+  // directly above the ledger lists, independent of the add-record forms.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   const fetchData = async () => {
     setLoading(true);
@@ -222,6 +229,96 @@ export default function FinanceManager() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * Deletes a single expense/cost record after user confirmation. Used to
+   * correct a wrong amount or any other mistakenly entered information.
+   * @param cost Cost record to remove
+   */
+  const handleDeleteCost = async (cost: Cost) => {
+    const confirmed = window.confirm(
+      `"${cost.category}" kategorisindeki ${cost.amount.toLocaleString("tr-TR")} TL tutarındaki gider kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+    );
+    if (!confirmed) return;
+
+    setDeleteError("");
+    setDeletingId(cost.id);
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/finance/costs/${cost.id}`, { method: "DELETE", headers });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gider kaydı silinemedi.");
+      }
+
+      setCosts((prev) => prev.filter((c) => c.id !== cost.id));
+    } catch (err: any) {
+      setDeleteError(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  /**
+   * Deletes a single sale/revenue record after user confirmation. Used to
+   * correct a wrong amount or any other mistakenly entered information.
+   * @param sale Sale record to remove
+   */
+  const handleDeleteSale = async (sale: Sale) => {
+    const confirmed = window.confirm(
+      `"${sale.productType}" ürününe ait ${sale.totalRevenue.toLocaleString("tr-TR")} TL tutarındaki satış kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+    );
+    if (!confirmed) return;
+
+    setDeleteError("");
+    setDeletingId(sale.id);
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/finance/sales/${sale.id}`, { method: "DELETE", headers });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Satış kaydı silinemedi.");
+      }
+
+      setSales((prev) => prev.filter((s) => s.id !== sale.id));
+    } catch (err: any) {
+      setDeleteError(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  /**
+   * Deletes a single harvest record after user confirmation. Used to
+   * correct a wrong amount or any other mistakenly entered information.
+   * @param harvest Harvest record to remove
+   */
+  const handleDeleteHarvest = async (harvest: Harvest) => {
+    const confirmed = window.confirm(
+      `${harvest.quantityKg.toLocaleString("tr-TR")} Kg'lık hasat kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+    );
+    if (!confirmed) return;
+
+    setDeleteError("");
+    setDeletingId(harvest.id);
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/finance/harvests/${harvest.id}`, { method: "DELETE", headers });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Hasat kaydı silinemedi.");
+      }
+
+      setHarvests((prev) => prev.filter((h) => h.id !== harvest.id));
+    } catch (err: any) {
+      setDeleteError(err.message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -629,6 +726,11 @@ export default function FinanceManager() {
             </form>
           )}
 
+          {/* Deletion error banner, visible across the ledger view regardless of which form is open */}
+          {deleteError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-100 p-3 rounded-2xl">{deleteError}</p>
+          )}
+
           {/* Ledger Lists of Transactions */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Costs Ledger */}
@@ -637,20 +739,36 @@ export default function FinanceManager() {
               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                 {costs.length > 0 ? (
                   costs.map((cost) => (
-                    <div id={`cost-row-${cost.id}`} key={cost.id} className="text-xs border-b border-[#f0f4ee] pb-3 last:border-b-0 flex justify-between items-center">
-                      <div className="space-y-1">
+                    <div id={`cost-row-${cost.id}`} key={cost.id} className="text-xs border-b border-[#f0f4ee] pb-3 last:border-b-0 flex justify-between items-center gap-2">
+                      <div className="space-y-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-[#1a2416]">{cost.category}</span>
                           <span className="text-[10px] text-[#80907a] bg-[#f0f4ee] px-1.5 py-0.5 rounded font-mono">
                             {getParcelName(cost.parcelId)}
                           </span>
                         </div>
-                        <p className="text-[#5a6a55] italic">{cost.description || "Harcama açıklaması belirtilmemiş"}</p>
+                        <p className="text-[#5a6a55] italic truncate">{cost.description || "Harcama açıklaması belirtilmemiş"}</p>
                       </div>
 
-                      <div className="text-right space-y-1">
-                        <span className="font-bold font-display text-red-700 text-sm">-{cost.amount.toLocaleString()} TL</span>
-                        <span className="block text-[10px] text-[#80907a] font-mono">{new Date(cost.costDate).toLocaleDateString("tr-TR")}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right space-y-1">
+                          <span className="font-bold font-display text-red-700 text-sm block">-{cost.amount.toLocaleString()} TL</span>
+                          <span className="block text-[10px] text-[#80907a] font-mono">{new Date(cost.costDate).toLocaleDateString("tr-TR")}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCost(cost)}
+                          disabled={deletingId === cost.id}
+                          title="Bu gider kaydını sil"
+                          aria-label="Gider kaydını sil"
+                          className="p-1.5 text-[#a3a99e] hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                        >
+                          {deletingId === cost.id ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                        </button>
                       </div>
                     </div>
                   ))
@@ -666,8 +784,8 @@ export default function FinanceManager() {
               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                 {sales.length > 0 ? (
                   sales.map((sale) => (
-                    <div id={`sale-row-${sale.id}`} key={sale.id} className="text-xs border-b border-[#f0f4ee] pb-3 last:border-b-0 flex justify-between items-center">
-                      <div className="space-y-1">
+                    <div id={`sale-row-${sale.id}`} key={sale.id} className="text-xs border-b border-[#f0f4ee] pb-3 last:border-b-0 flex justify-between items-center gap-2">
+                      <div className="space-y-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold text-[#1a2416]">{sale.productType}</span>
                           {sale.isOrganikSaglikBrand && (
@@ -676,12 +794,28 @@ export default function FinanceManager() {
                             </span>
                           )}
                         </div>
-                        <p className="text-[#5a6a55] font-semibold">{sale.quantityKg} Kg x {sale.unitPrice} TL/Kg • <span className="font-normal text-stone-500">{sale.buyerName}</span></p>
+                        <p className="text-[#5a6a55] font-semibold truncate">{sale.quantityKg} Kg x {sale.unitPrice} TL/Kg • <span className="font-normal text-stone-500">{sale.buyerName}</span></p>
                       </div>
 
-                      <div className="text-right space-y-1">
-                        <span className="font-bold font-display text-[#556b2f] text-sm">+{sale.totalRevenue.toLocaleString()} TL</span>
-                        <span className="block text-[10px] text-[#80907a] font-mono">{new Date(sale.saleDate).toLocaleDateString("tr-TR")}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right space-y-1">
+                          <span className="font-bold font-display text-[#556b2f] text-sm block">+{sale.totalRevenue.toLocaleString()} TL</span>
+                          <span className="block text-[10px] text-[#80907a] font-mono">{new Date(sale.saleDate).toLocaleDateString("tr-TR")}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSale(sale)}
+                          disabled={deletingId === sale.id}
+                          title="Bu satış kaydını sil"
+                          aria-label="Satış kaydını sil"
+                          className="p-1.5 text-[#a3a99e] hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                        >
+                          {deletingId === sale.id ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                        </button>
                       </div>
                     </div>
                   ))
@@ -737,9 +871,25 @@ export default function FinanceManager() {
                 {harvests.length > 0 ? (
                   harvests.map((harvest) => (
                     <div id={`harvest-item-${harvest.id}`} key={harvest.id} className="text-xs border-b border-[#f0f4ee] pb-3 last:border-b-0 space-y-1">
-                      <div className="flex justify-between font-bold text-[#1a2416]">
-                        <span>{getParcelName(harvest.parcelId)}</span>
-                        <span>{harvest.quantityKg} Kg</span>
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex justify-between font-bold text-[#1a2416] flex-1 min-w-0">
+                          <span className="truncate">{getParcelName(harvest.parcelId)}</span>
+                          <span className="shrink-0 ml-2">{harvest.quantityKg} Kg</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteHarvest(harvest)}
+                          disabled={deletingId === harvest.id}
+                          title="Bu hasat kaydını sil"
+                          aria-label="Hasat kaydını sil"
+                          className="p-1 text-[#a3a99e] hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40 shrink-0"
+                        >
+                          {deletingId === harvest.id ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                        </button>
                       </div>
                       <p className="text-[#80907a] font-mono">Kalite: {harvest.qualityGrade} • {new Date(harvest.harvestDate).toLocaleDateString("tr-TR")}</p>
                       <p className="text-[#5a6a55] font-semibold">Hasat Toplam Maliyeti: <span className="text-red-700">{harvest.totalCost.toLocaleString()} TL</span></p>

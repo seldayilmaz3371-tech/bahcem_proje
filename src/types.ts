@@ -50,6 +50,30 @@ export interface Tree {
   updatedAt: string;
 }
 
+export type TreeCountChangeReason =
+  | "Dikim (Yeni Ekim)"
+  | "Kesim/Budama"
+  | "Don/Hastalık Kaybı"
+  | "Sayım Düzeltmesi"
+  | "Diğer";
+
+/**
+ * A single immutable historical entry recording a manual adjustment to a
+ * parcel's aggregate tree/plant count.
+ */
+export interface TreeCountChangeLog {
+  id: string;
+  parcelId: string;
+  previousCount: number;
+  newCount: number;
+  delta: number;
+  reason: TreeCountChangeReason;
+  notes?: string;
+  changedBy: string;
+  changeDate: string;
+  createdAt: string;
+}
+
 export interface Observation {
   id: string;
   parcelId: string;
@@ -148,6 +172,53 @@ export interface WeatherRecord {
   hasFrostRisk: boolean;
   soilTemperature?: number;
   createdAt: string;
+}
+
+/**
+ * A single day's forecast within a LiveWeatherForecast payload, sourced
+ * live from the Open-Meteo external API (never fabricated).
+ */
+export interface LiveWeatherDailyForecast {
+  date: string;
+  dateLabel: string;
+  tempMax: number;
+  tempMin: number;
+  humidityPercent: number | null;
+  windSpeedMaxKmh: number;
+  precipitationProbabilityPercent: number | null;
+  condition: string;
+  weatherCode: number;
+  hasFrostRisk: boolean;
+}
+
+/**
+ * Real-time current weather conditions at the farm's configured location.
+ */
+export interface LiveWeatherCurrentConditions {
+  temperatureCelsius: number;
+  apparentTemperatureCelsius: number | null;
+  humidityPercent: number | null;
+  windSpeedKmh: number;
+  precipitationMm: number | null;
+  condition: string;
+  weatherCode: number;
+  observedAt: string;
+}
+
+/**
+ * Complete live weather forecast response returned by
+ * GET /api/weather/live-forecast, always sourced from Open-Meteo.
+ */
+export interface LiveWeatherForecast {
+  source: string;
+  locationName: string;
+  latitude: number;
+  longitude: number;
+  timezone: string;
+  fetchedAt: string;
+  current: LiveWeatherCurrentConditions;
+  daily: LiveWeatherDailyForecast[];
+  hasUpcomingFrostRisk: boolean;
 }
 
 export interface AIRecommendation {
