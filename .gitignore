@@ -6,3 +6,15 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Runtime-generated application data: the local JSON database, session
+# tokens, uploaded field-observation photos, RAG document embeddings, and
+# quarantined corrupted database files. None of this belongs in version
+# control — it is personal farm data and security-sensitive session state,
+# not source code, and grows over time as the application is used.
+data/
+
+# Automated database/photo backup snapshots, including any Google Drive
+# sync mirror created locally by this project (the actual cloud copy is
+# managed by Google Drive itself, not by git).
+backups/

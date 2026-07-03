@@ -4,6 +4,7 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
+import crypto from "crypto";
 import { 
   uploadedDocumentRepository, 
   vectorChunkRepository, 
@@ -18,6 +19,7 @@ import { UploadedDocument, VectorChunk, AIRecommendation, WeatherRecord, Photo }
 import { AgriUtils } from "../utils";
 import { weatherService } from "./weather.service";
 import { photoStorageService } from "./photo-storage.service";
+import { embeddingStorageService } from "./embedding-storage.service";
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -124,7 +126,11 @@ export async function searchSimilarChunks(query: string, limit = 4): Promise<{ c
     const allChunks = await vectorChunkRepository.getAll();
     
     const matches = allChunks.map((chunk) => {
-      const score = cosineSimilarity(queryEmbedding, chunk.embeddings);
+      // Embeddings are stored as individual files on disk (see
+      // EmbeddingStorageService); a not-yet-migrated legacy chunk may
+      // still carry its embedding inline in the record itself.
+      const chunkEmbedding = embeddingStorageService.readEmbedding(chunk.id) ?? chunk.embeddings;
+      const score = cosineSimilarity(queryEmbedding, chunkEmbedding);
       return { chunk, score };
     });
 
@@ -166,7 +172,9 @@ export class AIService {
       // Step 2: Split text into overlapping segments
       const textChunks = chunkText(textContent);
       
-      // Step 3: Embed each chunk and save to vector chunk repository
+      // Step 3: Embed each chunk, persist the (large) embedding vector to
+      // its own file on disk, and save only a lightweight record (id,
+      // content, chunk index) in the main database.
       for (let i = 0; i < textChunks.length; i++) {
         const chunkTextContent = textChunks[i];
         let embeddings: number[] = [];
@@ -177,11 +185,15 @@ export class AIService {
           embeddings = new Array(768).fill(0); // Blank embedding fallback to avoid hard crashes
         }
 
+        const chunkId = crypto.randomUUID();
+        embeddingStorageService.saveEmbedding(embeddings, chunkId);
+
         await vectorChunkRepository.create({
+          id: chunkId,
           documentId: newDoc.id,
           chunkIndex: i,
           content: chunkTextContent,
-          embeddings,
+          embeddings: [],
         });
       }
 
@@ -217,6 +229,13 @@ export class AIService {
     try {
       const docExists = await uploadedDocumentRepository.getById(documentId);
       if (!docExists) return false;
+
+      // Delete each chunk's on-disk embedding file before removing the
+      // lightweight chunk records themselves.
+      const chunksToDelete = await vectorChunkRepository.getByDocumentId(documentId);
+      for (const chunk of chunksToDelete) {
+        embeddingStorageService.deleteEmbedding(chunk.id);
+      }
 
       // Delete vector chunks
       await vectorChunkRepository.deleteByDocumentId(documentId);

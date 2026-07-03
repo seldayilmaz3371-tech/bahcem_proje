@@ -29,6 +29,7 @@ import { uploadedDocumentRepository, aiRecommendationRepository } from "./server
 import { weatherService } from "./server/services/weather.service";
 import { photoStorageService } from "./server/services/photo-storage.service";
 import { backupService } from "./server/services/backup.service";
+import { embeddingStorageService } from "./server/services/embedding-storage.service";
 import { 
   UserRole,
   User,
@@ -1133,6 +1134,15 @@ async function startServer() {
     }
   } catch (error) {
     logger.error("SYSTEM", "Eski fotoğrafları dosya sistemine taşıma işlemi sırasında bir hata oluştu.", error);
+  }
+
+  try {
+    const migratedEmbeddings = await embeddingStorageService.migrateAllLegacyEmbeddings();
+    if (migratedEmbeddings > 0) {
+      logger.info("SYSTEM", `${migratedEmbeddings} eski embedding kaydı dosya sistemine taşındı.`);
+    }
+  } catch (error) {
+    logger.error("SYSTEM", "Eski embedding'leri dosya sistemine taşıma işlemi sırasında bir hata oluştu.", error);
   }
 
   // Starts the recurring automated backup schedule (immediate first backup,
