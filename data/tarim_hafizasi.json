@@ -43,163 +43,8 @@
       ]
     }
   ],
-  "parcels": [
-    {
-      "id": "parcel-1",
-      "name": "Kuzey Yamaç Zeytinliği",
-      "latitude": 36.9312,
-      "longitude": 34.4255,
-      "areaDekar": 12.5,
-      "treeCount": 5,
-      "soilType": "Killi-Tınlı",
-      "irrigationType": "Damlama",
-      "notes": "Sarıulak ağırlıklı, rüzgara açık kuzey yamaç.",
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z"
-    },
-    {
-      "id": "parcel-2",
-      "name": "Derekenarı Düzlüğü",
-      "latitude": 36.9288,
-      "longitude": 34.429,
-      "areaDekar": 8,
-      "treeCount": 4,
-      "soilType": "Tınlı",
-      "irrigationType": "Damlama",
-      "notes": "Su sıkıntısı olmayan, derin profilli alüvyal toprak.",
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z"
-    },
-    {
-      "id": "parcel-3",
-      "name": "Tepebağ Eski Bahçe",
-      "latitude": 36.934,
-      "longitude": 34.421,
-      "areaDekar": 6.2,
-      "treeCount": 3,
-      "soilType": "Kireçli",
-      "irrigationType": "Kuru",
-      "notes": "Geleneksel dikim, yaşlı ağaçlar, susuz tarım.",
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z"
-    }
-  ],
-  "trees": [
-    {
-      "id": "tree-1-1",
-      "parcelId": "parcel-1",
-      "treeNumber": "KY-T01",
-      "variety": "Sarıulak",
-      "plantingYear": 2012,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z",
-      "notes": "Verimi yüksek, güçlü taç gelişimi."
-    },
-    {
-      "id": "tree-1-2",
-      "parcelId": "parcel-1",
-      "treeNumber": "KY-T02",
-      "variety": "Sarıulak",
-      "plantingYear": 2012,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z",
-      "notes": "Damlama ucu kontrol edilmeli, biraz gölge görüyor."
-    },
-    {
-      "id": "tree-1-3",
-      "parcelId": "parcel-1",
-      "treeNumber": "KY-T03",
-      "variety": "Sarıulak",
-      "plantingYear": 2013,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z"
-    },
-    {
-      "id": "tree-1-4",
-      "parcelId": "parcel-1",
-      "treeNumber": "KY-T04",
-      "variety": "Ayvalık",
-      "plantingYear": 2015,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z"
-    },
-    {
-      "id": "tree-1-5",
-      "parcelId": "parcel-1",
-      "treeNumber": "KY-T05",
-      "variety": "Sarıulak",
-      "plantingYear": 2012,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z",
-      "notes": "Gövde çevresi sağlıklı."
-    },
-    {
-      "id": "tree-2-1",
-      "parcelId": "parcel-2",
-      "treeNumber": "DK-T01",
-      "variety": "Ayvalık",
-      "plantingYear": 2014,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z"
-    },
-    {
-      "id": "tree-2-2",
-      "parcelId": "parcel-2",
-      "treeNumber": "DK-T02",
-      "variety": "Ayvalık",
-      "plantingYear": 2014,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z"
-    },
-    {
-      "id": "tree-2-3",
-      "parcelId": "parcel-2",
-      "treeNumber": "DK-T03",
-      "variety": "Ayvalık",
-      "plantingYear": 2014,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z",
-      "notes": "Nemli toprağı seviyor."
-    },
-    {
-      "id": "tree-2-4",
-      "parcelId": "parcel-2",
-      "treeNumber": "DK-T04",
-      "variety": "Ayvalık",
-      "plantingYear": 2015,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z"
-    },
-    {
-      "id": "tree-3-1",
-      "parcelId": "parcel-3",
-      "treeNumber": "TB-T01",
-      "variety": "Gemlik",
-      "plantingYear": 2008,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z",
-      "notes": "En yaşlı ve anıt ağaç statüsünde verimli."
-    },
-    {
-      "id": "tree-3-2",
-      "parcelId": "parcel-3",
-      "treeNumber": "TB-T02",
-      "variety": "Gemlik",
-      "plantingYear": 2008,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z",
-      "notes": "Halkalı leke geçmişi var, yakından izlenmeli."
-    },
-    {
-      "id": "tree-3-3",
-      "parcelId": "parcel-3",
-      "treeNumber": "TB-T03",
-      "variety": "Gemlik",
-      "plantingYear": 2009,
-      "createdAt": "2026-07-02T12:03:23.311Z",
-      "updatedAt": "2026-07-02T12:03:23.311Z"
-    }
-  ],
+  "parcels": [],
+  "trees": [],
   "observations": [
     {
       "id": "obs-3",
@@ -3625,6 +3470,20 @@
   ],
   "activityLogs": [
     {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "createdAt": "2026-07-03T03:55:49.240Z",
+      "id": "72afdd75-eb03-4c13-afe1-18f3759fd047"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "createdAt": "2026-07-02T12:25:59.847Z",
+      "id": "4fb9394f-6315-492c-b3a7-f05804793c4b"
+    },
+    {
       "id": "log-1",
       "userId": "user-admin-default",
       "action": "DATABASE_SEED",
@@ -3640,10 +3499,24 @@
     },
     {
       "userId": "user-admin-default",
-      "action": "LOGIN_SUCCESS",
-      "details": "Kullanıcı sisteme giriş yaptı.",
-      "createdAt": "2026-07-02T12:25:59.847Z",
-      "id": "4fb9394f-6315-492c-b3a7-f05804793c4b"
+      "action": "PARCEL_DELETE",
+      "details": "Parsel ve bağlı tüm ağaçlar silindi: 'Kuzey Yamaç Zeytinliği'",
+      "createdAt": "2026-07-03T04:03:22.209Z",
+      "id": "e633c4c1-dff3-4a59-9f2d-21dcae76062d"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "PARCEL_DELETE",
+      "details": "Parsel ve bağlı tüm ağaçlar silindi: 'Derekenarı Düzlüğü'",
+      "createdAt": "2026-07-03T04:03:25.402Z",
+      "id": "6c69005f-fb02-4b2d-9226-3d2ea1bca555"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "PARCEL_DELETE",
+      "details": "Parsel ve bağlı tüm ağaçlar silindi: 'Tepebağ Eski Bahçe'",
+      "createdAt": "2026-07-03T04:03:28.834Z",
+      "id": "af953e69-9e8f-430d-a6a2-3cedc7a4d86d"
     }
   ],
   "settings": [

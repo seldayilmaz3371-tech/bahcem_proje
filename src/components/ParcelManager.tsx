@@ -18,7 +18,7 @@ import {
   ChevronRight,
   Info
 } from "lucide-react";
-import { Parcel, Tree } from "../types";
+import { Parcel, Tree, CropType } from "../types";
 
 export default function ParcelManager() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
@@ -30,6 +30,8 @@ export default function ParcelManager() {
   const [showParcelForm, setShowParcelForm] = useState(false);
   const [parcelName, setParcelName] = useState("");
   const [parcelArea, setParcelArea] = useState("");
+  const [parcelTreeCount, setParcelTreeCount] = useState("");
+  const [cropType, setCropType] = useState<CropType>("Zeytin");
   const [soilType, setSoilType] = useState("Killi-Tınlı");
   const [irrigationType, setIrrigationType] = useState("Damlama");
 
@@ -40,6 +42,12 @@ export default function ParcelManager() {
   const [treeNotes, setTreeNotes] = useState("");
 
   const [error, setError] = useState("");
+
+  /**
+   * Human-readable label for the currently selected parcel's plant unit.
+   * Olive parcels track "Ağaç" (trees); vegetable/fruit parcels track "Bitki" (plants).
+   */
+  const plantLabel = selectedParcel?.cropType === "Zeytin" ? "Ağaç" : "Bitki";
 
   const fetchParcels = async () => {
     setLoading(true);
@@ -77,6 +85,7 @@ export default function ParcelManager() {
   const handleSelectParcel = (parcel: Parcel) => {
     setSelectedParcel(parcel);
     fetchTrees(parcel.id);
+    setTreeVariety(parcel.cropType === "Zeytin" ? "Sarıulak" : "");
   };
 
   const handleAddParcel = async (e: React.FormEvent) => {
@@ -98,6 +107,8 @@ export default function ParcelManager() {
         body: JSON.stringify({
           name: parcelName,
           areaDekar: parcelArea,
+          cropType,
+          treeCount: parcelTreeCount,
           soilType,
           irrigationType
         })
@@ -110,6 +121,8 @@ export default function ParcelManager() {
 
       setParcelName("");
       setParcelArea("");
+      setParcelTreeCount("");
+      setCropType("Zeytin");
       setShowParcelForm(false);
       fetchParcels();
     } catch (err: any) {
@@ -210,9 +223,9 @@ export default function ParcelManager() {
     <div id="parcel-manager-tab" className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold font-display text-[#1a2416] tracking-tight">Parseller & Ağaç Takipleri</h1>
+          <h1 className="text-3xl font-bold font-display text-[#1a2416] tracking-tight">Parseller & Ürün Takipleri</h1>
           <p className="text-sm text-[#5a6a55] mt-1">
-            Zeytinlik alanlarınızı yönetin ve ağaçlarınızı tek tek kaydedip takip edin.
+            Zeytin, sebze ve meyve parsellerinizi yönetin; ağaç ve bitkilerinizi tek tek kaydedip takip edin.
           </p>
         </div>
         <button
@@ -243,6 +256,18 @@ export default function ParcelManager() {
               />
             </div>
             <div>
+              <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Ürün Türü</label>
+              <select
+                value={cropType}
+                onChange={(e) => setCropType(e.target.value as CropType)}
+                className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+              >
+                <option value="Zeytin">Zeytin</option>
+                <option value="Sebze">Sebze</option>
+                <option value="Meyve">Meyve</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Alan (Dekar)</label>
               <input
                 type="number"
@@ -250,6 +275,18 @@ export default function ParcelManager() {
                 value={parcelArea}
                 onChange={(e) => setParcelArea(e.target.value)}
                 placeholder="Örn: 8.5"
+                className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Ağaç/Bitki Sayısı (Tahmini)</label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={parcelTreeCount}
+                onChange={(e) => setParcelTreeCount(e.target.value)}
+                placeholder="Örn: 50"
                 className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
               />
             </div>
@@ -279,6 +316,9 @@ export default function ParcelManager() {
               </select>
             </div>
           </div>
+          <p className="text-[11px] text-[#80907a] italic -mt-1">
+            Not: Ağaç/bitki sayısı burada tahmini olarak girilebilir. "Yeni {plantLabel} Tanımla" ile tekil kayıt eklemeye başladığınızda bu sayı otomatik olarak gerçek kayıt adedine göre güncellenir.
+          </p>
           
           <button
             type="submit"
@@ -315,10 +355,13 @@ export default function ParcelManager() {
                       <h3 className="font-bold font-display text-base leading-tight">{parcel.name}</h3>
                       <div className="flex flex-wrap gap-2 text-[11px] font-mono">
                         <span className={`px-2 py-0.5 rounded-full ${isSelected ? "bg-[#415324]" : "bg-[#f0f4ee] text-[#556b2f]"}`}>
+                          {parcel.cropType}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full ${isSelected ? "bg-[#415324]" : "bg-[#f0f4ee] text-[#556b2f]"}`}>
                           {parcel.areaDekar} Dekar
                         </span>
                         <span className={`px-2 py-0.5 rounded-full ${isSelected ? "bg-[#415324]" : "bg-[#f0f4ee] text-[#556b2f]"}`}>
-                          {parcel.treeCount} Ağaç
+                          {parcel.treeCount} {parcel.cropType === "Zeytin" ? "Ağaç" : "Bitki"}
                         </span>
                       </div>
                     </div>
@@ -355,9 +398,9 @@ export default function ParcelManager() {
             <div className="bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-6 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#f0f4ee] pb-4">
                 <div>
-                  <h2 className="text-xl font-bold font-display text-[#1a2416]">{selectedParcel.name} - Detaylı Ağaç Listesi</h2>
+                  <h2 className="text-xl font-bold font-display text-[#1a2416]">{selectedParcel.name} - Detaylı {plantLabel} Listesi</h2>
                   <p className="text-xs text-[#5a6a55] mt-0.5">
-                    Toprak: <span className="font-semibold text-[#1a2416]">{selectedParcel.soilType}</span> | Sulama: <span className="font-semibold text-[#1a2416]">{selectedParcel.irrigationType}</span>
+                    Ürün: <span className="font-semibold text-[#1a2416]">{selectedParcel.cropType}</span> | Toprak: <span className="font-semibold text-[#1a2416]">{selectedParcel.soilType}</span> | Sulama: <span className="font-semibold text-[#1a2416]">{selectedParcel.irrigationType}</span>
                   </p>
                 </div>
 
@@ -367,19 +410,19 @@ export default function ParcelManager() {
                   className="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-[#556b2f] bg-[#f0f4ee] rounded-xl hover:bg-[#e4ebdf] transition-all"
                 >
                   {showTreeForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                  <span>{showTreeForm ? "Kapat" : "Yeni Ağaç Tanımla"}</span>
+                  <span>{showTreeForm ? "Kapat" : `Yeni ${plantLabel} Tanımla`}</span>
                 </button>
               </div>
 
               {showTreeForm && (
                 <form onSubmit={handleAddTree} className="bg-[#fcfdfc] border border-[#e2e8df] rounded-2xl p-5 space-y-4 animate-slide-up">
-                  <h3 className="text-xs font-bold text-[#1a2416] uppercase tracking-wider">Ağaç Referans Kartı</h3>
+                  <h3 className="text-xs font-bold text-[#1a2416] uppercase tracking-wider">{plantLabel} Referans Kartı</h3>
                   
                   {error && <p className="text-xs font-bold text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-100">{error}</p>}
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Ağaç No (Örn: T-12)</label>
+                      <label className="block text-[10px] font-bold text-[#5a6a55] uppercase tracking-wider mb-1">{plantLabel} No (Örn: T-12)</label>
                       <input
                         type="text"
                         value={treeNumber}
@@ -390,16 +433,26 @@ export default function ParcelManager() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Varyete / Tür</label>
-                      <select
-                        value={treeVariety}
-                        onChange={(e) => setTreeVariety(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-[#cdd4ca] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
-                      >
-                        <option value="Sarıulak">Sarıulak (Yerel Mersin)</option>
-                        <option value="Ayvalık">Ayvalık / Edremit</option>
-                        <option value="Gemlik">Gemlik (Salamuralık)</option>
-                        <option value="Kalamata">Kalamata</option>
-                      </select>
+                      {selectedParcel.cropType === "Zeytin" ? (
+                        <select
+                          value={treeVariety}
+                          onChange={(e) => setTreeVariety(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-[#cdd4ca] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+                        >
+                          <option value="Sarıulak">Sarıulak (Yerel Mersin)</option>
+                          <option value="Ayvalık">Ayvalık / Edremit</option>
+                          <option value="Gemlik">Gemlik (Salamuralık)</option>
+                          <option value="Kalamata">Kalamata</option>
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={treeVariety}
+                          onChange={(e) => setTreeVariety(e.target.value)}
+                          placeholder={selectedParcel.cropType === "Sebze" ? "Örn: Domates - Pembe Çeri" : "Örn: Elma - Starking"}
+                          className="w-full px-3 py-2 bg-white border border-[#cdd4ca] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Dikim Yılı</label>
@@ -428,14 +481,14 @@ export default function ParcelManager() {
                     type="submit"
                     className="px-4 py-2 text-xs font-bold text-white bg-[#556b2f] hover:bg-[#415324] rounded-xl transition-all shadow-sm"
                   >
-                    Ağacı Kaydet
+                    {plantLabel === "Ağaç" ? "Ağacı" : "Bitkiyi"} Kaydet
                   </button>
                 </form>
               )}
 
               {/* Tree Grid */}
               <div className="space-y-2">
-                <h3 className="text-xs font-bold text-[#80907a] uppercase tracking-wider">Ağaç Haritası & Sağlık Durumları ({trees.length} Ağaç)</h3>
+                <h3 className="text-xs font-bold text-[#80907a] uppercase tracking-wider">{plantLabel} Haritası & Sağlık Durumları ({trees.length} {plantLabel})</h3>
                 
                 {trees.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -469,7 +522,7 @@ export default function ParcelManager() {
                 ) : (
                   <div className="p-12 text-center border-2 border-dashed border-[#e2e8df] rounded-2xl">
                     <Trees className="h-10 w-10 text-[#80907a] mx-auto mb-2" />
-                    <p className="text-xs text-[#5a6a55] italic">Bu parsele henüz tekli ağaç kaydı eklenmemiştir.</p>
+                    <p className="text-xs text-[#5a6a55] italic">Bu parsele henüz tekil {plantLabel.toLowerCase()} kaydı eklenmemiştir.</p>
                   </div>
                 )}
               </div>
@@ -479,11 +532,11 @@ export default function ParcelManager() {
               <Folder className="h-12 w-12 text-[#80907a] mb-3" />
               <h2 className="text-base font-bold text-[#1a2416]">Parsel Seçimi Yapın</h2>
               <p className="text-xs text-[#5a6a55] max-w-sm mt-1">
-                Soldaki listeden bir zeytinlik parseli seçerek ağaç detaylarını, tür dağılımlarını ve tekli ağaç sağlığı takiplerini anlık görebilirsiniz.
+                Soldaki listeden bir parsel seçerek ürün detaylarını, tür dağılımlarını ve tekil ağaç/bitki sağlığı takiplerini anlık görebilirsiniz.
               </p>
             </div>
           )}
-        </div>
+    </div>
       </div>
     </div>
   );

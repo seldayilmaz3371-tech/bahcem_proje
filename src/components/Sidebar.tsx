@@ -11,6 +11,7 @@ import {
   Package, 
   CircleDollarSign, 
   BrainCircuit, 
+  TrendingUp,
   FolderOpen, 
   ShieldAlert,
   LogOut,
@@ -34,6 +35,7 @@ export default function Sidebar({ activeTab, setActiveTab, user, onLogout }: Sid
     { id: "inventory", label: "Stok & Depo", icon: Package },
     { id: "finance", label: "Mali Defter & Gelir", icon: CircleDollarSign },
     { id: "ai-advisor", label: "Yapay Zeka Karar Destek", icon: BrainCircuit },
+    { id: "photo-growth", label: "Fotoğraflı Gelişim Analizi", icon: TrendingUp },
     { id: "document-hub", label: "RAG Doküman Havuzu", icon: FolderOpen },
     { id: "activities", label: "Sistem Logları", icon: ShieldAlert },
   ];

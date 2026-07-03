@@ -12,6 +12,7 @@ import ObservationLog from "./components/ObservationLog";
 import InventoryManager from "./components/InventoryManager";
 import FinanceManager from "./components/FinanceManager";
 import AIRecommendations from "./components/AIRecommendations";
+import PhotoGrowthAnalysis from "./components/PhotoGrowthAnalysis";
 import DocumentHub from "./components/DocumentHub";
 import ActivityLogs from "./components/ActivityLogs";
 import { ActiveTab, User } from "./types";
@@ -131,6 +132,7 @@ export default function App() {
         {activeTab === "inventory" && <InventoryManager />}
         {activeTab === "finance" && <FinanceManager />}
         {activeTab === "ai-advisor" && <AIRecommendations />}
+        {activeTab === "photo-growth" && <PhotoGrowthAnalysis />}
         {activeTab === "document-hub" && <DocumentHub />}
         {activeTab === "activities" && <ActivityLogs />}
       </main>

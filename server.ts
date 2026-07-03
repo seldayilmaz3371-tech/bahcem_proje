@@ -213,16 +213,33 @@ app.get("/api/parcels", requireAuth, asyncHandler(async (req, res) => {
   res.json(list);
 }));
 
+const VALID_CROP_TYPES: readonly string[] = ["Zeytin", "Sebze", "Meyve"];
+
 app.post("/api/parcels", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { name, areaDekar, soilType, irrigationType } = req.body;
+  const { name, areaDekar, soilType, irrigationType, cropType, treeCount } = req.body;
   if (!name || !areaDekar || !soilType || !irrigationType) {
     return res.status(400).json({ error: "Parsel adı, büyüklük (dekar), toprak yapısı ve sulama yöntemi zorunludur." });
   }
 
+  const resolvedCropType = cropType || "Zeytin";
+  if (!VALID_CROP_TYPES.includes(resolvedCropType)) {
+    return res.status(400).json({ error: `Geçersiz ürün türü. İzin verilen değerler: ${VALID_CROP_TYPES.join(", ")}.` });
+  }
+
+  let resolvedTreeCount = 0;
+  if (treeCount !== undefined && treeCount !== null && treeCount !== "") {
+    const parsedTreeCount = parseInt(treeCount, 10);
+    if (isNaN(parsedTreeCount) || parsedTreeCount < 0) {
+      return res.status(400).json({ error: "Ağaç/bitki sayısı sıfır veya pozitif bir tam sayı olmalıdır." });
+    }
+    resolvedTreeCount = parsedTreeCount;
+  }
+
   const newParcel = await parcelRepository.create({
     name,
+    cropType: resolvedCropType as Parcel["cropType"],
     areaDekar: parseFloat(areaDekar),
-    treeCount: 0,
+    treeCount: resolvedTreeCount,
     soilType,
     irrigationType,
     latitude: 36.9123, // Default center coordinate for Toroslar Değirmençay
@@ -236,7 +253,7 @@ app.post("/api/parcels", requireAuth, asyncHandler(async (req: AuthenticatedRequ
   await activityLogRepository.writeLog(
     req.user.id,
     "PARCEL_CREATE",
-    `Yeni arazi parseli eklendi: '${name}' (${areaDekar} Dekar)`
+    `Yeni ${resolvedCropType.toLowerCase()} parseli eklendi: '${name}' (${areaDekar} Dekar, ${resolvedTreeCount} Ağaç/Bitki)`
   );
 
   res.status(201).json(newParcel);
@@ -826,8 +843,53 @@ app.post("/api/ai/chat", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 
+// Get photos for a parcel within a date range (live preview before running AI analysis)
+app.get("/api/parcels/:parcelId/photos-in-range", requireAuth, asyncHandler(async (req, res) => {
+  const { startDate, endDate } = req.query;
+  if (!startDate || !endDate) {
+    return res.status(400).json({ error: "Başlangıç ve bitiş tarihi (startDate, endDate) zorunludur." });
+  }
+
+  const parcel = await parcelRepository.getById(req.params.parcelId);
+  if (!parcel) {
+    return res.status(404).json({ error: "Parsel bulunamadı." });
+  }
+
+  const rangeStart = new Date(startDate as string);
+  const rangeEnd = new Date(endDate as string);
+  if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime())) {
+    return res.status(400).json({ error: "Geçersiz tarih formatı." });
+  }
+  rangeEnd.setHours(23, 59, 59, 999);
+
+  const allPhotos = await photoRepository.getPhotosByParcelId(req.params.parcelId);
+  const photosInRange = allPhotos
+    .filter((p) => {
+      const photoDate = new Date(p.takenAt || p.createdAt);
+      return photoDate.getTime() >= rangeStart.getTime() && photoDate.getTime() <= rangeEnd.getTime();
+    })
+    .sort((a, b) => new Date(a.takenAt || a.createdAt).getTime() - new Date(b.takenAt || b.createdAt).getTime());
+
+  res.json(photosInRange);
+}));
+
+// Generate an AI-powered visual growth/development analysis from parcel photos over a date range
+app.post("/api/ai/growth-analysis/:parcelId", requireAuth, asyncHandler(async (req, res) => {
+  const { startDate, endDate, userQuery } = req.body;
+  if (!startDate || !endDate) {
+    return res.status(400).json({ error: "Başlangıç ve bitiş tarihi zorunludur." });
+  }
+
+  const result = await aiService.generateGrowthAnalysis(req.params.parcelId, startDate, endDate, userQuery);
+  if (!result) {
+    return res.status(500).json({ error: "Gelişim analizi oluşturulamadı." });
+  }
+
+  res.status(201).json(result);
+}));
+
 // ==========================================
-// VITE AND DEVELOPMENT CLIENT BINDING
+// 8. VITE AND DEVELOPMENT CLIENT BINDING
 // ==========================================
 
 async function startServer() {

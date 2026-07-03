@@ -39,11 +39,20 @@ export interface Role {
 }
 
 /**
+ * Crop Type Enum
+ * Distinguishes olive orchards from other vegetable/fruit cultivation parcels,
+ * allowing the existing Parcel/Tree infrastructure (observations, applications,
+ * harvests, finance, AI recommendations) to be reused for non-olive crops.
+ */
+export type CropType = "Zeytin" | "Sebze" | "Meyve";
+
+/**
  * 3. Parcels Table Schema (Mersin Toroslar / Değirmençay fields)
  */
 export interface Parcel {
   id: string;
   name: string; // e.g. "Değirmençay Merkez Zeytinlik"
+  cropType: CropType; // Ürün türü: Zeytin, Sebze veya Meyve
   latitude: number;
   longitude: number;
   areaDekar: number; // Alan bilgisi (Dekar)
@@ -287,7 +296,7 @@ export interface AITask {
 export interface AIRecommendation {
   id: string;
   parcelId?: string;
-  recommendationType: "Hastalık" | "Gübreleme" | "Sulama" | "Genel";
+  recommendationType: "Hastalık" | "Gübreleme" | "Sulama" | "Genel" | "Gelişim Analizi";
   content: string;
   confidenceScore: number; // AI Güven Skoru
   usedDocumentsCount: number;

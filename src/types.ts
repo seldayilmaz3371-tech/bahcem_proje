@@ -19,9 +19,12 @@ export interface User {
   createdAt: string;
 }
 
+export type CropType = "Zeytin" | "Sebze" | "Meyve";
+
 export interface Parcel {
   id: string;
   name: string;
+  cropType: CropType;
   latitude: number;
   longitude: number;
   areaDekar: number;
@@ -150,7 +153,7 @@ export interface WeatherRecord {
 export interface AIRecommendation {
   id: string;
   parcelId?: string;
-  recommendationType: "Hastalık" | "Gübreleme" | "Sulama" | "Genel";
+  recommendationType: "Hastalık" | "Gübreleme" | "Sulama" | "Genel" | "Gelişim Analizi";
   content: string;
   confidenceScore: number;
   usedDocumentsCount: number;
@@ -186,5 +189,6 @@ export type ActiveTab =
   | "inventory" 
   | "finance" 
   | "ai-advisor" 
+  | "photo-growth"
   | "document-hub"
   | "activities";
