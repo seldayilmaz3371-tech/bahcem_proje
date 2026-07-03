@@ -51,6 +51,10 @@ export default function ObservationLog() {
   const [trees, setTrees] = useState<Tree[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Fullscreen photo lightbox: holds the currently enlarged photo, or null
+  // when no lightbox is open.
+  const [lightboxPhoto, setLightboxPhoto] = useState<Photo | null>(null);
+
   // Form State
   const [showForm, setShowForm] = useState(false);
   const [selectedParcelId, setSelectedParcelId] = useState("");
@@ -97,6 +101,16 @@ export default function ObservationLog() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Close the fullscreen photo lightbox when the user presses Escape.
+  useEffect(() => {
+    if (!lightboxPhoto) return;
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxPhoto(null);
+    };
+    window.addEventListener("keydown", handleEscapeKey);
+    return () => window.removeEventListener("keydown", handleEscapeKey);
+  }, [lightboxPhoto]);
 
   // Fetch trees when parcel selection changes
   useEffect(() => {
@@ -332,10 +346,22 @@ export default function ObservationLog() {
             {/* Image Upload Simulator */}
             <div className="space-y-2">
               <span className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider">Fotoğraf Kaydet (EXIF GPS Simülatörlü)</span>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 flex-wrap">
                 <label className="flex items-center gap-2 px-4 py-2.5 bg-[#f0f4ee] hover:bg-[#e4ebdf] text-[#556b2f] text-xs font-bold rounded-xl cursor-pointer transition-all border border-[#dee5db]">
                   <Camera className="h-4 w-4" />
-                  <span>Fotoğraf Seç</span>
+                  <span>Kamerayla Çek</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                  />
+                </label>
+
+                <label className="flex items-center gap-2 px-4 py-2.5 bg-[#f0f4ee] hover:bg-[#e4ebdf] text-[#556b2f] text-xs font-bold rounded-xl cursor-pointer transition-all border border-[#dee5db]">
+                  <ImageIcon className="h-4 w-4" />
+                  <span>Galeriden Seç</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -360,6 +386,7 @@ export default function ObservationLog() {
               <p className="text-[10px] text-[#80907a] italic">
                 Fotoğraf yüklendiğinde Mersin Değirmençay koordinatları (EXIF GPS verisi) otomatik eklenir.
               </p>
+
             </div>
 
             {/* Audio Memo Simulator */}
@@ -483,13 +510,24 @@ export default function ObservationLog() {
 
                   {/* Display simulated Photo & EXIF coordinates */}
                   {obsPhoto && (
-                    <div className="rounded-2xl overflow-hidden border border-[#e2e8df] relative group">
-                      <img src={obsPhoto.originalUrl} alt="Field observation" className="w-full h-40 object-cover" />
+                    <button
+                      type="button"
+                      id={`obs-photo-${obs.id}`}
+                      onClick={() => setLightboxPhoto(obsPhoto)}
+                      title="Fotoğrafı büyüt"
+                      aria-label="Fotoğrafı büyüt"
+                      className="rounded-2xl overflow-hidden border border-[#e2e8df] relative group cursor-zoom-in text-left w-full"
+                    >
+                      <img
+                        src={obsPhoto.originalUrl}
+                        alt="Field observation"
+                        className="w-full h-40 object-cover transition-transform duration-200 group-hover:scale-105"
+                      />
                       <div className="absolute bottom-0 inset-x-0 bg-black/60 p-2 text-[10px] font-mono text-[#f1f5f0] flex justify-between">
                         <span className="flex items-center gap-0.5"><MapPin className="h-3 w-3 text-red-400" /> {obsPhoto.latitude}, {obsPhoto.longitude}</span>
                         <span>Mersin, Toroslar</span>
                       </div>
-                    </div>
+                    </button>
                   )}
 
                   {/* Audio memo display */}
@@ -515,6 +553,48 @@ export default function ObservationLog() {
           )}
         </div>
       </div>
+
+      {/* Fullscreen Photo Lightbox */}
+      {lightboxPhoto && (
+        <div
+          id="photo-lightbox-overlay"
+          onClick={() => setLightboxPhoto(null)}
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 sm:p-8 animate-fade-in"
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxPhoto(null)}
+            title="Kapat (Esc)"
+            aria-label="Fotoğraf görüntüleyiciyi kapat"
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+
+          <div
+            className="relative max-w-4xl max-h-[85vh] w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={lightboxPhoto.originalUrl}
+              alt="Büyütülmüş saha gözlem fotoğrafı"
+              className="w-full h-full max-h-[85vh] object-contain rounded-2xl"
+            />
+            <div className="absolute bottom-0 inset-x-0 bg-black/70 p-3 rounded-b-2xl text-xs font-mono text-[#f1f5f0] flex flex-col sm:flex-row sm:justify-between gap-1">
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5 text-red-400" />
+                {lightboxPhoto.latitude}, {lightboxPhoto.longitude}
+              </span>
+              <span>
+                {lightboxPhoto.takenAt
+                  ? new Date(lightboxPhoto.takenAt).toLocaleString("tr-TR")
+                  : new Date(lightboxPhoto.createdAt).toLocaleString("tr-TR")}
+                {" "}• Mersin, Toroslar
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

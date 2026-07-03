@@ -698,7 +698,9 @@ export default function ParcelManager() {
                         <button
                           id={`delete-tree-btn-${tree.id}`}
                           onClick={() => handleDeleteTree(tree.id)}
-                          className="absolute top-2 right-2 p-1.5 rounded-lg hover:bg-red-50 text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title={`Bu ${plantLabel.toLowerCase()} kaydını sil`}
+                          aria-label={`${plantLabel} kaydını sil`}
+                          className="absolute top-2 right-2 p-1.5 rounded-lg bg-white/70 text-[#a3a99e] hover:bg-red-50 hover:text-red-600 transition-colors"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

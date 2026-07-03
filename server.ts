@@ -459,23 +459,77 @@ app.post("/api/parcels/:id/tree-count-changes", requireAuth, asyncHandler(async 
 // 3. FIELD OBSERVATIONS & EXIF GPS SIMULATION
 // ==========================================
 
+const VALID_OBSERVATION_ACTIVITY_TYPES: readonly string[] = [
+  "Genel Gözlem",
+  "İlaçlama",
+  "Sulama",
+  "Budama",
+  "Gübreleme",
+  "Biçme"
+];
+
+/**
+ * Validates that a given date value (either a plain "YYYY-MM-DD" string or
+ * a full ISO 8601 timestamp) represents a real calendar date that is not
+ * later than today. Used to allow retroactive (backdated) observation and
+ * photo entries — e.g. logging an activity using a photo taken earlier —
+ * while preventing logically meaningless future-dated records.
+ * @param dateInput Raw value received from the request body
+ * @returns true if the value is a valid, non-future date string
+ */
+function isValidNonFutureDate(dateInput: unknown): boolean {
+  if (typeof dateInput !== "string" || !dateInput.trim()) return false;
+  const parsed = new Date(dateInput);
+  if (isNaN(parsed.getTime())) return false;
+
+  const todayDateOnly = new Date().toISOString().split("T")[0];
+  const inputDateOnly = dateInput.length >= 10 ? dateInput.substring(0, 10) : dateInput;
+  return inputDateOnly <= todayDateOnly;
+}
+
 app.get("/api/observations", requireAuth, asyncHandler(async (req, res) => {
-  const list = await observationRepository.getAll();
+  const { activityType } = req.query;
+
+  let list = await observationRepository.getAll();
+  if (activityType && typeof activityType === "string") {
+    if (!VALID_OBSERVATION_ACTIVITY_TYPES.includes(activityType)) {
+      return res.status(400).json({ error: `Geçersiz faaliyet türü. İzin verilen değerler: ${VALID_OBSERVATION_ACTIVITY_TYPES.join(", ")}.` });
+    }
+    list = list.filter((obs) => obs.activityType === activityType);
+  }
+
   list.sort((a, b) => new Date(b.observationDate).getTime() - new Date(a.observationDate).getTime());
   res.json(list);
 }));
 
 app.post("/api/observations", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { parcelId, treeId, notes, audioNotePath } = req.body;
+  const { parcelId, treeId, activityType, notes, audioNotePath, observationDate } = req.body;
   if (!parcelId || !notes) {
     return res.status(400).json({ error: "Parsel seçimi ve gözlem notları zorunludur." });
+  }
+
+  const resolvedActivityType = activityType || "Genel Gözlem";
+  if (!VALID_OBSERVATION_ACTIVITY_TYPES.includes(resolvedActivityType)) {
+    return res.status(400).json({ error: `Geçersiz faaliyet türü. İzin verilen değerler: ${VALID_OBSERVATION_ACTIVITY_TYPES.join(", ")}.` });
+  }
+
+  // Defaults to the current timestamp, but accepts a user-supplied
+  // (possibly backdated) date so field activities can be logged
+  // retroactively using photos or notes from an earlier day.
+  let resolvedObservationDate = new Date().toISOString();
+  if (observationDate !== undefined && observationDate !== null && observationDate !== "") {
+    if (!isValidNonFutureDate(observationDate)) {
+      return res.status(400).json({ error: "Gözlem tarihi geçersiz veya gelecekte bir tarih olamaz." });
+    }
+    resolvedObservationDate = observationDate;
   }
 
   const newObs = await observationRepository.create({
     parcelId,
     treeId: treeId || undefined,
     observerId: req.user.id,
-    observationDate: new Date().toISOString(),
+    observationDate: resolvedObservationDate,
+    activityType: resolvedActivityType,
     notes,
     audioNotePath: audioNotePath || undefined,
     createdAt: new Date().toISOString()
@@ -484,7 +538,7 @@ app.post("/api/observations", requireAuth, asyncHandler(async (req: Authenticate
   await activityLogRepository.writeLog(
     req.user.id,
     "OBSERVATION_CREATE",
-    `Yeni saha gözlemi kaydedildi. ${treeId ? "Ağaç ID: " + treeId : "Genel parsel gözlemi."}`
+    `Yeni saha gözlemi kaydedildi (${resolvedActivityType}). ${treeId ? "Ağaç ID: " + treeId : "Genel parsel gözlemi."}`
   );
 
   res.status(201).json(newObs);
@@ -495,7 +549,7 @@ app.post("/api/observations", requireAuth, asyncHandler(async (req: Authenticate
  * Simulated for Mersin Toroslar/Değirmençay (Latitude: 36.912, Longitude: 34.423)
  */
 app.post("/api/observations/upload-photo", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { observationId, base64Data, label } = req.body;
+  const { observationId, base64Data, label, takenAt } = req.body;
   if (!observationId || !base64Data) {
     return res.status(400).json({ error: "Gözlem referansı ve görsel verisi zorunludur." });
   }
@@ -504,13 +558,25 @@ app.post("/api/observations/upload-photo", requireAuth, asyncHandler(async (req:
   const simulatedLatitude = 36.91234 + (Math.random() - 0.5) * 0.0085;
   const simulatedLongitude = 34.42345 + (Math.random() - 0.5) * 0.0085;
 
+  // Defaults to the current timestamp, but accepts a user-supplied
+  // (possibly backdated) date to match a retroactively logged observation
+  // when the photo was actually taken (e.g. selected from the gallery)
+  // on an earlier day.
+  let resolvedTakenAt = new Date().toISOString();
+  if (takenAt !== undefined && takenAt !== null && takenAt !== "") {
+    if (!isValidNonFutureDate(takenAt)) {
+      return res.status(400).json({ error: "Fotoğraf tarihi geçersiz veya gelecekte bir tarih olamaz." });
+    }
+    resolvedTakenAt = takenAt;
+  }
+
   const newPhoto = await photoRepository.create({
     observationId,
     originalUrl: base64Data, // Stored as base64 asset directly in mock database
     thumbnailUrl: base64Data,
     latitude: parseFloat(simulatedLatitude.toFixed(6)),
     longitude: parseFloat(simulatedLongitude.toFixed(6)),
-    takenAt: new Date().toISOString(),
+    takenAt: resolvedTakenAt,
     fileSize: Buffer.byteLength(base64Data, "utf8"),
     createdAt: new Date().toISOString()
   });
