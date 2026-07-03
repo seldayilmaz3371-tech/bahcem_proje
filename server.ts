@@ -27,6 +27,7 @@ import {
 } from "./server/repositories/finance.repository";
 import { uploadedDocumentRepository, aiRecommendationRepository } from "./server/repositories/ai.repository";
 import { weatherService } from "./server/services/weather.service";
+import { photoStorageService } from "./server/services/photo-storage.service";
 import { 
   UserRole,
   User,
@@ -54,6 +55,11 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Enable JSON parsing with large limits to support photo/document payloads
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
+
+// Serves individually stored field-observation photo files. Photo records
+// reference files here via a root-relative URL (e.g. "/uploads/photos/<id>.jpg")
+// instead of embedding the image data inside the JSON database.
+app.use("/uploads/photos", express.static(photoStorageService.getPhotosDirectoryPath()));
 
 // Types for Authenticated Request
 interface AuthenticatedRequest extends Request {
@@ -547,6 +553,10 @@ app.post("/api/observations", requireAuth, asyncHandler(async (req: Authenticate
 /**
  * Image Upload & GPS EXIF Coordinate Simulation
  * Simulated for Mersin Toroslar/Değirmençay (Latitude: 36.912, Longitude: 34.423)
+ * The uploaded photo is persisted as an individual file on disk (via
+ * photoStorageService) rather than embedded as base64 text inside the
+ * main JSON database, keeping database reads/writes fast regardless of
+ * how many photos have been collected.
  */
 app.post("/api/observations/upload-photo", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { observationId, base64Data, label, takenAt } = req.body;
@@ -570,14 +580,23 @@ app.post("/api/observations/upload-photo", requireAuth, asyncHandler(async (req:
     resolvedTakenAt = takenAt;
   }
 
+  let savedFile;
+  try {
+    savedFile = photoStorageService.saveNewPhoto(base64Data);
+  } catch (error: any) {
+    logger.error("SYSTEM", "Fotoğraf dosyaya kaydedilemedi.", error);
+    return res.status(400).json({ error: error.message || "Fotoğraf işlenirken bir hata oluştu." });
+  }
+
   const newPhoto = await photoRepository.create({
+    id: savedFile.photoId,
     observationId,
-    originalUrl: base64Data, // Stored as base64 asset directly in mock database
-    thumbnailUrl: base64Data,
+    originalUrl: savedFile.relativeUrl,
+    thumbnailUrl: savedFile.relativeUrl,
     latitude: parseFloat(simulatedLatitude.toFixed(6)),
     longitude: parseFloat(simulatedLongitude.toFixed(6)),
     takenAt: resolvedTakenAt,
-    fileSize: Buffer.byteLength(base64Data, "utf8"),
+    fileSize: savedFile.fileSizeBytes,
     createdAt: new Date().toISOString()
   });
 
@@ -1102,6 +1121,19 @@ app.post("/api/ai/growth-analysis/:parcelId", requireAuth, asyncHandler(async (r
 // ==========================================
 
 async function startServer() {
+  // One-time startup migration: moves any photos still embedded inline as
+  // base64 inside the JSON database (from before file-based photo storage
+  // existed) onto disk as individual files. Safe to run on every startup —
+  // it is a no-op once all legacy records have been migrated.
+  try {
+    const migratedCount = await photoStorageService.migrateAllLegacyPhotos();
+    if (migratedCount > 0) {
+      logger.info("SYSTEM", `${migratedCount} eski fotoğraf kaydı dosya sistemine taşındı.`);
+    }
+  } catch (error) {
+    logger.error("SYSTEM", "Eski fotoğrafları dosya sistemine taşıma işlemi sırasında bir hata oluştu.", error);
+  }
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

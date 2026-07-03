@@ -17,6 +17,7 @@ import { logger } from "../logger";
 import { UploadedDocument, VectorChunk, AIRecommendation, WeatherRecord, Photo } from "../models";
 import { AgriUtils } from "../utils";
 import { weatherService } from "./weather.service";
+import { photoStorageService } from "./photo-storage.service";
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -505,9 +506,9 @@ Cevabını Markdown formatında, net başlıklarla ve profesyonel/samimi bir Tü
       ];
 
       for (const photo of sampledPhotos) {
-        const parsed = this.parseDataUrl(photo.originalUrl);
+        const parsed = photoStorageService.readPhotoAsInlineData(photo.originalUrl);
         if (!parsed) {
-          logger.error("AI", `Fotoğraf veri formatı çözümlenemedi, atlanıyor. Photo ID: ${photo.id}`);
+          logger.error("AI", `Fotoğraf verisi okunamadı, atlanıyor. Photo ID: ${photo.id}`);
           continue;
         }
         const photoDate = new Date(photo.takenAt || photo.createdAt);
@@ -573,18 +574,6 @@ Cevabını Markdown formatında, net başlıklarla ve profesyonel/samimi bir Tü
     }
     // Deduplicate in case rounding produced repeated indices
     return Array.from(new Set(result));
-  }
-
-  /**
-   * Parses a base64 data URL (e.g. "data:image/jpeg;base64,/9j/4AAQ...")
-   * into its MIME type and raw base64 payload for Gemini's inlineData format.
-   */
-  private parseDataUrl(dataUrl: string): { mimeType: string; base64Data: string } | null {
-    const match = /^data:(.+);base64,(.+)$/.exec(dataUrl);
-    if (!match) {
-      return null;
-    }
-    return { mimeType: match[1], base64Data: match[2] };
   }
 }
 

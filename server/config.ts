@@ -24,6 +24,9 @@ export interface AppConfig {
     directory: string;
     intervalHours: number;
   };
+  storage: {
+    photosDirectory: string;
+  };
   geography: {
     latitude: number;
     longitude: number;
@@ -70,6 +73,12 @@ class ConfigManager {
     // user-owned dataset. Set to "true" only for local demos or onboarding.
     const seedSampleData = (process.env.SEED_SAMPLE_DATA || "false").trim().toLowerCase() === "true";
 
+    // Directory where uploaded field-observation photos are stored as
+    // individual files on disk, rather than embedded as base64 text
+    // inside the main JSON database. Keeps the primary database file
+    // small and fast regardless of how many photos are collected.
+    const photosDirectory = process.env.PHOTOS_STORAGE_DIR || path.join(process.cwd(), "data", "photos");
+
     // Geographic defaults for Mersin Toroslar, Değirmençay
     const lat = parseFloat(process.env.DEFAULT_LATITUDE || "36.8741");
     const lng = parseFloat(process.env.DEFAULT_LONGITUDE || "34.4512");
@@ -91,6 +100,9 @@ class ConfigManager {
       backup: {
         directory: backupDir,
         intervalHours: backupInterval,
+      },
+      storage: {
+        photosDirectory,
       },
       geography: {
         latitude: lat,
