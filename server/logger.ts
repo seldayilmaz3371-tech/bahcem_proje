@@ -5,6 +5,7 @@
 
 import fs from "fs";
 import path from "path";
+import { PROJECT_ROOT } from "./config";
 
 /**
  * Log levels supported by the Mersin AgriTech Digital Assistant logger.
@@ -30,7 +31,7 @@ class Logger {
   private logDir: string;
 
   constructor() {
-    this.logDir = path.join(process.cwd(), "logs");
+    this.logDir = path.join(PROJECT_ROOT, "logs");
     this.ensureLogDirectoryExists();
   }
 

@@ -117,6 +117,23 @@ export interface TreeCountChangeLog {
 }
 
 /**
+ * Classifies what kind of field activity a Saha Gözlemi (Observation)
+ * record represents. "Genel Gözlem" is the default/backward-compatible
+ * category for free-form observations that are not a specific operation.
+ * The remaining values represent concrete field operations a farmer
+ * performs on a parcel: spraying, irrigation, pruning, fertilizing, and
+ * mowing/reaping. Intentionally NOT linked to inventory stock or the
+ * financial ledger — this is a lightweight activity log only.
+ */
+export type ObservationActivityType =
+  | "Genel Gözlem"
+  | "İlaçlama"
+  | "Sulama"
+  | "Budama"
+  | "Gübreleme"
+  | "Biçme";
+
+/**
  * 5. Observations Table Schema (Gözlem Modülü)
  */
 export interface Observation {
@@ -125,9 +142,45 @@ export interface Observation {
   treeId?: string; // Optional Foreign Key to Trees
   observerId: string; // Foreign Key to Users
   observationDate: string; // Date
+  activityType: ObservationActivityType; // What kind of field activity this entry represents
   notes: string;
   audioNotePath?: string; // Path to recorded audio note
   createdAt: string;
+}
+
+/**
+ * Categorical growth stage assessed from a single field photo. Kept as a
+ * closed set of realistically photo-assessable stages — deliberately
+ * excludes overly precise measurements (e.g. an exact height in cm or an
+ * exact leaf count) that a vision model cannot reliably determine from a
+ * single 2D image, since presenting such fabricated precision as fact
+ * would violate this project's "doğruluk yaratıcılıktan daha önemlidir"
+ * principle.
+ */
+export type PhotoGrowthStage = "Fide" | "Gelişim" | "Çiçeklenme" | "Meyve/Ürün" | "Olgunlaşma" | "Belirsiz";
+
+/**
+ * One-time, AI-derived structured analysis of a single field photo.
+ * Generated exactly once per distinct photo (see PhotoRepository's
+ * content-hash lookup) and then persisted permanently — the underlying
+ * image is never re-sent to Gemini for analysis again. This is
+ * explicitly an "AI Analizi" category record (see TARIMSAL KARAR DESTEK
+ * SİSTEMİ bilgi kategorileri): it reflects Gemini's assessment, not a
+ * verified/ground-truth fact, and must always be treated as such by any
+ * consumer that presents it to a user or feeds it into further logic.
+ */
+export interface PhotoAiAnalysis {
+  growthStage: PhotoGrowthStage;
+  /** Approximate visual health assessment, 0-100. Null if the model could not assess this confidently. */
+  healthScore: number | null;
+  /** Short description of a visible disease/pest indication, or null if none was detected. */
+  diseaseIndication: string | null;
+  /** Model's own confidence in this analysis, 0-1. */
+  confidence: number;
+  /** True when confidence fell at or below this application's low-confidence threshold (see growth-scoring.util.ts) — the analysis should be treated as inconclusive rather than acted upon. */
+  isUncertain: boolean;
+  /** ISO timestamp of when this analysis was generated. */
+  analyzedAt: string;
 }
 
 /**
@@ -143,6 +196,21 @@ export interface Photo {
   takenAt?: string; // Captured date read from EXIF
   fileSize: number;
   createdAt: string;
+  /**
+   * SHA-256 hash of the photo's decoded image bytes, computed at upload
+   * time. Used to detect when the exact same image has been uploaded
+   * more than once, so its one-time AI analysis can be reused instead of
+   * calling Gemini again. Optional so existing photos created before
+   * this field existed remain valid without any migration.
+   */
+  contentHash?: string;
+  /**
+   * One-time structured AI analysis of this photo (see PhotoAiAnalysis).
+   * Absent until the first time this photo is actually needed for a
+   * growth analysis — computed lazily, not on every upload, to avoid
+   * spending AI quota on photos that are never used for growth tracking.
+   */
+  aiAnalysis?: PhotoAiAnalysis;
 }
 
 /**

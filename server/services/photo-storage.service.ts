@@ -17,6 +17,8 @@ import { photoRepository } from "../repositories/observation.repository";
 export interface SavedPhotoFile {
   relativeUrl: string;
   fileSizeBytes: number;
+  /** SHA-256 hash of the decoded image bytes, for exact-duplicate detection. */
+  contentHash: string;
 }
 
 /**
@@ -150,6 +152,7 @@ export class PhotoStorageService {
 
     try {
       const buffer = Buffer.from(parsed.base64Payload, "base64");
+      const contentHash = crypto.createHash("sha256").update(buffer).digest("hex");
       fs.writeFileSync(tempPath, buffer);
       fs.renameSync(tempPath, finalPath);
 
@@ -158,6 +161,7 @@ export class PhotoStorageService {
       return {
         relativeUrl: `${this.urlPrefix}/${fileName}`,
         fileSizeBytes: buffer.length,
+        contentHash,
       };
     } catch (error) {
       logger.error("SYSTEM", "Fotoğraf diske yazılırken hata oluştu.", error, { fileName });

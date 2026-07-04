@@ -9,6 +9,8 @@ import { createServer as createViteServer } from "vite";
 import { authService } from "./server/services/auth.service";
 import { settingService } from "./server/services/setting.service";
 import { aiService } from "./server/services/ai.service";
+import { aiUsageTrackerService } from "./server/services/ai-usage-tracker.service";
+import { MAX_USER_QUERY_LENGTH } from "./server/prompts/prompt-safety.util";
 import { userRepository } from "./server/repositories/user.repository";
 import { parcelRepository, treeRepository, treeCountChangeLogRepository } from "./server/repositories/parcel.repository";
 import { observationRepository, photoRepository } from "./server/repositories/observation.repository";
@@ -30,6 +32,7 @@ import { weatherService } from "./server/services/weather.service";
 import { photoStorageService } from "./server/services/photo-storage.service";
 import { backupService } from "./server/services/backup.service";
 import { embeddingStorageService } from "./server/services/embedding-storage.service";
+import { PROJECT_ROOT } from "./server/config";
 import { 
   UserRole,
   User,
@@ -602,6 +605,7 @@ app.post("/api/observations/upload-photo", requireAuth, asyncHandler(async (req:
     longitude: parseFloat(simulatedLongitude.toFixed(6)),
     takenAt: resolvedTakenAt,
     fileSize: savedFile.fileSizeBytes,
+    contentHash: savedFile.contentHash,
     createdAt: new Date().toISOString()
   });
 
@@ -1053,6 +1057,10 @@ app.post("/api/ai/recommend/:parcelId", requireAuth, upload.array("photos", 3), 
   const { userQuery } = req.body;
   const uploadedFiles = (req.files as Express.Multer.File[]) || [];
 
+  if (userQuery !== undefined && typeof userQuery === "string" && userQuery.length > MAX_USER_QUERY_LENGTH) {
+    return res.status(400).json({ error: `Soru metni en fazla ${MAX_USER_QUERY_LENGTH} karakter olabilir.` });
+  }
+
   for (const file of uploadedFiles) {
     if (!file.mimetype.startsWith("image/")) {
       return res.status(400).json({ error: "Sadece görsel dosyaları (JPEG, PNG, WEBP vb.) teşhis fotoğrafı olarak yüklenebilir." });
@@ -1081,11 +1089,22 @@ app.get("/api/ai/recommendations/:parcelId", requireAuth, asyncHandler(async (re
   res.json(parcelHistory);
 }));
 
+// Reports today's estimated Gemini API usage against known daily quota
+// limits (see AiUsageTrackerService). This is a self-reported estimate,
+// not a live, guaranteed-accurate figure from Google — the frontend
+// must present it accordingly.
+app.get("/api/ai/usage", requireAuth, asyncHandler(async (req, res) => {
+  res.json(aiUsageTrackerService.getUsageSnapshot());
+}));
+
 // Ask general question to the RAG chat-bot assistant
 app.post("/api/ai/chat", requireAuth, asyncHandler(async (req, res) => {
   const { query } = req.body;
   if (!query) {
     return res.status(400).json({ error: "Soru alanı boş bırakılamaz." });
+  }
+  if (typeof query === "string" && query.length > MAX_USER_QUERY_LENGTH) {
+    return res.status(400).json({ error: `Soru metni en fazla ${MAX_USER_QUERY_LENGTH} karakter olabilir.` });
   }
 
   const result = await aiService.queryChatAssistant(query);
@@ -1201,7 +1220,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = path.join(PROJECT_ROOT, "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));

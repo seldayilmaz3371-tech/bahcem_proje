@@ -20,9 +20,17 @@ import {
   Image as ImageIcon,
   X
 } from "lucide-react";
-import { Parcel, AIRecommendation } from "../types";
+import { Parcel, AIRecommendation, AiUsageSnapshot } from "../types";
 
 const MAX_DIAGNOSIS_PHOTOS = 3;
+
+/**
+ * Confidence scores at or below this threshold trigger a visible warning
+ * banner encouraging the farmer to provide clearer evidence (a different
+ * photo angle, more detail) rather than silently trusting a low-certainty
+ * AI report, per this project's confidence-disclosure requirement.
+ */
+const LOW_CONFIDENCE_THRESHOLD = 0.65;
 
 export default function AIRecommendations() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
@@ -55,6 +63,27 @@ export default function AIRecommendations() {
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [error, setError] = useState("");
+
+  // Estimated daily Gemini API usage, shown as a transparency indicator.
+  // See AiUsageSnapshot's documentation: this is a self-reported estimate,
+  // never presented to the user as a guaranteed-exact figure from Google.
+  const [aiUsage, setAiUsage] = useState<AiUsageSnapshot | null>(null);
+
+  const fetchAiUsage = async () => {
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch("/api/ai/usage", { headers });
+      if (res.ok) {
+        setAiUsage(await res.json());
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAiUsage();
+  }, []);
 
   const changeSelectedParcelId = (id: string) => {
     setSelectedParcelId(id);
@@ -181,6 +210,7 @@ export default function AIRecommendations() {
       setPhotoFiles([]);
       setPhotoPreviews([]);
       fetchParcelHistory(selectedParcelId); // Refresh history feed
+      fetchAiUsage(); // Refresh usage indicator — a call was just made
     } catch (err: any) {
       setError(err.message || "Gemini API bağlantısında veya sunucu işleminde bir sorun oluştu.");
     } finally {
@@ -206,6 +236,27 @@ export default function AIRecommendations() {
             Mersin Değirmençay zeytinliklerinin toprak yapısı, hastalık geçmişi ve hava durumuna göre kişiselleştirilmiş Gemini raporları
           </p>
         </div>
+
+        {aiUsage && aiUsage.models.length > 0 && (
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {aiUsage.models.map((model) => (
+              <div
+                key={model.modelName}
+                id={`ai-usage-badge-${model.modelName}`}
+                title="Bu, Google'ın kesin canlı verisi değil; uygulamanın kendi tuttuğu tahmini bir sayaçtır."
+                className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${
+                  model.percentageUsed !== null && model.percentageUsed >= 80
+                    ? "bg-red-50 text-red-700 border-red-200"
+                    : "bg-[#f0f4ee] text-[#556b2f] border-[#dee5db]"
+                }`}
+              >
+                {model.dailyLimit !== null
+                  ? `Tahmini Kullanım: ${model.usedToday}/${model.dailyLimit}`
+                  : `Bugünkü Kullanım: ${model.usedToday}`}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -304,6 +355,8 @@ export default function AIRecommendations() {
 
                 <p className="text-[10px] text-[#80907a] italic mt-1.5 leading-relaxed">
                   Fotoğraf eklerseniz, Gemini önce Doküman Havuzunuzda (RAG) eşleşen bir tedavi arar; bulamazsa genel bilgisini kullanır ve raporda bunu açıkça belirtir. Fotoğraflar kalıcı olarak Saha Gözlemleri geçmişine de kaydedilir.
+                  <br />
+                  <span className="font-semibold not-italic">İpucu:</span> Tek bir yakın çekim yerine, mümkünse <span className="font-semibold not-italic">genel görünüm + yakın çekim + yaprak altı</span> gibi farklı açılardan 2-3 fotoğraf yükleyin — teşhis doğruluğu belirgin şekilde artar.
                 </p>
               </div>
 
@@ -407,6 +460,14 @@ export default function AIRecommendations() {
                   <p className="text-xs text-[#80907a] font-mono">
                     Rapor Tarihi: {new Date(currentReport.createdDate).toLocaleString("tr-TR")} • Güven Skoru: %{(currentReport.confidenceScore * 100).toFixed(0)}
                   </p>
+                  {currentReport.confidenceScore <= LOW_CONFIDENCE_THRESHOLD && (
+                    <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-2 flex items-start gap-1.5">
+                      <span>⚠️</span>
+                      <span>
+                        Bu raporun güven skoru düşük — kanıt (fotoğraf netliği, gözlem detayı) yetersiz olabilir. Daha net veya farklı açıdan (yakın çekim, yaprak altı) bir fotoğrafla tekrar deneyin.
+                      </span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex gap-2 shrink-0">

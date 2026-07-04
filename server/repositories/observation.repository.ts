@@ -57,6 +57,17 @@ export class PhotoRepository extends BaseRepository<Photo> {
   }
 
   /**
+   * Finds an existing photo record that already carries a completed AI
+   * analysis for the given content hash, if one exists. Used to detect
+   * when the exact same image has been uploaded more than once, so its
+   * one-time analysis can be reused instead of calling Gemini again.
+   * @param contentHash SHA-256 hash of the decoded image bytes
+   */
+  public async findAnalyzedPhotoByContentHash(contentHash: string): Promise<Photo | null> {
+    return this.findOne((p) => p.contentHash === contentHash && !!p.aiAnalysis);
+  }
+
+  /**
    * Loads all photos taken in a specific parcel by joining through observations.
    */
   public async getPhotosByParcelId(parcelId: string): Promise<Photo[]> {

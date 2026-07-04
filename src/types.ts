@@ -262,6 +262,26 @@ export interface ActivityLog {
   createdAt: string;
 }
 
+/**
+ * Estimated Gemini API usage for a single model, as reported by
+ * GET /api/ai/usage. This is a self-reported estimate maintained by the
+ * application itself, not a live figure sourced from Google — Google
+ * does not expose a public endpoint for querying remaining free-tier
+ * quota in real time (as of July 2026).
+ */
+export interface AiModelUsage {
+  modelName: string;
+  usedToday: number;
+  dailyLimit: number | null;
+  remaining: number | null;
+  percentageUsed: number | null;
+}
+
+export interface AiUsageSnapshot {
+  pacificDate: string;
+  models: AiModelUsage[];
+}
+
 export type ActiveTab = 
   | "dashboard" 
   | "parcels" 

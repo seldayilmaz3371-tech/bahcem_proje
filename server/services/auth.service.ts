@@ -11,8 +11,9 @@ import { activityLogRepository } from "../repositories/activity.repository";
 import { User, UserRole } from "../models";
 import { logger } from "../logger";
 import { AgriUtils } from "../utils";
+import { PROJECT_ROOT } from "../config";
 
-const SESSION_FILE = path.join(process.cwd(), "data", "sessions.json");
+const SESSION_FILE = path.join(PROJECT_ROOT, "data", "sessions.json");
 
 /**
  * Loads persistent sessions from disk.

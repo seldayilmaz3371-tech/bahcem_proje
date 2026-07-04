@@ -5,21 +5,29 @@
 
 import { GoogleGenAI } from "@google/genai";
 import crypto from "crypto";
-import { 
-  uploadedDocumentRepository, 
-  vectorChunkRepository, 
-  aiRecommendationRepository 
+import {
+  uploadedDocumentRepository,
+  vectorChunkRepository,
+  aiRecommendationRepository
 } from "../repositories/ai.repository";
 import { parcelRepository } from "../repositories/parcel.repository";
 import { observationRepository, photoRepository } from "../repositories/observation.repository";
 import { inventoryItemRepository } from "../repositories/inventory.repository";
 import { db } from "../database";
 import { logger } from "../logger";
-import { UploadedDocument, VectorChunk, AIRecommendation, WeatherRecord, Photo } from "../models";
-import { AgriUtils } from "../utils";
+import { config } from "../config";
+import { UploadedDocument, VectorChunk, AIRecommendation, Photo, PhotoAiAnalysis } from "../models";
 import { weatherService } from "./weather.service";
 import { photoStorageService } from "./photo-storage.service";
 import { embeddingStorageService } from "./embedding-storage.service";
+import { aiUsageTrackerService } from "./ai-usage-tracker.service";
+import { isUncertainAnalysis } from "./growth-scoring.util";
+import { capUserQueryLength } from "../prompts/prompt-safety.util";
+import { buildDocumentSummaryPrompt } from "../prompts/document-summary.prompt";
+import { buildParcelRecommendationPrompt } from "../prompts/parcel-recommendation.prompt";
+import { buildChatAssistantPrompt } from "../prompts/chat-assistant.prompt";
+import { buildGrowthAnalysisPrompt } from "../prompts/growth-analysis.prompt";
+import { buildPhotoAnalysisPrompt } from "../prompts/photo-analysis.prompt";
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -34,7 +42,7 @@ export function getGeminiClient(): GoogleGenAI {
       "Yapay zeka asistanını ve RAG (Doküman Havuzu) özelliklerini kullanabilmek için lütfen sol menüdeki Settings > Secrets kısmından geçerli bir GEMINI_API_KEY anahtarı ekleyin."
     );
   }
-  
+
   if (!aiClient) {
     aiClient = new GoogleGenAI({
       apiKey: key,
@@ -48,26 +56,89 @@ export function getGeminiClient(): GoogleGenAI {
   return aiClient;
 }
 
+// ==========================================================================
+// EMBEDDING CACHE
+//
+// Identical (or near-identical, after trimming/case-normalization) text
+// embedded more than once within the cache's lifetime is served from
+// memory instead of re-calling the Gemini embedding API. This directly
+// reduces daily quota consumption for repeated farmer questions (e.g.
+// multiple people asking a similarly worded question) without touching
+// answer quality, since the returned vector is byte-for-byte the same
+// value Gemini would have produced for the same input text.
+//
+// Deliberately implemented here (not as a separate file/service): it has
+// no independent persisted state, no external consumers beyond
+// `generateEmbedding` in this module, and is a handful of lines — moving
+// it out would be an unnecessary abstraction for no real benefit.
+// ==========================================================================
+
+/** Maximum number of distinct query embeddings kept in memory at once. */
+const MAX_EMBEDDING_CACHE_ENTRIES = 500;
+
+const embeddingCache = new Map<string, number[]>();
+
+/**
+ * Normalizes text into a cache key: trimmed and lower-cased so trivial
+ * formatting differences (extra whitespace, capitalization) still hit
+ * the same cache entry, then hashed to keep map keys a fixed, small size.
+ */
+function buildEmbeddingCacheKey(text: string): string {
+  const normalized = text.trim().toLowerCase();
+  return crypto.createHash("sha256").update(normalized).digest("hex");
+}
+
+/**
+ * Inserts an entry into the embedding cache, evicting the oldest entry
+ * first if the cache is at capacity (simple FIFO bound, sufficient for
+ * this application's scale — a full LRU is unnecessary complexity here).
+ */
+function cacheEmbedding(cacheKey: string, embedding: number[]): void {
+  if (embeddingCache.size >= MAX_EMBEDDING_CACHE_ENTRIES) {
+    const oldestKey = embeddingCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      embeddingCache.delete(oldestKey);
+    }
+  }
+  embeddingCache.set(cacheKey, embedding);
+}
+
 /**
  * Generates numerical vector embeddings for a given block of text.
- * Uses gemini-embedding-2-preview.
+ * Uses the configured embedding model (see config.ai.embeddingModel).
+ * Serves a cached result when the exact same text was embedded before,
+ * avoiding a redundant Gemini API call and its quota cost.
  * @param text The input text string to represent as vector
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
+  const cacheKey = buildEmbeddingCacheKey(text);
+  const cached = embeddingCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const client = getGeminiClient();
+  const embeddingModel = config.ai.embeddingModel;
+  aiUsageTrackerService.recordUsage(embeddingModel);
   const response = await client.models.embedContent({
-    model: "gemini-embedding-2-preview",
+    model: embeddingModel,
     contents: text,
   });
 
   const embeddings = response.embeddings || (response as any).embedding;
+  let values: number[] | null = null;
   if (embeddings && Array.isArray(embeddings.values)) {
-    return embeddings.values;
+    values = embeddings.values;
+  } else if (response && Array.isArray((response as any).values)) {
+    values = (response as any).values;
   }
-  if (response && Array.isArray((response as any).values)) {
-    return (response as any).values;
+
+  if (!values) {
+    throw new Error("Gemini API'den vektör verisi alınamadı.");
   }
-  throw new Error("Gemini API'den vektör verisi alınamadı.");
+
+  cacheEmbedding(cacheKey, values);
+  return values;
 }
 
 /**
@@ -81,7 +152,7 @@ export function chunkText(text: string, chunkSize = 800, overlap = 150): string[
   if (step <= 0) {
     return [text];
   }
-  
+
   while (index < text.length) {
     const chunk = text.substring(index, index + chunkSize).trim();
     if (chunk.length > 0) {
@@ -100,17 +171,17 @@ export function chunkText(text: string, chunkSize = 800, overlap = 150): string[
  */
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) return 0;
-  
+
   let dotProduct = 0;
   let normA = 0;
   let normB = 0;
-  
+
   for (let i = 0; i < vecA.length; i++) {
     dotProduct += vecA[i] * vecB[i];
     normA += vecA[i] * vecA[i];
     normB += vecB[i] * vecB[i];
   }
-  
+
   if (normA === 0 || normB === 0) return 0;
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
@@ -124,7 +195,7 @@ export async function searchSimilarChunks(query: string, limit = 4): Promise<{ c
   try {
     const queryEmbedding = await generateEmbedding(query);
     const allChunks = await vectorChunkRepository.getAll();
-    
+
     const matches = allChunks.map((chunk) => {
       // Embeddings are stored as individual files on disk (see
       // EmbeddingStorageService); a not-yet-migrated legacy chunk may
@@ -141,6 +212,39 @@ export async function searchSimilarChunks(query: string, limit = 4): Promise<{ c
     logger.error("RAG", "Error occurred during vector similarity search", error);
     return [];
   }
+}
+
+// ==========================================================================
+// CHAT GREETING SHORT-CIRCUIT
+//
+// A short, purely conversational message ("merhaba", "teşekkürler") has
+// no agricultural content to search against and gains nothing from an
+// embedding + Gemini round trip. Recognizing these and answering them
+// locally avoids spending API quota on messages that were never really
+// questions in the first place. This does NOT touch real questions —
+// anything not matching this narrow, conservative pattern still goes
+// through the full RAG + Gemini pipeline unchanged.
+// ==========================================================================
+
+const GREETING_PATTERNS = ["merhaba", "selam", "günaydın", "iyi günler", "teşekkür", "sağol", "sağ ol"];
+
+/** Messages at or below this length are eligible for the greeting short-circuit. */
+const MAX_GREETING_MESSAGE_LENGTH = 30;
+
+/**
+ * Detects whether a chat message is a trivial greeting/thanks with no
+ * agricultural question content, based on a short, conservative keyword
+ * list. Intentionally narrow: a false negative (treating a greeting as a
+ * real question) only costs one extra API call, while a false positive
+ * (treating a real question as a greeting) would silently withhold a
+ * real answer — so this only matches very short messages.
+ */
+function isTrivialGreeting(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (normalized.length === 0 || normalized.length > MAX_GREETING_MESSAGE_LENGTH) {
+    return false;
+  }
+  return GREETING_PATTERNS.some((pattern) => normalized.includes(pattern));
 }
 
 /**
@@ -171,7 +275,7 @@ export class AIService {
 
       // Step 2: Split text into overlapping segments
       const textChunks = chunkText(textContent);
-      
+
       // Step 3: Embed each chunk, persist the (large) embedding vector to
       // its own file on disk, and save only a lightweight record (id,
       // content, chunk index) in the main database.
@@ -200,9 +304,10 @@ export class AIService {
       // Step 4: Generate a summary of the document using Gemini
       try {
         const client = getGeminiClient();
+        aiUsageTrackerService.recordUsage(config.ai.generationModel);
         const summaryResponse = await client.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: `Aşağıdaki tarımsal dokümanı 2 cümle ile özetle. Çiftçinin ne konuda bilgi edinebileceğini belirt:\n\n${textContent.substring(0, 3000)}`,
+          model: config.ai.generationModel,
+          contents: buildDocumentSummaryPrompt(textContent),
         });
         if (summaryResponse.text) {
           await uploadedDocumentRepository.update(newDoc.id, {
@@ -237,9 +342,7 @@ export class AIService {
         embeddingStorageService.deleteEmbedding(chunk.id);
       }
 
-      // Delete vector chunks
       await vectorChunkRepository.deleteByDocumentId(documentId);
-      // Delete document record
       await uploadedDocumentRepository.delete(documentId);
 
       logger.info("RAG", `Document and its vector index unlinked: ID: '${documentId}'`);
@@ -255,22 +358,15 @@ export class AIService {
    * for a specific plot, integrating sensor data, live weather data, inventory stocks, RAG
    * articles, and — optionally — up to 3 uploaded diagnosis photos.
    *
-   * Weather grounding: this method combines two explicitly labeled sources —
-   * (1) locally logged historical weather records ("Yerel Proje Verisi"), and
-   * (2) a live, real-time forecast fetched from the Open-Meteo external API
-   * ("Harici Web Verisi"). If the live API is unavailable, the prompt states
-   * this explicitly rather than silently omitting it or fabricating values,
-   * and the model is instructed to disclose which source(s) it relied on.
-   *
-   * Photo grounding: when diagnosis photos are supplied, the model is
-   * explicitly instructed to check the RAG document pool FIRST for a
-   * matching treatment before falling back to its own general knowledge —
-   * and to disclose in the generated report which of the two was actually
-   * used, satisfying the project's "never hallucinate, always distinguish
-   * sources" requirement. Uploaded photos are persisted permanently using
-   * the same Photo/Observation infrastructure as Saha Gözlemleri uploads
-   * (via a lightweight, auto-generated supporting Observation record), so
-   * they also appear in the parcel's observation history.
+   * Gemini never acts as the final decision-maker here: it produces an
+   * analysis, a probability/confidence-qualified diagnosis, and
+   * source-labeled recommendations, but every dosage figure is presented
+   * as approximate and the model is explicitly instructed to disclose
+   * uncertainty rather than guess (see AI PHILOSOPHY / CONFIDENCE
+   * principles). A proper rules-based Decision Engine that would
+   * override or hard-validate dosage figures against verified product
+   * data is a larger, separate initiative, deferred until per-product
+   * dosage data exists in the inventory (see architecture notes).
    *
    * @param parcelId Target parcel identifier
    * @param userQuery Optional free-text question from the farmer
@@ -284,13 +380,14 @@ export class AIService {
     requestedByUserId?: string
   ): Promise<AIRecommendation | null> {
     try {
-      // 1. Retrieve plot details
       const parcel = await parcelRepository.getById(parcelId);
       if (!parcel) {
         throw new Error("Ulaşılmaya çalışılan tarsel (parsel) kaydı bulunamadı.");
       }
 
-      // 2. Fetch linked observation records (up to 5 recent)
+      const safeUserQuery = userQuery ? capUserQueryLength(userQuery) : undefined;
+      const hasPhotos = !!photoFiles && photoFiles.length > 0;
+
       const allObservations = await observationRepository.getAll();
       const parcelObservations = allObservations
         .filter((o) => o.parcelId === parcelId)
@@ -301,7 +398,6 @@ export class AIService {
         ? parcelObservations.map((o, idx) => `[Gözlem ${idx + 1} - Tarih: ${o.observationDate}]: ${o.notes}`).join("\n")
         : "Bu parsel için yakın zamanda kaydedilmiş gözlem raporu bulunmuyor.";
 
-      // 3. Fetch locally logged historical weather records (Yerel Proje Verisi)
       const rawDb = await db.readRaw();
       const weatherHistory = rawDb.weatherHistory || [];
       const recentWeather = weatherHistory
@@ -312,42 +408,38 @@ export class AIService {
         ? recentWeather.map((w) => `[Tarih: ${w.recordDate}]: En Yüksek Sıcaklık: ${w.tempMax}°C, En Düşük Sıcaklık: ${w.tempMin}°C, Nem: %${w.humidity}, Don Riski Var Mı: ${w.hasFrostRisk ? "EVET" : "HAYIR"}`).join("\n")
         : "Yerel veritabanında manuel olarak kaydedilmiş yakın zamana ait meteorolojik veri bulunmamaktadır.";
 
-      // 3b. Fetch live, real-time forecast from the Open-Meteo external API
-      // (Harici Web Verisi). Never fails the entire recommendation if the
-      // external API is down — degrades gracefully with an explicit notice.
-      const liveWeather = await weatherService.getWeatherSummaryForAI();
-
-      // 4. Fetch under-stocked inventory alerts
       const allInventory = await inventoryItemRepository.getAll();
       const stockAlerts = allInventory.filter((item) => item.stockQuantity <= item.minStockAlert);
       const inventoryContext = stockAlerts.length > 0
         ? stockAlerts.map((i) => `- ${i.name} (Stokta: ${i.stockQuantity} ${i.unit}, Kritik Seviye: ${i.minStockAlert} ${i.unit})`).join("\n")
         : "Tüm gübre ve ilaç stok seviyeleri güvenli eşiğin üzerindedir.";
 
-      const hasPhotos = !!photoFiles && photoFiles.length > 0;
-
-      // 5. Query RAG context using similarity vectors. When diagnosis
-      // photos are attached, the search term is broadened toward
-      // disease/pest treatment so the retrieved chunks are the most
-      // relevant possible grounding source for a visual diagnosis.
-      const querySearchTerm = userQuery
-        ? userQuery
+      const querySearchTerm = safeUserQuery
+        ? safeUserQuery
         : hasPhotos
           ? "zeytin hastalık zararlı teşhis ilaç tedavi bakır sülfat"
           : "Mersin Toroslar Değirmençay zeytin yetiştiriciliği sulama gübreleme hastalık koruma";
-      const similarChunks = await searchSimilarChunks(querySearchTerm, 3);
+
+      // The live weather forecast (external HTTP call) and the RAG
+      // similarity search (embedding API call) are fully independent of
+      // one another — running them concurrently instead of sequentially
+      // reduces total latency to roughly the slower of the two, rather
+      // than their sum.
+      const [liveWeather, similarChunks] = await Promise.all([
+        weatherService.getWeatherSummaryForAI(),
+        searchSimilarChunks(querySearchTerm, 3),
+      ]);
+
       const ragContext = similarChunks.length > 0
         ? similarChunks.map((m, idx) => `[RAG Kaynak ${idx + 1} - Güven Skoru: ${(m.score * 100).toFixed(1)}%]: ${m.chunk.content}`).join("\n")
         : "Bilgi deposunda zeytin tarımıyla ilgili eşleşen makale bulunamadı.";
 
-      // 5b. If diagnosis photos were attached, persist them permanently
+      // If diagnosis photos were attached, persist them permanently
       // through the existing Observation/Photo infrastructure (identical
       // to Saha Gözlemleri uploads) so they also appear in this parcel's
       // observation history and become eligible for Fotoğraflı Gelişim
-      // Analizi later. A lightweight, auto-generated Observation record
-      // is created to satisfy Photo's required observationId link. A
-      // failure to persist a given photo is logged and skipped rather
-      // than aborting the whole recommendation.
+      // Analizi later. A failure to persist a given photo is logged and
+      // skipped rather than aborting the whole recommendation.
       let photosUsedCount = 0;
       if (hasPhotos && requestedByUserId) {
         const photoObservation = await observationRepository.create({
@@ -355,7 +447,7 @@ export class AIService {
           observerId: requestedByUserId,
           observationDate: new Date().toISOString(),
           activityType: "Genel Gözlem",
-          notes: `Yapay Zeka Karar Destek raporu için yüklenen teşhis fotoğrafı.${userQuery ? ` Soru: "${userQuery}"` : ""}`,
+          notes: `Yapay Zeka Karar Destek raporu için yüklenen teşhis fotoğrafı.${safeUserQuery ? ` Soru: "${safeUserQuery}"` : ""}`,
           createdAt: new Date().toISOString(),
         });
 
@@ -370,6 +462,7 @@ export class AIService {
               thumbnailUrl: saved.relativeUrl,
               takenAt: new Date().toISOString(),
               fileSize: saved.fileSizeBytes,
+              contentHash: saved.contentHash,
               createdAt: new Date().toISOString(),
             });
             photosUsedCount++;
@@ -379,69 +472,26 @@ export class AIService {
         }
       }
 
-      // 6. Build the expert prompt. When diagnosis photos are present, an
-      // additional section instructs the model to analyze the attached
-      // images and to explicitly prioritize the RAG document pool for any
-      // treatment recommendation before falling back to its own general
-      // knowledge — and to disclose which of the two was actually used.
-      const photoInstructionBlock = hasPhotos
-        ? `
-=== YÜKLENEN TEŞHİS FOTOĞRAFLARI ===
-Çiftçi bu parsele ait ${photosUsedCount} adet fotoğraf yükledi. Bu fotoğrafları dikkatlice incele: yapraklarda leke/sararma, meyvede zararlı izi, genel bitki sağlığı gibi görsel olarak tespit edilebilecek belirtileri belirle.
-
-ÖNEMLİ TEŞHİS KURALI (MUTLAKA UYGULA):
-1. Fotoğrafta bir hastalık/zararlı belirtisi tespit edersen, ÖNCE yukarıdaki "BİLGİ DEPOSU VE RAG KAYNAKLARINDAN ALINAN BİLGİLER" bölümünde bu belirtiyle eşleşen bir tedavi/ilaç bilgisi olup olmadığına bak.
-2. Eşleşme BULURSAN: önerini bu dokümana dayandır ve raporunda açıkça "KAYNAK: RAG Doküman Havuzu (yüklediğiniz döküman)" yaz.
-3. Eşleşme BULAMAZSAN: kendi genel tarımsal bilgini kullanarak teşhis ve öneri yap, ama raporunda MUTLAKA açıkça "KAYNAK: Gemini Genel Bilgisi (Doküman Havuzunda bu teşhisle eşleşen bir kayıt bulunamadı)" yaz. Bunu asla RAG dokümanından geliyormuş gibi sunma.
-4. Fotoğrafta net bir belirti göremiyorsan, bunu dürüstçe belirt; var olmayan bir hastalık uydurma.
-`
-        : "";
-
-      const prompt = `
-Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış yapay zeka destekli bir Tarım Danışmanısın (Mersin Tarım Asistanı).
-Aşağıdaki verilere dayanarak çiftçiye özel, bilimsel, pratik ve bölgesel (Toroslar mikro-klimasına uygun) tavsiyeler üreteceksin.
-
-=== ÇİFTLİK VE PARSEL BİLGİLERİ (KAYNAK: Yerel Proje Verisi) ===
-Parsel Adı: ${parcel.name}
-Alan: ${parcel.areaDekar} Dekar
-Ağaç Sayısı: ${parcel.treeCount} adet zeytin ağacı
-Toprak Yapısı: ${parcel.soilType}
-Sulama Yöntemi: ${parcel.irrigationType}
-
-=== SON GÖZLEMLER VE SAHA RAPORLARI (KAYNAK: Yerel Proje Verisi) ===
-${observationsContext}
-
-=== METEOROLOJİ KAYNAK 1: GEÇMİŞ KAYITLAR (KAYNAK: Yerel Proje Verisi - Manuel Girilen Geçmiş Ölçümler) ===
-${localWeatherContext}
-
-=== METEOROLOJİ KAYNAK 2: CANLI GÜNCEL TAHMİN (KAYNAK: Harici Web Verisi - Open-Meteo API) ===
-${liveWeather.text}
-
-=== ENVANTER VE STOK DURUMU (KAYNAK: Yerel Proje Verisi) ===
-${inventoryContext}
-
-=== BİLGİ DEPOSU VE RAG KAYNAKLARINDAN ALINAN BİLGİLER (KAYNAK: RAG - Yüklenen Dokümanlar) ===
-${ragContext}
-${photoInstructionBlock}
-=== KULLANICI SORUSU ===
-"${userQuery || "Bu parsel için genel durum analizi ve gelecek haftaki tarımsal faaliyet planı nedir?"}"
-
-Senden istenenler:
-1. **Analiz ve Teşhis**: Gözlemlerde ve${hasPhotos ? " yüklenen fotoğraflarda" : ""} belirtilen hastalık, zararlı (örn. Zeytin sineği, halkalı leke, dökülme) veya besin eksikliklerini değerlendir.
-2. **Eylem Planı**: Sulama, gübreleme, ilaçlama veya budama için somut tavsiyeler ver. Don riski değerlendirmeni MUTLAKA "METEOROLOJİ KAYNAK 2" bölümündeki canlı tahmine dayandır (eğer o bölüm veri alınamadığını belirtiyorsa, bunu açıkça söyle ve sadece geçmiş kayıtlara dayandığını belirt). Don riski varsa, Toroslar/Değirmençay bölgesinde don önleme için yapılacakları vurgula.
-3. **Uygulama Dozajı**: Envanterde bulunan ilaç ve gübrelerin, parsel büyüklüğüne ve ağaç sayısına göre doğru dozajlarını hesapla.
-4. **Hasat Öngörüsü**: Eğer hasat dönemi yaklaşıyorsa, son ilaçlama ile hasat arasındaki bekleme sürelerine (PH) dikkat çek.
-5. **Kaynak Beyanı**: Yanıtının sonunda kısa bir "Kullanılan Kaynaklar" notu ekle; hangi bölümler için Yerel Proje Verisi, hangi bölümler için Harici Web Verisi (Open-Meteo), hangi bölümler için RAG dokümanlarını${hasPhotos ? " ve fotoğraf analizi için hangi kaynağı (RAG veya Gemini genel bilgisi)" : ""} kullandığını belirt.
-
-Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi bir Türkçe tonuyla yaz.
-`;
+      const prompt = buildParcelRecommendationPrompt({
+        parcelName: parcel.name,
+        areaDekar: parcel.areaDekar,
+        treeCount: parcel.treeCount,
+        soilType: parcel.soilType,
+        irrigationType: parcel.irrigationType,
+        observationsContext,
+        localWeatherContext,
+        liveWeatherText: liveWeather.text,
+        inventoryContext,
+        ragContext,
+        userQuery: safeUserQuery || "",
+        hasPhotos,
+        photosUsedCount,
+      });
 
       const client = getGeminiClient();
-
-      // When diagnosis photos are attached, send a multimodal request
-      // (text + inline image data). Otherwise, behavior is unchanged: a
-      // pure text-generation call, exactly as before this feature existed.
       let responseText: string | undefined;
+
+      aiUsageTrackerService.recordUsage(config.ai.generationModel);
       if (hasPhotos) {
         const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [
           { text: prompt },
@@ -450,13 +500,13 @@ Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi
           parts.push({ inlineData: { data: file.buffer.toString("base64"), mimeType: file.mimeType } });
         }
         const response = await client.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: config.ai.generationModel,
           contents: parts,
         });
         responseText = response.text;
       } else {
         const response = await client.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: config.ai.generationModel,
           contents: prompt,
         });
         responseText = response.text;
@@ -466,27 +516,17 @@ Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi
         throw new Error("Yapay zeka asistanından boş bir cevap döndü.");
       }
 
-      // 7. Calculate confidence score
-      let score = 0.85; // Default score
+      let score = 0.85;
       if (similarChunks.length > 0) {
         score = Math.max(score, similarChunks[0].score);
       }
-      // Slightly reduce confidence when live weather grounding was unavailable,
-      // since frost-risk advice then relies solely on potentially stale local records.
       if (!liveWeather.available) {
         score = Math.max(0.5, score - 0.1);
       }
-      // Photo-based diagnoses without any matching RAG document are
-      // inherently less certain than a text-grounded recommendation, since
-      // the visual diagnosis then relies solely on the model's general
-      // knowledge rather than the farmer's own reference material.
       if (hasPhotos && similarChunks.length === 0) {
         score = Math.max(0.5, score - 0.15);
       }
 
-      // 8. Create recommendation record in DB. usedWeatherCount reflects the
-      // combined number of weather data points (local historical + live
-      // forecast days) that actually grounded this recommendation.
       const timestamp = new Date().toISOString();
       const recommendation = await aiRecommendationRepository.create({
         parcelId,
@@ -513,37 +553,38 @@ Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi
 
   /**
    * Generates a generic agriculture-related prompt query answer (Chat mode) using loaded RAG documentation.
+   * Trivial greetings/thanks are answered locally without calling Gemini
+   * at all (see `isTrivialGreeting`), since they carry no agricultural
+   * question content to ground an AI response in.
    */
   public async queryChatAssistant(userQuery: string): Promise<{ text: string; usedChunks: string[] }> {
+    const safeQuery = capUserQueryLength(userQuery);
+
+    if (isTrivialGreeting(safeQuery)) {
+      return {
+        text: "Merhaba! Ben Mersin AgriTech RAG asistanınızım. Zeytin tarımı, hastalık teşhisi veya yüklediğiniz dokümanlarla ilgili bir soru sorabilirsiniz.",
+        usedChunks: [],
+      };
+    }
+
     try {
-      // Find matching chunks
-      const matches = await searchSimilarChunks(userQuery, 3);
+      const matches = await searchSimilarChunks(safeQuery, 3);
       const ragContext = matches.length > 0
         ? matches.map((m, idx) => `[Referans ${idx + 1}]: ${m.chunk.content}`).join("\n\n")
         : "Eşleşen spesifik bir döküman bulunamadı.";
 
-      const prompt = `
-Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış tarım asistanı "Mersin Tarım Asistanı" yapay zeka danışmanısın.
-Aşağıdaki bilgi deposundan alınan kaynakları temel alarak kullanıcının zeytin tarımı, bahçe bakımı, gübreleme veya hastalık koruma ile ilgili sorusuna yanıt vereceksin.
-
-=== BİLGİ DEPOSU REFERANSLARI ===
-${ragContext}
-
-=== KULLANICI SORUSU ===
-"${userQuery}"
-
-Lütfen soruyu tamamen doğru, bilimsel ve pratik bir yaklaşımla, zeytin ağaçlarının sağlığını korumaya yönelik, Türkçe tonunda yanıtla. Yanıtında referanslardan faydalandığını hissettir. Markdown formatını kullan.
-`;
+      const prompt = buildChatAssistantPrompt(ragContext, safeQuery);
 
       const client = getGeminiClient();
+      aiUsageTrackerService.recordUsage(config.ai.generationModel);
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: config.ai.generationModel,
         contents: prompt,
       });
 
       return {
         text: response.text ? response.text.trim() : "Yapay zeka asistanından bir yanıt alınamadı.",
-        usedChunks: matches.map(m => m.chunk.content)
+        usedChunks: matches.map((m) => m.chunk.content),
       };
     } catch (error) {
       logger.error("AI", "Error inside general chat assistant query", error);
@@ -552,10 +593,120 @@ Lütfen soruyu tamamen doğru, bilimsel ve pratik bir yaklaşımla, zeytin ağa�
   }
 
   /**
-   * Analyzes the visual development of a parcel over a date range by sending
-   * its chronologically ordered field photos to Gemini's multimodal vision model.
-   * Compares plant/tree condition (foliage density, color, fruit presence,
-   * visible disease/stress signs) across the selected time window.
+   * Ensures a single photo has a structured AI analysis, computing it at
+   * most once per distinct image. Resolution order:
+   * 1. If this exact Photo record already has `aiAnalysis`, return it —
+   *    no API call.
+   * 2. If another photo with the same `contentHash` already has an
+   *    analysis (the identical image was uploaded more than once), copy
+   *    that result onto this record — no API call.
+   * 3. Otherwise, send this photo's image to Gemini exactly once,
+   *    persist the structured result, and return it.
+   *
+   * A failure to analyze (Gemini error, malformed JSON response) never
+   * throws — it returns a clearly-marked "Belirsiz"/uncertain analysis
+   * instead, so one bad photo can never crash an entire growth report
+   * (see HATA YÖNETİMİ: AI başarısız olursa sistem çökmemeli).
+   * @param photo The photo to ensure an analysis for
+   * @param cropType The parcel's crop type, for prompt context
+   */
+  private async analyzePhotoOnce(photo: Photo, cropType: string): Promise<PhotoAiAnalysis> {
+    if (photo.aiAnalysis) {
+      return photo.aiAnalysis;
+    }
+
+    if (photo.contentHash) {
+      const duplicate = await photoRepository.findAnalyzedPhotoByContentHash(photo.contentHash);
+      if (duplicate?.aiAnalysis) {
+        await photoRepository.update(photo.id, { aiAnalysis: duplicate.aiAnalysis });
+        logger.info("AI", `Fotoğraf daha önce analiz edilmiş bir kopyayla eşleşti, Gemini çağrısı atlandı. Photo ID: ${photo.id}`);
+        return duplicate.aiAnalysis;
+      }
+    }
+
+    const fallbackAnalysis: PhotoAiAnalysis = {
+      growthStage: "Belirsiz",
+      healthScore: null,
+      diseaseIndication: null,
+      confidence: 0,
+      isUncertain: true,
+      analyzedAt: new Date().toISOString(),
+    };
+
+    const inlineData = photoStorageService.readPhotoAsInlineData(photo.originalUrl);
+    if (!inlineData) {
+      logger.error("AI", `Fotoğraf verisi okunamadı, belirsiz analiz döndürülüyor. Photo ID: ${photo.id}`);
+      return fallbackAnalysis;
+    }
+
+    try {
+      const client = getGeminiClient();
+      aiUsageTrackerService.recordUsage(config.ai.generationModel);
+      const response = await client.models.generateContent({
+        model: config.ai.generationModel,
+        contents: [
+          { text: buildPhotoAnalysisPrompt(cropType) },
+          { inlineData: { data: inlineData.base64Data, mimeType: inlineData.mimeType } },
+        ],
+      });
+
+      const rawText = response.text?.trim();
+      if (!rawText) {
+        throw new Error("Gemini boş bir yanıt döndürdü.");
+      }
+
+      // Gemini is instructed to return raw JSON, but defensively strip
+      // markdown code fences in case they are included anyway.
+      const cleanedText = rawText.replace(/^```json\s*|```\s*$/g, "").trim();
+      const parsed = JSON.parse(cleanedText) as {
+        growthStage?: string;
+        healthScore?: number | null;
+        diseaseIndication?: string | null;
+        confidence?: number;
+      };
+
+      const confidence = typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : 0;
+      const analysis: PhotoAiAnalysis = {
+        growthStage: (parsed.growthStage as PhotoAiAnalysis["growthStage"]) || "Belirsiz",
+        healthScore: typeof parsed.healthScore === "number" ? Math.max(0, Math.min(100, parsed.healthScore)) : null,
+        diseaseIndication: parsed.diseaseIndication || null,
+        confidence,
+        isUncertain: isUncertainAnalysis(confidence),
+        analyzedAt: new Date().toISOString(),
+      };
+
+      await photoRepository.update(photo.id, { aiAnalysis: analysis });
+      return analysis;
+    } catch (error) {
+      logger.error("AI", `Fotoğraf analizi başarısız oldu, belirsiz analiz döndürülüyor. Photo ID: ${photo.id}`, error);
+      return fallbackAnalysis;
+    }
+  }
+
+  /**
+   * Formats a single photo's structured analysis into one line of the
+   * text summary block sent to the growth-comparison prompt.
+   */
+  private formatPhotoAnalysisLine(photo: Photo, analysis: PhotoAiAnalysis, dateFormatter: Intl.DateTimeFormat): string {
+    const photoDate = new Date(photo.takenAt || photo.createdAt);
+    const uncertainNote = analysis.isUncertain ? " [BELİRSİZ — düşük güven, dikkatli yorumla]" : "";
+    const healthText = analysis.healthScore !== null ? `${analysis.healthScore}/100` : "değerlendirilemedi";
+    const diseaseText = analysis.diseaseIndication || "belirti yok";
+
+    return `[${dateFormatter.format(photoDate)}] Büyüme Evresi: ${analysis.growthStage} | Sağlık: ${healthText} | Hastalık/Zararlı: ${diseaseText} | Güven: %${Math.round(analysis.confidence * 100)}${uncertainNote}`;
+  }
+
+  /**
+   * Analyzes the visual development of a parcel over a date range.
+   *
+   * Each photo's image is sent to Gemini's vision model AT MOST ONCE,
+   * ever — the resulting structured analysis (growth stage, health
+   * score, disease indication, confidence) is persisted on the Photo
+   * record and reused for every subsequent growth-analysis request that
+   * covers the same photo, including overlapping or repeated date
+   * ranges. A separate, purely text-based Gemini call then synthesizes
+   * these stored structured summaries into a narrative comparison — this
+   * step never includes any raw image data.
    *
    * @param parcelId Target parcel identifier
    * @param startDate ISO date string (inclusive) marking the start of the range
@@ -569,13 +720,11 @@ Lütfen soruyu tamamen doğru, bilimsel ve pratik bir yaklaşımla, zeytin ağa�
     userQuery?: string
   ): Promise<{ recommendation: AIRecommendation; photosUsed: Photo[] } | null> {
     try {
-      // 1. Validate parcel
       const parcel = await parcelRepository.getById(parcelId);
       if (!parcel) {
         throw new Error("Analiz istenen parsel kaydı bulunamadı.");
       }
 
-      // 2. Validate date range
       const rangeStart = new Date(startDate);
       const rangeEnd = new Date(endDate);
       if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime())) {
@@ -585,11 +734,8 @@ Lütfen soruyu tamamen doğru, bilimsel ve pratik bir yaklaşımla, zeytin ağa�
         throw new Error("Başlangıç tarihi, bitiş tarihinden sonra olamaz.");
       }
 
-      // 3. Fetch all photos for this parcel (joined through observations)
       const allParcelPhotos = await photoRepository.getPhotosByParcelId(parcelId);
 
-      // 4. Filter to the requested date range using takenAt (fallback to createdAt)
-      // and sort chronologically ascending so the model perceives a timeline.
       const rangeEndInclusive = new Date(rangeEnd);
       rangeEndInclusive.setHours(23, 59, 59, 999);
 
@@ -606,63 +752,60 @@ Lütfen soruyu tamamen doğru, bilimsel ve pratik bir yaklaşımla, zeytin ağa�
         );
       }
 
-      // 5. Cap the number of photos sent to the model to control payload size
-      // and latency. If more are available, sample evenly across the timeline
-      // while always keeping the first and last photo for accurate before/after comparison.
       const MAX_PHOTOS = 12;
       const sampledPhotos = this.sampleEvenly(photosInRange, MAX_PHOTOS);
 
-      // 6. Build multimodal request parts: an instruction text followed by
-      // interleaved date-label + image pairs, in chronological order.
-      const dateFormatter = new Intl.DateTimeFormat("tr-TR", { year: "numeric", month: "long", day: "numeric" });
-      const introText = `
-Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış bir Tarım Danışmanısın (Mersin Tarım Asistanı).
-Aşağıda "${parcel.name}" adlı parsele (Ürün Türü: ${parcel.cropType}, ${parcel.areaDekar} Dekar, ${parcel.treeCount} adet ${parcel.cropType === "Zeytin" ? "ağaç" : "bitki"}) ait, ${dateFormatter.format(rangeStart)} ile ${dateFormatter.format(rangeEnd)} arasında çekilmiş, kronolojik sıraya dizilmiş ${sampledPhotos.length} saha fotoğrafı bulunuyor. Her fotoğraftan hemen önce çekildiği tarih belirtilmiştir.
-
-Bu fotoğrafları zaman sırasına göre inceleyerek parseldeki gelişimi analiz et:
-1. **Görsel Değişim Özeti**: Yaprak yoğunluğu/rengi, dallanma, meyve/çiçek varlığı gibi gözle görülür değişimleri tarih sırasıyla anlat.
-2. **Sağlık Değerlendirmesi**: Fotoğraflarda hastalık, zararlı, susuzluk veya besin eksikliği belirtisi (yaprak sararması, leke, dökülme vb.) görüyorsan belirt.
-3. **Gelişim Hızı Yorumu**: Bu süre zarfında gelişimin normal, yavaş veya hızlı olduğuna dair bölgesel (Toroslar mikro-klimasına uygun) bir değerlendirme yap.
-4. **Öneri**: Gözlemlerine dayanarak somut bir sonraki adım öner.
-
-${userQuery ? `Çiftçinin özel olarak odaklanmanı istediği konu: "${userQuery}"` : ""}
-
-Cevabını Markdown formatında, net başlıklarla ve profesyonel/samimi bir Türkçe tonuyla yaz. Sadece görebildiğin şeyleri yorumla, fotoğraflarda net olarak görünmeyen hiçbir şeyi varsayma.
-`.trim();
-
-      const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [
-        { text: introText },
-      ];
-
+      // Ensure every sampled photo has a structured analysis. Photos
+      // already analyzed (in this or any previous request) cost nothing
+      // here; only genuinely new photos result in a Gemini vision call.
+      const photoAnalyses = new Map<string, PhotoAiAnalysis>();
       for (const photo of sampledPhotos) {
-        const parsed = photoStorageService.readPhotoAsInlineData(photo.originalUrl);
-        if (!parsed) {
-          logger.error("AI", `Fotoğraf verisi okunamadı, atlanıyor. Photo ID: ${photo.id}`);
-          continue;
-        }
-        const photoDate = new Date(photo.takenAt || photo.createdAt);
-        parts.push({ text: `[Fotoğraf Tarihi: ${dateFormatter.format(photoDate)}]` });
-        parts.push({ inlineData: { data: parsed.base64Data, mimeType: parsed.mimeType } });
+        const analysis = await this.analyzePhotoOnce(photo, parcel.cropType);
+        photoAnalyses.set(photo.id, analysis);
       }
 
-      // 7. Call Gemini with multimodal content
+      const dateFormatter = new Intl.DateTimeFormat("tr-TR", { year: "numeric", month: "long", day: "numeric" });
+      const photoSummaries = sampledPhotos
+        .map((photo) => this.formatPhotoAnalysisLine(photo, photoAnalyses.get(photo.id)!, dateFormatter))
+        .join("\n");
+
+      const safeUserQuery = userQuery ? capUserQueryLength(userQuery) : undefined;
+      const prompt = buildGrowthAnalysisPrompt(
+        parcel.name,
+        parcel.cropType,
+        parcel.areaDekar,
+        parcel.treeCount,
+        dateFormatter.format(rangeStart),
+        dateFormatter.format(rangeEnd),
+        photoSummaries,
+        safeUserQuery
+      );
+
       const client = getGeminiClient();
+      aiUsageTrackerService.recordUsage(config.ai.generationModel);
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: parts,
+        model: config.ai.generationModel,
+        contents: prompt,
       });
 
       if (!response.text) {
         throw new Error("Yapay zeka asistanından fotoğraf analizi için boş bir cevap döndü.");
       }
 
-      // 8. Persist the recommendation record for history/traceability
+      // The overall report's confidence reflects the least certain photo
+      // analysis it relies on — a strong narrative built partly on an
+      // uncertain data point should not be presented as fully confident.
+      const analysesUsed = Array.from(photoAnalyses.values());
+      const overallConfidence = analysesUsed.length > 0
+        ? Math.min(...analysesUsed.map((a) => a.confidence))
+        : 0.5;
+
       const timestamp = new Date().toISOString();
       const recommendation = await aiRecommendationRepository.create({
         parcelId,
         recommendationType: "Gelişim Analizi",
         content: response.text.trim(),
-        confidenceScore: 0.8,
+        confidenceScore: parseFloat(Math.max(0.5, overallConfidence).toFixed(2)),
         usedDocumentsCount: 0,
         usedObservationsCount: 0,
         usedWeatherCount: 0,
@@ -701,7 +844,6 @@ Cevabını Markdown formatında, net başlıklarla ve profesyonel/samimi bir Tü
       const index = Math.round(i * step);
       result.push(items[index]);
     }
-    // Deduplicate in case rounding produced repeated indices
     return Array.from(new Set(result));
   }
 }
