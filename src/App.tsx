@@ -133,36 +133,48 @@ export default function App() {
 
       {/* Main View Area */}
       <main id="app-main-view" className="flex-1 overflow-y-auto bg-[#fcfdfc]">
-        {/* Mobile-only menu button — the sidebar is a hidden drawer below the md: breakpoint (see Sidebar.tsx) and needs an always-visible way to open it. */}
+        {/* Mobile-only menu button. Deliberately `fixed` (not `sticky`) and
+            given a higher z-index than the status banners below: this is a
+            persistent navigation control, not a scrolling status message,
+            so it must remain in a constant screen position and stay
+            clickable regardless of scroll position or which banner (if
+            any) is currently showing. */}
         <button
           id="mobile-sidebar-toggle"
           onClick={() => setIsMobileSidebarOpen(true)}
           aria-label="Menüyü aç"
-          className="md:hidden sticky top-0 z-30 m-3 p-2.5 bg-[#23301f] text-white rounded-xl shadow-md"
+          className="md:hidden fixed top-3 left-3 z-[60] p-2.5 bg-[#23301f] text-white rounded-xl shadow-md"
         >
           <Menu className="h-5 w-5" />
         </button>
 
-        {!isOnline && (
-          <div
-            id="offline-banner"
-            role="alert"
-            className="sticky top-0 z-50 bg-red-600 text-white px-4 py-2.5 flex items-center justify-center gap-2 text-sm font-semibold shadow-md"
-          >
-            <WifiOff className="h-4 w-4 shrink-0" />
-            <span>İnternet bağlantınız kesildi. Saha Gözlemi ve fotoğraf ekleyebilirsiniz — bağlantı gelince otomatik gönderilecek. Yapay Zeka özellikleri şu an kullanılamaz.</span>
-          </div>
-        )}
-        {isOnline && pendingCount > 0 && (
-          <div
-            id="pending-sync-banner"
-            role="status"
-            className="sticky top-0 z-50 bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 text-sm font-semibold shadow-md"
-          >
-            <UploadCloud className={`h-4 w-4 shrink-0 ${isSyncing ? "animate-bounce" : ""}`} />
-            <span>{isSyncing ? "Bekleyen kayıtlar gönderiliyor..." : `${pendingCount} bekleyen kayıt gönderilecek.`}</span>
-          </div>
-        )}
+        {/* Status banners share a single sticky wrapper so that if both
+            were ever visible in sequence (e.g. connectivity just returned
+            but a sync is still in progress), they stack in normal document
+            flow instead of each independently competing for the same
+            sticky top-0 position. */}
+        <div className="sticky top-0 z-50">
+          {!isOnline && (
+            <div
+              id="offline-banner"
+              role="alert"
+              className="bg-red-600 text-white px-4 py-2.5 pl-14 md:pl-4 flex items-center justify-center gap-2 text-sm font-semibold shadow-md"
+            >
+              <WifiOff className="h-4 w-4 shrink-0" />
+              <span>İnternet bağlantınız kesildi. Saha Gözlemi ve fotoğraf ekleyebilirsiniz — bağlantı gelince otomatik gönderilecek. Yapay Zeka özellikleri şu an kullanılamaz.</span>
+            </div>
+          )}
+          {isOnline && pendingCount > 0 && (
+            <div
+              id="pending-sync-banner"
+              role="status"
+              className="bg-amber-500 text-white px-4 py-2 pl-14 md:pl-4 flex items-center justify-center gap-2 text-sm font-semibold shadow-md"
+            >
+              <UploadCloud className={`h-4 w-4 shrink-0 ${isSyncing ? "animate-bounce" : ""}`} />
+              <span>{isSyncing ? "Bekleyen kayıtlar gönderiliyor..." : `${pendingCount} bekleyen kayıt gönderilecek.`}</span>
+            </div>
+          )}
+        </div>
         {activeTab === "dashboard" && <Dashboard setActiveTab={handleActiveTabChange} />}
         {activeTab === "parcels" && <ParcelManager />}
         {activeTab === "observations" && <ObservationLog />}

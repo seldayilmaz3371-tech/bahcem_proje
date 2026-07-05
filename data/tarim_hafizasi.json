@@ -11215,6 +11215,13 @@
       "details": "Kullanıcı sisteme giriş yaptı.",
       "createdAt": "2026-07-05T10:26:53.256Z",
       "id": "c2069a7c-2f85-44c8-81b0-1a36f6eb99b9"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "createdAt": "2026-07-05T22:59:41.688Z",
+      "id": "29392170-70b4-4006-9bf5-9ce3ce8eccb3"
     }
   ],
   "settings": [

@@ -26,7 +26,7 @@ import {
   Wheat
 } from "lucide-react";
 import { Observation, Parcel, Tree, Photo, ObservationActivityType } from "../types";
-import { enqueueObservation } from "../offline/offlineQueue";
+import { useCreateObservation } from "../hooks/useCreateObservation";
 
 /**
  * Centralized display configuration (icon, label, and color classes) for
@@ -77,8 +77,8 @@ export default function ObservationLog() {
   const timerRef = useRef<any>(null);
 
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
   const [queuedNotice, setQueuedNotice] = useState("");
+  const { createObservation, saving } = useCreateObservation();
 
   const fetchData = async () => {
     setLoading(true);
@@ -187,14 +187,8 @@ export default function ObservationLog() {
       return;
     }
 
-    setSaving(true);
     setQueuedNotice("");
     try {
-      const headers = { 
-        "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
-        "Content-Type": "application/json"
-      };
-
       const observationPayload = {
         parcelId: selectedParcelId,
         treeId: selectedTreeId || undefined,
@@ -203,63 +197,14 @@ export default function ObservationLog() {
         notes,
       };
 
-      // 1. Create Observation Log. A genuine network failure (no
-      // connectivity at all — the request never reaches the server) is
-      // handled separately from a real server-side error: it is queued
-      // locally for automatic submission once connectivity returns,
-      // rather than being shown to the farmer as a failure. A server
-      // response that says "no" (validation error, etc.) is a real error
-      // and must never be silently queued as if it had succeeded.
-      let obsRes: Response;
-      try {
-        obsRes = await fetch("/api/observations", {
-          method: "POST",
-          headers,
-          body: JSON.stringify(observationPayload),
-        });
-      } catch {
-        await enqueueObservation({
-          queueId: crypto.randomUUID(),
-          queuedAt: new Date().toISOString(),
-          payload: observationPayload,
-          photoBase64: base64Photo || undefined,
-        });
+      const result = await createObservation(
+        observationPayload,
+        base64Photo || undefined,
+        { takenAt: observationDate, label: "Saha Gözlemi Görseli" }
+      );
 
+      if (result.queued) {
         setQueuedNotice("İnternet bağlantısı yok. Gözlem cihazınıza kaydedildi, bağlantı gelince otomatik gönderilecek.");
-        setSelectedParcelId("");
-        setSelectedTreeId("");
-        setActivityType("Genel Gözlem");
-        setObservationDate(new Date().toISOString().split("T")[0]);
-        setNotes("");
-        setBase64Photo(null);
-        setSimulatedAudioPath(null);
-        setShowForm(false);
-        return;
-      }
-
-      const obsData = await obsRes.json();
-      if (!obsRes.ok) {
-        throw new Error(obsData.error || "Gözlem kaydedilemedi.");
-      }
-
-      // 2. If photo is uploaded, post it to photo endpoint. The photo's
-      // takenAt date is kept in sync with the observation date, so a
-      // gallery photo attached to a retroactively logged entry is
-      // correctly dated to the day the activity actually happened.
-      if (base64Photo) {
-        const photoRes = await fetch("/api/observations/upload-photo", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            observationId: obsData.id,
-            base64Data: base64Photo,
-            takenAt: observationDate,
-            label: "Saha Gözlemi Görseli"
-          })
-        });
-        if (!photoRes.ok) {
-          console.error("Gözlem fotoğrafı yüklenemedi.");
-        }
       }
 
       // Reset
@@ -271,12 +216,12 @@ export default function ObservationLog() {
       setBase64Photo(null);
       setSimulatedAudioPath(null);
       setShowForm(false);
-      
-      fetchData();
+
+      if (!result.queued) {
+        fetchData();
+      }
     } catch (err: any) {
       setError(err.message);
-    } finally {
-      setSaving(false);
     }
   };
 

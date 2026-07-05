@@ -17,9 +17,12 @@ import {
   Droplet,
   Wind,
   CloudOff,
-  Camera
+  Camera,
+  Send,
+  X
 } from "lucide-react";
 import { Parcel, WeatherRecord, ActivityLog, LiveWeatherForecast, ActiveTab, ReferenceTreeSummary } from "../types";
+import { useCreateObservation } from "../hooks/useCreateObservation";
 
 interface DashboardProps {
   /** Navigates to another tab — same mechanism already used by Sidebar (see App.tsx). */
@@ -29,6 +32,15 @@ interface DashboardProps {
 export default function Dashboard({ setActiveTab }: DashboardProps) {
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [referenceTreeSummary, setReferenceTreeSummary] = useState<ReferenceTreeSummary | null>(null);
+
+  // Quick observation shortcut — lets the farmer log a brief field note
+  // without leaving the Dashboard for the full Saha Gözlemleri form.
+  const [showQuickObservation, setShowQuickObservation] = useState(false);
+  const [quickParcelId, setQuickParcelId] = useState("");
+  const [quickNotes, setQuickNotes] = useState("");
+  const [quickPhoto, setQuickPhoto] = useState<string | null>(null);
+  const [quickSuccessMessage, setQuickSuccessMessage] = useState("");
+  const { createObservation, saving: savingQuickObservation, error: quickObservationError, setError: setQuickObservationError } = useCreateObservation();
   const [weatherHistory, setWeatherHistory] = useState<WeatherRecord[]>([]);
   const [recentLogs, setRecentLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +98,47 @@ export default function Dashboard({ setActiveTab }: DashboardProps) {
   const totalLand = parcels.reduce((sum, p) => sum + p.areaDekar, 0);
   const totalTrees = parcels.reduce((sum, p) => sum + p.treeCount, 0);
   const nextFrostRisk = liveForecast?.hasUpcomingFrostRisk ?? false;
+
+  const handleQuickPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setQuickPhoto(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleQuickObservationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setQuickObservationError("");
+
+    if (!quickParcelId || !quickNotes) {
+      setQuickObservationError("Parsel seçimi ve kısa bir not zorunludur.");
+      return;
+    }
+
+    try {
+      const result = await createObservation(
+        {
+          parcelId: quickParcelId,
+          activityType: "Genel Gözlem",
+          notes: quickNotes,
+        },
+        quickPhoto || undefined
+      );
+
+      setQuickSuccessMessage(
+        result.queued
+          ? "İnternet yok, gözlem cihazınıza kaydedildi — bağlantı gelince otomatik gönderilecek."
+          : "Gözlem kaydedildi."
+      );
+      setQuickParcelId("");
+      setQuickNotes("");
+      setQuickPhoto(null);
+      setShowQuickObservation(false);
+    } catch {
+      // Hata mesajı zaten hook içinde (quickObservationError) tutuluyor.
+    }
+  };
 
   if (loading) {
     return (
@@ -212,6 +265,82 @@ export default function Dashboard({ setActiveTab }: DashboardProps) {
             <ThermometerSnowflake className="h-6 w-6" />
           </div>
         </button>
+      </div>
+
+      {/* Quick Observation Shortcut — lets the farmer log a brief field
+          note (with optional photo) without leaving the Dashboard for
+          the full Saha Gözlemleri form. Reuses useCreateObservation, the
+          same hook ObservationLog.tsx and TreeManager.tsx use, so this
+          shortcut automatically benefits from the exact same offline
+          queueing behavior without any duplicated logic. */}
+      <div className="bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-[#1a2416] flex items-center gap-1.5">
+            <Send className="h-4 w-4 text-[#556b2f]" /> Hızlı Gözlem Ekle
+          </h2>
+          <button
+            id="quick-observation-toggle"
+            onClick={() => { setShowQuickObservation(!showQuickObservation); setQuickSuccessMessage(""); }}
+            className="text-xs font-semibold text-[#556b2f] hover:underline"
+          >
+            {showQuickObservation ? "Kapat" : "Aç"}
+          </button>
+        </div>
+
+        {quickSuccessMessage && !showQuickObservation && (
+          <p className="mt-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl">{quickSuccessMessage}</p>
+        )}
+
+        {showQuickObservation && (
+          <form onSubmit={handleQuickObservationSubmit} className="mt-4 space-y-3 animate-slide-up">
+            {quickObservationError && (
+              <p className="text-xs font-bold text-red-600 bg-red-50 p-2.5 rounded-xl">{quickObservationError}</p>
+            )}
+
+            <select
+              value={quickParcelId}
+              onChange={(e) => setQuickParcelId(e.target.value)}
+              className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+            >
+              <option value="">Parsel seçin</option>
+              {parcels.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+
+            <textarea
+              value={quickNotes}
+              onChange={(e) => setQuickNotes(e.target.value)}
+              placeholder="Örn: Kuzey sırada yaprak sararması gözlendi..."
+              rows={2}
+              className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f] resize-none"
+            />
+
+            <div className="flex items-center gap-3">
+              <label
+                id="quick-observation-photo-btn"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#556b2f] bg-[#f0f4ee] rounded-xl hover:bg-[#e4ebdf] cursor-pointer transition-all"
+              >
+                <Camera className="h-3.5 w-3.5" />
+                <span>{quickPhoto ? "Fotoğraf Seçildi" : "Fotoğraf Ekle"}</span>
+                <input type="file" accept="image/*" capture="environment" onChange={handleQuickPhotoSelect} className="hidden" />
+              </label>
+              {quickPhoto && (
+                <button type="button" onClick={() => setQuickPhoto(null)} className="text-[#a3a99e] hover:text-red-600">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+
+              <button
+                type="submit"
+                disabled={savingQuickObservation}
+                className="ml-auto px-5 py-2 text-xs font-bold text-white bg-[#556b2f] hover:bg-[#415324] rounded-2xl transition-all shadow-sm disabled:opacity-50"
+              >
+                {savingQuickObservation ? "Kaydediliyor..." : "Kaydet"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* Main Content Sections */}
