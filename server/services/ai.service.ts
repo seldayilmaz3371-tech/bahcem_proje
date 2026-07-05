@@ -607,10 +607,16 @@ export class AIService {
    * throws — it returns a clearly-marked "Belirsiz"/uncertain analysis
    * instead, so one bad photo can never crash an entire growth report
    * (see HATA YÖNETİMİ: AI başarısız olursa sistem çökmemeli).
+   *
+   * Public (not private) because it has two legitimate call sites:
+   * `generateGrowthAnalysis` (batch analysis over a date range) and the
+   * `/api/observations/upload-photo` route (immediate analysis when a
+   * photo is uploaded directly to a "Referans Ağaç" — see server.ts).
+   * Both reuse this exact same logic; neither duplicates it.
    * @param photo The photo to ensure an analysis for
    * @param cropType The parcel's crop type, for prompt context
    */
-  private async analyzePhotoOnce(photo: Photo, cropType: string): Promise<PhotoAiAnalysis> {
+  public async analyzePhotoOnce(photo: Photo, cropType: string): Promise<PhotoAiAnalysis> {
     if (photo.aiAnalysis) {
       return photo.aiAnalysis;
     }

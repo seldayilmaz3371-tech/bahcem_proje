@@ -80,6 +80,30 @@ export class PhotoRepository extends BaseRepository<Photo> {
 
     return (rawDb.photos || []).filter((p) => obsIds.has(p.observationId));
   }
+
+  /**
+   * Finds the most recent photo, with a completed AI analysis, taken of a
+   * specific individual tree — joining through that tree's observations.
+   * Used to infer a reference tree's current condition without
+   * re-analyzing every photo ever taken of it (see
+   * growth-scoring.util.ts's summarizeParcelHealthFromReferenceTrees).
+   * @param treeId Unique tree ID
+   * @returns The latest analyzed photo, or null if the tree has none yet
+   */
+  public async getLatestAnalyzedPhotoByTreeId(treeId: string): Promise<Photo | null> {
+    const rawDb = await db.readRaw();
+    const obsIds = new Set(
+      (rawDb.observations || [])
+        .filter((obs) => obs.treeId === treeId)
+        .map((obs) => obs.id)
+    );
+
+    const analyzedPhotos = (rawDb.photos || [])
+      .filter((p) => obsIds.has(p.observationId) && !!p.aiAnalysis)
+      .sort((a, b) => new Date(b.takenAt || b.createdAt).getTime() - new Date(a.takenAt || a.createdAt).getTime());
+
+    return analyzedPhotos[0] || null;
+  }
 }
 
 export const observationRepository = new ObservationRepository();

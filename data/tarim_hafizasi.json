@@ -108,7 +108,7 @@
       "name": "test deneme 1",
       "cropType": "Zeytin",
       "areaDekar": 1,
-      "treeCount": 15,
+      "treeCount": 1,
       "soilType": "Killi-Tınlı",
       "irrigationType": "Damlama",
       "latitude": 36.9123,
@@ -123,7 +123,7 @@
       "name": "Karşı Ada Zeytin",
       "cropType": "Zeytin",
       "areaDekar": 0.1,
-      "treeCount": 4,
+      "treeCount": 0,
       "soilType": "Killi-Tınlı",
       "irrigationType": "Damlama",
       "latitude": 36.9123,
@@ -131,14 +131,14 @@
       "notes": "",
       "qrCodeData": "",
       "createdAt": "2026-07-03T08:25:22.801Z",
-      "updatedAt": "2026-07-03T08:25:22.801Z",
+      "updatedAt": "2026-07-04T11:42:37.151Z",
       "id": "568b794e-945c-45da-be72-8409a193dbbe"
     },
     {
       "name": "Test2",
       "cropType": "Zeytin",
       "areaDekar": 1,
-      "treeCount": 1,
+      "treeCount": 6,
       "soilType": "Killi-Tınlı",
       "irrigationType": "Damlama",
       "latitude": 36.9123,
@@ -146,7 +146,7 @@
       "notes": "",
       "qrCodeData": "",
       "createdAt": "2026-07-03T09:49:53.796Z",
-      "updatedAt": "2026-07-03T09:49:53.796Z",
+      "updatedAt": "2026-07-04T11:48:48.991Z",
       "id": "37f942cc-d016-40b2-95d3-99b040e208e9"
     },
     {
@@ -165,8 +165,40 @@
       "id": "1931ce5d-7a84-431a-a041-06ebf144d5ee"
     }
   ],
-  "trees": [],
+  "trees": [
+    {
+      "parcelId": "2d128fe4-3eba-4e34-8348-e45f13e61f35",
+      "treeNumber": "güney sıra 1",
+      "variety": "Sarıulak",
+      "plantingYear": 2016,
+      "notes": "",
+      "createdAt": "2026-07-04T11:35:18.964Z",
+      "updatedAt": "2026-07-04T11:35:24.914Z",
+      "id": "38bcd8b6-18d0-44b8-89ac-d90e55c6a556",
+      "isReferenceTree": true
+    },
+    {
+      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
+      "treeNumber": "güney sıra 1",
+      "variety": "Sarıulak",
+      "plantingYear": 2016,
+      "notes": "",
+      "createdAt": "2026-07-04T11:45:36.588Z",
+      "updatedAt": "2026-07-04T11:45:38.565Z",
+      "id": "3fdf10c0-3ab3-41ee-b5c4-d82be09d4823",
+      "isReferenceTree": true
+    }
+  ],
   "observations": [
+    {
+      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-04T11:01:17.153Z",
+      "activityType": "Genel Gözlem",
+      "notes": "Yapay Zeka Karar Destek raporu için yüklenen teşhis fotoğrafı. Soru: \"Zeytin bahçemin genel durumu nasıl görünüyor\"",
+      "createdAt": "2026-07-04T11:01:17.153Z",
+      "id": "4a22c3bc-4b0e-407a-840f-dd9f99867ba3"
+    },
     {
       "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
       "observerId": "user-admin-default",
@@ -202,6 +234,16 @@
       "createdAt": "2026-07-03T10:22:44.742Z",
       "id": "9416d328-d692-40c2-a482-d3f1ccb3e1ef",
       "activityType": "Genel Gözlem"
+    },
+    {
+      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
+      "treeId": "3fdf10c0-3ab3-41ee-b5c4-d82be09d4823",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-05T04:42:06.788Z",
+      "activityType": "Genel Gözlem",
+      "notes": "güney sıra 1 için hızlı ağaç fotoğrafı.",
+      "createdAt": "2026-07-05T04:42:06.789Z",
+      "id": "7b102f1b-ac47-4f5d-b143-9e242017df8e"
     }
   ],
   "photos": [
@@ -244,6 +286,36 @@
       "takenAt": "2026-07-03T17:04:55.713Z",
       "fileSize": 35259,
       "createdAt": "2026-07-03T17:04:55.713Z"
+    },
+    {
+      "id": "dc054f35-c08b-4829-acc6-da697a932872",
+      "observationId": "4a22c3bc-4b0e-407a-840f-dd9f99867ba3",
+      "originalUrl": "/uploads/photos/dc054f35-c08b-4829-acc6-da697a932872.jpg",
+      "thumbnailUrl": "/uploads/photos/dc054f35-c08b-4829-acc6-da697a932872.jpg",
+      "takenAt": "2026-07-04T11:01:17.213Z",
+      "fileSize": 384821,
+      "contentHash": "f1f8f46e372cb2bf02b70599fee465016ba037ea1abc401773bedbf331feffe2",
+      "createdAt": "2026-07-04T11:01:17.213Z"
+    },
+    {
+      "id": "53195f6a-04cb-4ee4-a538-1cbcf79af027",
+      "observationId": "7b102f1b-ac47-4f5d-b143-9e242017df8e",
+      "originalUrl": "/uploads/photos/53195f6a-04cb-4ee4-a538-1cbcf79af027.jpg",
+      "thumbnailUrl": "/uploads/photos/53195f6a-04cb-4ee4-a538-1cbcf79af027.jpg",
+      "latitude": 36.915289,
+      "longitude": 34.423591,
+      "takenAt": "2026-07-05T04:42:06.994Z",
+      "fileSize": 384821,
+      "contentHash": "f1f8f46e372cb2bf02b70599fee465016ba037ea1abc401773bedbf331feffe2",
+      "createdAt": "2026-07-05T04:42:07.013Z",
+      "aiAnalysis": {
+        "growthStage": "Belirsiz",
+        "healthScore": null,
+        "diseaseIndication": null,
+        "confidence": 0.3,
+        "isUncertain": true,
+        "analyzedAt": "2026-07-05T04:42:17.792Z"
+      }
     }
   ],
   "inventory": [],
@@ -344,6 +416,18 @@
       "usedInventoryCount": 0,
       "createdDate": "2026-07-03T17:05:23.956Z",
       "id": "8abcb598-d10d-4799-85e8-b0fdf43e81bf"
+    },
+    {
+      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
+      "recommendationType": "Hastalık",
+      "content": "Merhaba! Ben **Mersin Tarım Asistanı**, Toroslar ve Değirmençay bölgesindeki mikro-klima koşullarına, toprak yapısına ve zeytin yetiştiriciliğine odaklanmış yapay zeka destekli tarım danışmanınızım. \n\n\"Test2\" parseliniz için yüklediğiniz fotoğrafı ve sistemdeki güncel verileri titizlikle inceledim. Bahçenizin genel durumu ve önümüzdeki günlerde yapmanız gerekenler hakkında hazırladığım özel raporu aşağıda bulabilirsiniz.\n\n---\n\n### 1. Analiz ve Teşhis: Bahçenizin Genel Durumu\n\nYüklediğiniz fotoğraf, Değirmençay’ın o güzel, hafif eğimli ve havadar yamaç yapısını çok iyi yansıtan, harika bir manzara sunuyor. Ancak zeytin ağaçlarınızın genel sağlığı, yapraklarında leke olup olmadığı veya çiçek/meyve dönemindeki olası hastalıklar açısından durum şöyledir:\n\n*   **Görsel Analiz Değerlendirmesi:** Fotoğraf oldukça uzaktan, genel bir manzara açısıyla çekilmiştir. Bu mesafeden zeytin yapraklarındaki sararmaları, dökülmeleri, halkalı leke (yeşillenme/lekelenme) belirtilerini veya zeytin sineği/çiçek hastalıkları gibi mikro düzeydeki zararları **kesin olarak tespit etmek mümkün değildir.** \n*   **Veri Çelişkisi:** Sistem kayıtlarında parselinizde \"1 adet zeytin ağacı\" olduğu görünmektedir; ancak fotoğrafta çok sayıda ağaçtan oluşan güzel bir zeytinlik yer almaktadır. Bu durum, gübre ve ilaçlama dozajlarında hata yapmamak adına kayıtlarımızı güncellememiz gerektiğini gösteriyor.\n*   **Teşhis:** Uzaktan bakıldığında ağaç taç hacimleri ve yeşil aksam yoğunluğu fena görünmemekle birlikte, sorduğunuz *\"Zeytinde/çiçeklerde hastalık var mı?\"* sorusuna bu fotoğrafla net bir teşhis koymak imkansızdır. \n\n> **Önemli Çağrı:** Lütfen ağaçların yanına giderek; **yaprakların üst ve alt yüzeylerini, yeni oluşan meyve/çiçek salkımlarını ve sürgün uçlarını gösteren birkaç adet yakın çekim (makro) fotoğraf** yükleyin. Bu sayede size nokta atışı bir teşhis yapabilirim.\n\n---\n\n### 2. Bölgesel Eylem Planı ve Risk Yönetimi\n\nÖnümüzdeki günlerde Değirmençay mikro-klimasında yaşayacağımız hava değişimleri, bahçe yönetiminizde oldukça kritik bir rol oynayacak.\n\n#### A. Meteorolojik Risk ve Hastalık Yönetimi\n*   **Yüksek Nem ve Yağış Uyarısı:** Önümüzdeki 4 gün boyunca (4 - 7 Temmuz) hava sıcaklıkları 29-30°C civarında seyrederken, **nem oranı %77 ila %81** gibi oldukça yüksek seviyelerde olacak. Cumartesi günü **sis**, pazar, pazartesi ve salı günleri ise **sağanak yağış** bekleniyor.\n*   **Fungal (Mantar) Hastalık Riski:** Sıcaklıkların 30°C civarında olması ve havadaki yüksek nem/sis, başta **Zeytin Halkalı Lekesi** (*Spilocaea oleagina*) ve antraknoz gibi mantari hastalıkların yayılması için adeta biçilmiş kaftandır. Yağışlı ve sisli periyodun ardından ağaçların yaprak aralarını sık sık kontrol etmelisiniz.\n*   **Zeytin Sineği Riski:** Nemli ve ılık havalar zeytin sineğinin aktifleşmesini tetikler. Bahçenizde mutlaka sarı yapışkan tuzaklar kullanarak popülasyon takibi yapmalısınız.\n*   **Don Riski Değerlendirmesi:** Önümüzdeki 4 günlük süreçte **don riski bulunmamaktadır.**\n\n#### B. Sulama Yönetimi\n*   **Toprak Yapısı:** Parseliniz **Killi-Tınlı** bir yapıya sahip. Bu toprak türü suyu çok iyi tutar ancak drenajı yavaştır.\n*   **Sulama Planı:** Damlama sulama sistemine sahip olmanız büyük avantaj. Ancak pazar gününden itibaren beklenen sağanak yağışlar nedeniyle, **5-6-7 Temmuz tarihlerinde sulamayı tamamen durdurmanızı öneririm.** Killi-tınlı topraklarda aşırı su birikmesi kök boğulmasına ve kök çürüklüğü hastalıklarına yol açabilir. Yağışlardan sonra toprak nemini elinizle kontrol ederek sulamaya tekrar başlayabilirsiniz.\n\n---\n\n### 3. Yaklaşık Uygulama Dozajı\n\nBahçenizde henüz kesinleşmiş bir hastalık teşhisi olmadığından, şu aşamada ağır kimyasal ilaçlamalardan kaçınmalıyız. Ancak yüksek neme bağlı fungal hastalıklardan korunmak amacıyla **koruyucu** olarak bakırlı bir preparat veya koruyucu fungisit düşünülebilir.\n\n*   **Tahmini Dozaj Hesabı (1 Dekar Alan İçin):** \n    *   Sistemde 1 dekar alan görünmektedir. Eğer koruyucu amaçlı organik kökenli bakır uygulaması yapacaksanız: Genellikle 100 litre suya 150-200 gram (ürün etiketine göre değişir) sıvı/toz bakır uygulanır. 1 dekar için ağaç sayınıza göre ortalama 100-150 litre ilaçlı su yeterli olacaktır.\n*   **ÖNEMLİ UYARI:** Bu dozajlar genel bilgilendirme amaçlıdır ve kesin bir reçete değildir. Uygulamadan önce mutlaka envanterinizdeki ürünün etiketini okuyunuz ve bir ziraat mühendisine danışınız.\n\n---\n\n### 4. Hasat Öngörüsü\n\nTemmuz ayındayız ve Değirmençay bölgesinde zeytin hasat sezonuna (sofralık yeşil veya yağlık) daha vakit var. Ancak şimdiden planlama yapmak gerekirse:\n*   İlerleyen dönemlerde yapacağınız tüm ilaçlamalarda, ilaçların üzerinde yazan **\"Son İlaçlama ile Hasat Arasındaki Süreye (PH)\"** mutlaka dikkat etmelisiniz. \n*   Özellikle zeytin sineği ilaçlamalarında bu süreye uymak, sofranıza gelecek zeytinin kalitesi ve sağlığı için hayati önem taşır.\n\n---\n\n### 5. Güven Seviyesi\n\n*   **Güven Seviyesi: BELİRSİZ (DÜŞÜK GÜVEN)**\n*   **Gerekçe:** Yüklenen fotoğrafın çok uzaktan çekilmiş bir manzara fotoğrafı olması nedeniyle yaprak, çiçek ve meyve sağlığı mikroskobik veya yakın gözle tespit edilememiştir. Kesin bir teşhis için daha yakın çekim fotoğraflara ihtiyaç vardır.\n\n---\n\n### 6. Kullanılan Kaynaklar\n\n*   **Çiftlik, Toprak ve Sulama Bilgileri:** Yerel Proje Verisi (Test2 Parsel Bilgileri)\n*   **Meteorolojik Tahminler:** Harici Web Verisi (Open-Meteo API üzerinden alınan 4 günlük Değirmençay canlı tahmini)\n*   **Hastalık ve Zararlı Teşhisi:** *KAYNAK: Gemini Genel Bilgisi (Doküman Havuzunda bu teşhisle eşleşen bir kayıt bulunamadı).*\n\n**Öneri:** Lütfen en kısa sürede ağaçların yaprak ve dal uçlarından yakın çekim fotoğraflar alarak benimle tekrar paylaşın. Bereketli ve sağlıklı bir sezon dilerim!",
+      "confidenceScore": 0.7,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 2,
+      "usedWeatherCount": 4,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-04T11:02:03.665Z",
+      "id": "37b32c01-b776-4ccc-9a18-055bf53839c6"
     }
   ],
   "uploadedDocuments": [
@@ -10804,6 +10888,83 @@
       "userId": "user-admin-default",
       "action": "LOGIN_SUCCESS",
       "details": "Kullanıcı sisteme giriş yaptı.",
+      "createdAt": "2026-07-05T04:39:11.994Z",
+      "id": "a1b2b007-fa97-4fce-a35b-3e5dcb109ed8"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "TREE_COUNT_CHANGE",
+      "details": "'Test2' parselinde ağaç sayısı 1 → 6 olarak güncellendi (+5). Neden: Sayım Düzeltmesi",
+      "createdAt": "2026-07-04T11:48:49.012Z",
+      "id": "343960cf-1ef2-47be-9a6d-bcbf841c1ba2"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "TREE_CREATE",
+      "details": "Yeni ağaç kaydı eklendi: 'güney sıra 1' (Sarıulak)",
+      "createdAt": "2026-07-04T11:45:36.638Z",
+      "id": "d2ff2102-16d2-4e5e-92d0-04fa16c2a68d"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "TREE_COUNT_CHANGE",
+      "details": "'Test2' parselinde ağaç sayısı 1 → 3 olarak güncellendi (+2). Neden: Sayım Düzeltmesi",
+      "createdAt": "2026-07-04T11:45:23.236Z",
+      "id": "038c6cf6-f02e-4c0b-90c6-46c057aed882"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "TREE_DELETE",
+      "details": "Ağaç kaydı silindi: 'güney sıra 2'",
+      "createdAt": "2026-07-04T11:45:04.379Z",
+      "id": "9c81dc81-26af-43ca-aa58-fa8c3b4d5fd9"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "TREE_COUNT_CHANGE",
+      "details": "'Karşı Ada Zeytin' parselinde ağaç sayısı 5 → 4 olarak güncellendi (-1). Neden: Sayım Düzeltmesi",
+      "createdAt": "2026-07-04T11:42:37.184Z",
+      "id": "eaf0432d-88e5-482e-8a38-6a23075b15f1"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "TREE_COUNT_CHANGE",
+      "details": "'Karşı Ada Zeytin' parselinde ağaç sayısı 1 → 5 olarak güncellendi (+4). Neden: Dikim (Yeni Ekim)",
+      "createdAt": "2026-07-04T11:41:24.159Z",
+      "id": "edcc0ce6-35c3-4596-b633-fb6c82462f93"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "TREE_CREATE",
+      "details": "Yeni ağaç kaydı eklendi: 'güney sıra 2' (Sarıulak)",
+      "createdAt": "2026-07-04T11:36:21.931Z",
+      "id": "0f360825-d460-4296-bd15-5384b2dce5ee"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "TREE_CREATE",
+      "details": "Yeni ağaç kaydı eklendi: 'güney sıra 1' (Sarıulak)",
+      "createdAt": "2026-07-04T11:35:19.028Z",
+      "id": "d382937b-1579-4026-9b26-aad746d69040"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "createdAt": "2026-07-04T10:44:13.371Z",
+      "id": "dbe8e267-0ba2-4f70-a1b3-7e8d853f561d"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "createdAt": "2026-07-04T09:03:10.406Z",
+      "id": "f0e0084e-d5fa-4ae5-9f2f-bda595f31d30"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
       "createdAt": "2026-07-03T17:04:12.733Z",
       "id": "afa02e87-3251-4ed3-9323-e7fe0a35cbe3"
     },
@@ -10956,10 +11117,10 @@
     },
     {
       "userId": "user-admin-default",
-      "action": "LOGIN_SUCCESS",
-      "details": "Kullanıcı sisteme giriş yaptı.",
-      "createdAt": "2026-07-04T09:03:10.406Z",
-      "id": "f0e0084e-d5fa-4ae5-9f2f-bda595f31d30"
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (Genel Gözlem). Ağaç ID: 3fdf10c0-3ab3-41ee-b5c4-d82be09d4823",
+      "createdAt": "2026-07-05T04:42:06.872Z",
+      "id": "21499b8b-5ef1-4b0c-b023-3b09ec0ca918"
     }
   ],
   "settings": [
@@ -11030,6 +11191,54 @@
       "changeDate": "2026-07-03",
       "createdAt": "2026-07-03T08:23:38.420Z",
       "id": "af9176b8-9890-4e5b-9a7e-78609bdbe3dd"
+    },
+    {
+      "parcelId": "568b794e-945c-45da-be72-8409a193dbbe",
+      "previousCount": 1,
+      "newCount": 5,
+      "delta": 4,
+      "reason": "Dikim (Yeni Ekim)",
+      "notes": "",
+      "changedBy": "user-admin-default",
+      "changeDate": "2026-07-04",
+      "createdAt": "2026-07-04T11:41:24.115Z",
+      "id": "cf339c0c-da02-4815-bfbe-d6caadc7a8fb"
+    },
+    {
+      "parcelId": "568b794e-945c-45da-be72-8409a193dbbe",
+      "previousCount": 5,
+      "newCount": 4,
+      "delta": -1,
+      "reason": "Sayım Düzeltmesi",
+      "notes": "",
+      "changedBy": "user-admin-default",
+      "changeDate": "2025-07-04",
+      "createdAt": "2026-07-04T11:42:37.121Z",
+      "id": "ca321ec3-ef45-44f6-b855-dd385b30357d"
+    },
+    {
+      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
+      "previousCount": 1,
+      "newCount": 3,
+      "delta": 2,
+      "reason": "Sayım Düzeltmesi",
+      "notes": "",
+      "changedBy": "user-admin-default",
+      "changeDate": "2026-07-04",
+      "createdAt": "2026-07-04T11:45:23.186Z",
+      "id": "2efe0c57-feac-48e4-804f-ef703d581ada"
+    },
+    {
+      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
+      "previousCount": 1,
+      "newCount": 6,
+      "delta": 5,
+      "reason": "Sayım Düzeltmesi",
+      "notes": "",
+      "changedBy": "user-admin-default",
+      "changeDate": "2026-07-04",
+      "createdAt": "2026-07-04T11:48:48.977Z",
+      "id": "8f78e6f4-0e9b-42d1-91e6-bad4b0b80aed"
     }
   ]
 }

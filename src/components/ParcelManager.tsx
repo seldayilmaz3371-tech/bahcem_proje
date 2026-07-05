@@ -19,9 +19,14 @@ import {
   Info,
   History,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Star,
+  ShieldCheck,
+  AlertTriangle,
+  Camera,
+  RefreshCw
 } from "lucide-react";
-import { Parcel, Tree, CropType, TreeCountChangeLog, TreeCountChangeReason } from "../types";
+import { Parcel, Tree, CropType, TreeCountChangeLog, TreeCountChangeReason, ParcelHealthSummary } from "../types";
 
 export default function ParcelManager() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
@@ -55,6 +60,15 @@ export default function ParcelManager() {
   const [savingCountChange, setSavingCountChange] = useState(false);
 
   const [error, setError] = useState("");
+
+  // Deterministic (AI-free) parcel health summary, computed from
+  // reference trees' latest structured analyses.
+  const [healthSummary, setHealthSummary] = useState<ParcelHealthSummary | null>(null);
+  const [loadingHealthSummary, setLoadingHealthSummary] = useState(false);
+
+  // Tracks which tree currently has a quick-photo upload in progress, so
+  // its card can show a small loading indicator (see handleQuickTreePhoto).
+  const [uploadingPhotoForTreeId, setUploadingPhotoForTreeId] = useState<string | null>(null);
 
   /**
    * Human-readable label for the currently selected parcel's plant unit.
@@ -103,6 +117,21 @@ export default function ParcelManager() {
     }
   };
 
+  const fetchHealthSummary = async (parcelId: string) => {
+    setLoadingHealthSummary(true);
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/parcels/${parcelId}/reference-tree-health`, { headers });
+      if (res.ok) {
+        setHealthSummary(await res.json());
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingHealthSummary(false);
+    }
+  };
+
   useEffect(() => {
     fetchParcels();
   }, []);
@@ -111,6 +140,7 @@ export default function ParcelManager() {
     setSelectedParcel(parcel);
     fetchTrees(parcel.id);
     fetchTreeCountChanges(parcel.id);
+    fetchHealthSummary(parcel.id);
     setTreeVariety(parcel.cropType === "Zeytin" ? "Sarıulak" : "");
     setShowTreeCountChangeForm(false);
     setNewTreeCount("");
@@ -242,10 +272,108 @@ export default function ParcelManager() {
       if (res.ok) {
         fetchTrees(selectedParcel.id);
         fetchParcels();
+        fetchHealthSummary(selectedParcel.id);
       }
     } catch (err) {
       console.error(err);
     }
+  };
+
+  /**
+   * Toggles a tree's "Referans Ağaç" (reference tree) status. Reference
+   * trees receive closer photo-based monitoring and stand in for the
+   * whole parcel's condition (see ParcelHealthSummary) without requiring
+   * every tree in a large parcel to be individually AI-analyzed.
+   */
+  const handleToggleReferenceTree = async (tree: Tree) => {
+    if (!selectedParcel) return;
+
+    try {
+      const headers = {
+        "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
+        "Content-Type": "application/json"
+      };
+      const res = await fetch(`/api/trees/${tree.id}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ isReferenceTree: !tree.isReferenceTree })
+      });
+
+      if (res.ok) {
+        fetchTrees(selectedParcel.id);
+        fetchHealthSummary(selectedParcel.id);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  /**
+   * One-tap photo shortcut directly from a tree's card — the most
+   * frequent action for a "Referans Ağaç" (reference tree), which
+   * benefits from close, up-to-date photo monitoring. Deliberately reuses
+   * the existing observation-create and photo-upload endpoints (a
+   * lightweight supporting Observation is created behind the scenes,
+   * the same pattern already used for AI-diagnosis photos in
+   * AIRecommendations.tsx) rather than introducing a new creation route.
+   * If the tree is a reference tree, the server analyzes the photo
+   * immediately (see server.ts's upload-photo route); the health summary
+   * is refreshed afterward to reflect this without extra user action.
+   */
+  const handleQuickTreePhoto = (tree: Tree) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // Allow re-selecting the same file consecutively
+    if (!file || !selectedParcel) return;
+
+    setUploadingPhotoForTreeId(tree.id);
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const headers = {
+          "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
+          "Content-Type": "application/json"
+        };
+
+        const obsRes = await fetch("/api/observations", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            parcelId: selectedParcel.id,
+            treeId: tree.id,
+            activityType: "Genel Gözlem",
+            notes: `${tree.treeNumber} için hızlı ağaç fotoğrafı.`
+          })
+        });
+        const obsData = await obsRes.json();
+        if (!obsRes.ok) {
+          throw new Error(obsData.error || "Gözlem oluşturulamadı.");
+        }
+
+        const photoRes = await fetch("/api/observations/upload-photo", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            observationId: obsData.id,
+            base64Data: reader.result as string
+          })
+        });
+        if (!photoRes.ok) {
+          const photoData = await photoRes.json();
+          throw new Error(photoData.error || "Fotoğraf yüklenemedi.");
+        }
+
+        // Refresh the reference-tree health summary, since a
+        // reference-tree photo may have just been analyzed.
+        fetchHealthSummary(selectedParcel.id);
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : "Fotoğraf eklenirken bir hata oluştu.");
+      } finally {
+        setUploadingPhotoForTreeId(null);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAddTreeCountChange = async (e: React.FormEvent) => {
@@ -687,27 +815,114 @@ export default function ParcelManager() {
                 </form>
               )}
 
+              {/* Reference Tree Health Summary — deterministic, computed
+                  from reference trees' latest AI analyses. Never calls
+                  Gemini itself; see growth-scoring.util.ts. */}
+              {healthSummary && healthSummary.referenceTreeCount > 0 && (
+                <div className={`rounded-2xl border p-4 space-y-2 ${
+                  healthSummary.overallStatus === "Riskli Bölgeler Var"
+                    ? "bg-red-50 border-red-200"
+                    : healthSummary.overallStatus === "Sağlıklı"
+                    ? "bg-emerald-50 border-emerald-200"
+                    : "bg-stone-50 border-stone-200"
+                }`}>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      {healthSummary.overallStatus === "Riskli Bölgeler Var" ? (
+                        <AlertTriangle className="h-4 w-4 text-red-600" />
+                      ) : (
+                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      )}
+                      Referans Ağaç Durumu: {healthSummary.overallStatus}
+                    </h3>
+                    <span className="text-[10px] text-[#80907a] font-mono">
+                      {healthSummary.analyzedTreeCount}/{healthSummary.referenceTreeCount} referans {plantLabel.toLowerCase()} analiz edildi
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <span className="text-emerald-700 font-semibold">✓ Sağlıklı: {healthSummary.healthyCount}</span>
+                    <span className="text-red-700 font-semibold">⚠ Riskli: {healthSummary.atRiskCount}</span>
+                    <span className="text-stone-500 font-semibold">? Belirsiz: {healthSummary.uncertainCount}</span>
+                    {healthSummary.averageHealthScore !== null && (
+                      <span className="text-[#5a6a55] font-semibold">Ortalama Sağlık: {healthSummary.averageHealthScore}/100</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-[#80907a] italic">
+                    Bu özet, sadece "Referans Ağaç" olarak işaretlediğiniz {plantLabel.toLowerCase()}lerin en son fotoğraf analizinden hesaplanır — yapay zekaya tekrar sorulmaz, anlık ve ücretsizdir.
+                  </p>
+                </div>
+              )}
+
               {/* Tree Grid */}
               <div className="space-y-2">
-                <h3 className="text-xs font-bold text-[#80907a] uppercase tracking-wider">{plantLabel} Haritası & Sağlık Durumları ({trees.length} {plantLabel})</h3>
-                
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="text-xs font-bold text-[#80907a] uppercase tracking-wider">{plantLabel} Haritası & Sağlık Durumları ({trees.length} {plantLabel})</h3>
+                  <p className="text-[10px] text-[#80907a] italic">
+                    <Star className="h-3 w-3 inline mb-0.5" /> ile işaretlenenler "Referans {plantLabel}" — parselin genel durumu bunlardan hesaplanır.
+                  </p>
+                </div>
+
                 {trees.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     {trees.map((tree) => (
-                      <div id={`tree-card-${tree.id}`} key={tree.id} className="bg-[#f7f9f6] border border-[#e2e8df] p-4 rounded-2xl relative group hover:border-[#556b2f]/30 transition-all flex flex-col justify-between">
-                        <button
-                          id={`delete-tree-btn-${tree.id}`}
-                          onClick={() => handleDeleteTree(tree.id)}
-                          title={`Bu ${plantLabel.toLowerCase()} kaydını sil`}
-                          aria-label={`${plantLabel} kaydını sil`}
-                          className="absolute top-2 right-2 p-1.5 rounded-lg bg-white/70 text-[#a3a99e] hover:bg-red-50 hover:text-red-600 transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                      <div id={`tree-card-${tree.id}`} key={tree.id} className={`bg-[#f7f9f6] border p-4 rounded-2xl relative group hover:border-[#556b2f]/30 transition-all flex flex-col justify-between ${
+                        tree.isReferenceTree ? "border-amber-300 ring-1 ring-amber-200" : "border-[#e2e8df]"
+                      }`}>
+                        <div className="absolute top-2 right-2 flex items-center gap-1">
+                          <label
+                            id={`quick-photo-btn-${tree.id}`}
+                            title="Bu ağaca hızlıca fotoğraf ekle"
+                            aria-label="Ağaca hızlı fotoğraf ekle"
+                            className={`p-1.5 rounded-lg cursor-pointer transition-colors flex items-center justify-center ${
+                              uploadingPhotoForTreeId === tree.id
+                                ? "bg-[#556b2f]/10 text-[#556b2f]"
+                                : "bg-white/70 text-[#a3a99e] hover:bg-[#f0f4ee] hover:text-[#556b2f]"
+                            }`}
+                          >
+                            {uploadingPhotoForTreeId === tree.id ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Camera className="h-3.5 w-3.5" />
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              onChange={handleQuickTreePhoto(tree)}
+                              disabled={uploadingPhotoForTreeId === tree.id}
+                              className="hidden"
+                            />
+                          </label>
+                          <button
+                            id={`reference-tree-btn-${tree.id}`}
+                            onClick={() => handleToggleReferenceTree(tree)}
+                            title={tree.isReferenceTree ? "Referans ağaç işaretini kaldır" : "Bu ağacı referans ağaç olarak işaretle"}
+                            aria-label="Referans ağaç işaretle/kaldır"
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              tree.isReferenceTree
+                                ? "bg-amber-100 text-amber-600 hover:bg-amber-200"
+                                : "bg-white/70 text-[#a3a99e] hover:bg-amber-50 hover:text-amber-500"
+                            }`}
+                          >
+                            <Star className="h-3.5 w-3.5" fill={tree.isReferenceTree ? "currentColor" : "none"} />
+                          </button>
+                          <button
+                            id={`delete-tree-btn-${tree.id}`}
+                            onClick={() => handleDeleteTree(tree.id)}
+                            title={`Bu ${plantLabel.toLowerCase()} kaydını sil`}
+                            aria-label={`${plantLabel} kaydını sil`}
+                            className="p-1.5 rounded-lg bg-white/70 text-[#a3a99e] hover:bg-red-50 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
 
                         <div className="space-y-1">
                           <span className="text-[10px] font-mono text-[#80907a]">NO:</span>
                           <p className="text-sm font-bold text-[#1a2416] font-mono">{tree.treeNumber}</p>
+                          {tree.isReferenceTree && (
+                            <span className="inline-block text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">Referans {plantLabel}</span>
+                          )}
                         </div>
 
                         <div className="mt-3 pt-2 border-t border-[#e2e8df]/60 space-y-1">
@@ -722,6 +937,7 @@ export default function ParcelManager() {
                       </div>
                     ))}
                   </div>
+
                 ) : (
                   <div className="p-12 text-center border-2 border-dashed border-[#e2e8df] rounded-2xl">
                     <Trees className="h-10 w-10 text-[#80907a] mx-auto mb-2" />

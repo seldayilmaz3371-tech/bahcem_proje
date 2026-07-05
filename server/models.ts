@@ -79,6 +79,19 @@ export interface Tree {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Marks this tree as a "Referans Ağaç" — a representative sample tree
+   * chosen by the farmer to stand in for the whole parcel's condition.
+   * Large parcels may have hundreds of trees; analyzing every single one
+   * is neither practical nor a wise use of AI quota (see PERFORMANS
+   * principle). Instead, a small set of reference trees receives closer
+   * photo-based monitoring, and the parcel's overall health is inferred
+   * deterministically from just these trees (see
+   * growth-scoring.util.ts's summarizeParcelHealthFromReferenceTrees —
+   * Gemini is never re-invoked for this aggregation). Optional and
+   * defaults to falsy for backward compatibility with existing trees.
+   */
+  isReferenceTree?: boolean;
 }
 
 /**

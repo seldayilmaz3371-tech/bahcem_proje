@@ -14,6 +14,7 @@ import { MAX_USER_QUERY_LENGTH } from "./server/prompts/prompt-safety.util";
 import { userRepository } from "./server/repositories/user.repository";
 import { parcelRepository, treeRepository, treeCountChangeLogRepository } from "./server/repositories/parcel.repository";
 import { observationRepository, photoRepository } from "./server/repositories/observation.repository";
+import { summarizeParcelHealthFromReferenceTrees, ReferenceTreeStatus } from "./server/services/growth-scoring.util";
 import { 
   inventoryItemRepository, 
   inventoryCategoryRepository,
@@ -356,7 +357,7 @@ app.post("/api/parcels/:id/trees", requireAuth, asyncHandler(async (req: Authent
 }));
 
 app.put("/api/trees/:id", requireAuth, asyncHandler(async (req, res) => {
-  const { variety, plantingYear, notes } = req.body;
+  const { variety, plantingYear, notes, isReferenceTree } = req.body;
   const exists = await treeRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Ağaç kaydı bulunamadı." });
@@ -366,6 +367,7 @@ app.put("/api/trees/:id", requireAuth, asyncHandler(async (req, res) => {
     variety: variety ?? exists.variety,
     plantingYear: plantingYear ? parseInt(plantingYear) : exists.plantingYear,
     notes: notes ?? exists.notes,
+    isReferenceTree: isReferenceTree !== undefined ? !!isReferenceTree : exists.isReferenceTree,
     updatedAt: new Date().toISOString()
   });
 
@@ -467,6 +469,32 @@ app.post("/api/parcels/:id/tree-count-changes", requireAuth, asyncHandler(async 
   );
 
   res.status(201).json(changeLog);
+}));
+
+// Deterministic, AI-free health summary for a parcel, computed from its
+// "Referans Ağaç" (reference tree) records' latest structured analyses.
+// This never calls Gemini — see summarizeParcelHealthFromReferenceTrees.
+app.get("/api/parcels/:id/reference-tree-health", requireAuth, asyncHandler(async (req, res) => {
+  const parcel = await parcelRepository.getById(req.params.id);
+  if (!parcel) {
+    return res.status(404).json({ error: "Parsel bulunamadı." });
+  }
+
+  const referenceTrees = await treeRepository.getReferenceTreesByParcelId(req.params.id);
+
+  const treeStatuses: ReferenceTreeStatus[] = await Promise.all(
+    referenceTrees.map(async (tree) => {
+      const latestPhoto = await photoRepository.getLatestAnalyzedPhotoByTreeId(tree.id);
+      return {
+        treeId: tree.id,
+        treeNumber: tree.treeNumber,
+        latestAnalysis: latestPhoto?.aiAnalysis ?? null,
+      };
+    })
+  );
+
+  const summary = summarizeParcelHealthFromReferenceTrees(treeStatuses);
+  res.json(summary);
 }));
 
 // ==========================================
@@ -608,6 +636,33 @@ app.post("/api/observations/upload-photo", requireAuth, asyncHandler(async (req:
     contentHash: savedFile.contentHash,
     createdAt: new Date().toISOString()
   });
+
+  // If this photo belongs to a "Referans Ağaç" (reference tree), analyze
+  // it immediately rather than waiting for a later Fotoğraflı Gelişim
+  // Analizi request — reference trees exist specifically for close,
+  // up-to-date monitoring, so their health summary should reflect a new
+  // photo right away. Photos on non-reference trees or general parcel
+  // observations are unaffected and remain analyzed lazily, preserving
+  // this application's existing "don't spend AI quota until needed"
+  // behavior (see PERFORMANS: gereksiz API çağrısı yapma).
+  try {
+    const observation = await observationRepository.getById(observationId);
+    if (observation?.treeId) {
+      const tree = await treeRepository.getById(observation.treeId);
+      if (tree?.isReferenceTree) {
+        const parcel = await parcelRepository.getById(tree.parcelId);
+        if (parcel) {
+          newPhoto.aiAnalysis = await aiService.analyzePhotoOnce(newPhoto, parcel.cropType);
+        }
+      }
+    }
+  } catch (error) {
+    // analyzePhotoOnce already fails safe internally and never throws,
+    // but this route must never fail the upload itself even if that
+    // contract is violated by a future change — the photo is already
+    // saved successfully at this point regardless.
+    logger.error("AI", "Referans ağaç fotoğrafı için anlık analiz denemesi başarısız oldu.", error);
+  }
 
   logger.info("AI", `Image metadata extracted successfully. Simulated GPS registered: [${simulatedLatitude}, ${simulatedLongitude}]`);
   res.status(201).json(newPhoto);

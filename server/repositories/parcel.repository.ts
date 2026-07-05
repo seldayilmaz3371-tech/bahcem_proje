@@ -46,6 +46,16 @@ export class TreeRepository extends BaseRepository<Tree> {
   }
 
   /**
+   * Retrieves only the trees marked as "Referans Ağaç" (reference tree)
+   * for a single parcel — the representative sample used to infer the
+   * whole parcel's condition without analyzing every tree individually.
+   * @param parcelId Unique parcel ID
+   */
+  public async getReferenceTreesByParcelId(parcelId: string): Promise<Tree[]> {
+    return this.find((tree) => tree.parcelId === parcelId && !!tree.isReferenceTree);
+  }
+
+  /**
    * Find a specific tree by tree number within a parcel (e.g. "P1-T12").
    */
   public async getByTreeNumber(parcelId: string, treeNumber: string): Promise<Tree | null> {

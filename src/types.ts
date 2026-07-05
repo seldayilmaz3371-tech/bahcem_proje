@@ -37,6 +37,17 @@ export interface Parcel {
   updatedAt: string;
 }
 
+export type PhotoGrowthStage = "Fide" | "Gelişim" | "Çiçeklenme" | "Meyve/Ürün" | "Olgunlaşma" | "Belirsiz";
+
+export interface PhotoAiAnalysis {
+  growthStage: PhotoGrowthStage;
+  healthScore: number | null;
+  diseaseIndication: string | null;
+  confidence: number;
+  isUncertain: boolean;
+  analyzedAt: string;
+}
+
 export interface Tree {
   id: string;
   parcelId: string;
@@ -48,6 +59,26 @@ export interface Tree {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  isReferenceTree?: boolean;
+}
+
+/** A single reference tree's identity paired with its latest known analysis (if any). */
+export interface ReferenceTreeStatus {
+  treeId: string;
+  treeNumber: string;
+  latestAnalysis: PhotoAiAnalysis | null;
+}
+
+/** Deterministic, parcel-wide health summary computed from its reference trees. */
+export interface ParcelHealthSummary {
+  referenceTreeCount: number;
+  analyzedTreeCount: number;
+  healthyCount: number;
+  atRiskCount: number;
+  uncertainCount: number;
+  averageHealthScore: number | null;
+  overallStatus: "Sağlıklı" | "Riskli Bölgeler Var" | "Belirsiz" | "Veri Yok";
+  treeStatuses: ReferenceTreeStatus[];
 }
 
 export type TreeCountChangeReason =
@@ -104,6 +135,8 @@ export interface Photo {
   takenAt?: string;
   fileSize: number;
   createdAt: string;
+  contentHash?: string;
+  aiAnalysis?: PhotoAiAnalysis;
 }
 
 export interface InventoryItem {
