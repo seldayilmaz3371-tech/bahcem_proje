@@ -16,7 +16,8 @@ import PhotoGrowthAnalysis from "./components/PhotoGrowthAnalysis";
 import DocumentHub from "./components/DocumentHub";
 import ActivityLogs from "./components/ActivityLogs";
 import { ActiveTab, User } from "./types";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, WifiOff } from "lucide-react";
+import { useOnlineStatus } from "./hooks/useOnlineStatus";
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem("agri_token"));
@@ -27,6 +28,7 @@ export default function App() {
     return (saved as ActiveTab) || "dashboard";
   });
   const [initializing, setInitializing] = useState(true);
+  const isOnline = useOnlineStatus();
 
   const handleActiveTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
@@ -126,6 +128,16 @@ export default function App() {
 
       {/* Main View Area */}
       <main id="app-main-view" className="flex-1 overflow-y-auto bg-[#fcfdfc]">
+        {!isOnline && (
+          <div
+            id="offline-banner"
+            role="alert"
+            className="sticky top-0 z-50 bg-red-600 text-white px-4 py-2.5 flex items-center justify-center gap-2 text-sm font-semibold shadow-md"
+          >
+            <WifiOff className="h-4 w-4 shrink-0" />
+            <span>İnternet bağlantınız kesildi. Yeni veri kaydedemezsiniz — bağlantı geri gelene kadar bekleyin.</span>
+          </div>
+        )}
         {activeTab === "dashboard" && <Dashboard setActiveTab={handleActiveTabChange} />}
         {activeTab === "parcels" && <ParcelManager />}
         {activeTab === "observations" && <ObservationLog />}

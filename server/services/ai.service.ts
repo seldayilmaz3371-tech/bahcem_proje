@@ -27,7 +27,7 @@ import { buildDocumentSummaryPrompt } from "../prompts/document-summary.prompt";
 import { buildParcelRecommendationPrompt } from "../prompts/parcel-recommendation.prompt";
 import { buildChatAssistantPrompt } from "../prompts/chat-assistant.prompt";
 import { buildGrowthAnalysisPrompt } from "../prompts/growth-analysis.prompt";
-import { buildPhotoAnalysisPrompt } from "../prompts/photo-analysis.prompt";
+import { buildPhotoAnalysisPrompt, photoAnalysisResponseSchema } from "../prompts/photo-analysis.prompt";
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -54,6 +54,61 @@ export function getGeminiClient(): GoogleGenAI {
     });
   }
   return aiClient;
+}
+
+/** Maximum number of retry attempts for a transient Gemini API failure (does not count the initial attempt). */
+const MAX_GEMINI_RETRY_ATTEMPTS = 2;
+
+/** Base delay before the first retry; doubles on each subsequent attempt (exponential backoff). */
+const GEMINI_RETRY_BASE_DELAY_MS = 1000;
+
+/**
+ * Determines whether a failed Gemini call is worth retrying. Quota
+ * exhaustion (429 / RESOURCE_EXHAUSTED) and client-side request errors
+ * (400/401/403) will fail identically on every retry — retrying them
+ * only wastes additional quota and time, so they are excluded. Only
+ * transient failures (network errors, 5xx server errors) are retried.
+ */
+function isRetryableGeminiError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const nonRetryableMarkers = ["RESOURCE_EXHAUSTED", "\"code\":429", "\"code\":400", "\"code\":401", "\"code\":403"];
+  return !nonRetryableMarkers.some((marker) => message.includes(marker));
+}
+
+/**
+ * Executes a Gemini API call with a small number of retries using
+ * exponential backoff, limited to transient failures (see
+ * isRetryableGeminiError). Per HATA YÖNETİMİ, this does not change what
+ * happens on final failure — the caller's own try/catch still handles it
+ * exactly as before; this only gives a transient failure a chance to
+ * self-resolve before giving up. `operation` should include any
+ * AiUsageTrackerService.recordUsage call, since each retry is a genuine
+ * additional request that consumes quota.
+ */
+async function callGeminiWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= MAX_GEMINI_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const isLastAttempt = attempt === MAX_GEMINI_RETRY_ATTEMPTS;
+      if (isLastAttempt || !isRetryableGeminiError(error)) {
+        throw error;
+      }
+
+      const delayMs = GEMINI_RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+      logger.warn(
+        "AI",
+        `Gemini çağrısı geçici bir hatayla başarısız oldu, ${delayMs}ms sonra yeniden denenecek (deneme ${attempt + 1}/${MAX_GEMINI_RETRY_ATTEMPTS}).`,
+        { error: error instanceof Error ? error.message : String(error) }
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastError;
 }
 
 // ==========================================================================
@@ -119,10 +174,12 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
   const client = getGeminiClient();
   const embeddingModel = config.ai.embeddingModel;
-  aiUsageTrackerService.recordUsage(embeddingModel);
-  const response = await client.models.embedContent({
-    model: embeddingModel,
-    contents: text,
+  const response = await callGeminiWithRetry(() => {
+    aiUsageTrackerService.recordUsage(embeddingModel);
+    return client.models.embedContent({
+      model: embeddingModel,
+      contents: text,
+    });
   });
 
   const embeddings = response.embeddings || (response as any).embedding;
@@ -304,10 +361,12 @@ export class AIService {
       // Step 4: Generate a summary of the document using Gemini
       try {
         const client = getGeminiClient();
-        aiUsageTrackerService.recordUsage(config.ai.generationModel);
-        const summaryResponse = await client.models.generateContent({
-          model: config.ai.generationModel,
-          contents: buildDocumentSummaryPrompt(textContent),
+        const summaryResponse = await callGeminiWithRetry(() => {
+          aiUsageTrackerService.recordUsage(config.ai.generationModel);
+          return client.models.generateContent({
+            model: config.ai.generationModel,
+            contents: buildDocumentSummaryPrompt(textContent),
+          });
         });
         if (summaryResponse.text) {
           await uploadedDocumentRepository.update(newDoc.id, {
@@ -491,7 +550,6 @@ export class AIService {
       const client = getGeminiClient();
       let responseText: string | undefined;
 
-      aiUsageTrackerService.recordUsage(config.ai.generationModel);
       if (hasPhotos) {
         const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [
           { text: prompt },
@@ -499,15 +557,21 @@ export class AIService {
         for (const file of photoFiles!) {
           parts.push({ inlineData: { data: file.buffer.toString("base64"), mimeType: file.mimeType } });
         }
-        const response = await client.models.generateContent({
-          model: config.ai.generationModel,
-          contents: parts,
+        const response = await callGeminiWithRetry(() => {
+          aiUsageTrackerService.recordUsage(config.ai.generationModel);
+          return client.models.generateContent({
+            model: config.ai.generationModel,
+            contents: parts,
+          });
         });
         responseText = response.text;
       } else {
-        const response = await client.models.generateContent({
-          model: config.ai.generationModel,
-          contents: prompt,
+        const response = await callGeminiWithRetry(() => {
+          aiUsageTrackerService.recordUsage(config.ai.generationModel);
+          return client.models.generateContent({
+            model: config.ai.generationModel,
+            contents: prompt,
+          });
         });
         responseText = response.text;
       }
@@ -576,10 +640,12 @@ export class AIService {
       const prompt = buildChatAssistantPrompt(ragContext, safeQuery);
 
       const client = getGeminiClient();
-      aiUsageTrackerService.recordUsage(config.ai.generationModel);
-      const response = await client.models.generateContent({
-        model: config.ai.generationModel,
-        contents: prompt,
+      const response = await callGeminiWithRetry(() => {
+        aiUsageTrackerService.recordUsage(config.ai.generationModel);
+        return client.models.generateContent({
+          model: config.ai.generationModel,
+          contents: prompt,
+        });
       });
 
       return {
@@ -647,13 +713,15 @@ export class AIService {
 
     try {
       const client = getGeminiClient();
-      aiUsageTrackerService.recordUsage(config.ai.generationModel);
-      const response = await client.models.generateContent({
-        model: config.ai.generationModel,
-        contents: [
-          { text: buildPhotoAnalysisPrompt(cropType) },
-          { inlineData: { data: inlineData.base64Data, mimeType: inlineData.mimeType } },
-        ],
+      const response = await callGeminiWithRetry(() => {
+        aiUsageTrackerService.recordUsage(config.ai.generationModel);
+        return client.models.generateContent({
+          model: config.ai.generationModel,
+          contents: [
+            { text: buildPhotoAnalysisPrompt(cropType) },
+            { inlineData: { data: inlineData.base64Data, mimeType: inlineData.mimeType } },
+          ],
+        });
       });
 
       const rawText = response.text?.trim();
@@ -664,20 +732,22 @@ export class AIService {
       // Gemini is instructed to return raw JSON, but defensively strip
       // markdown code fences in case they are included anyway.
       const cleanedText = rawText.replace(/^```json\s*|```\s*$/g, "").trim();
-      const parsed = JSON.parse(cleanedText) as {
-        growthStage?: string;
-        healthScore?: number | null;
-        diseaseIndication?: string | null;
-        confidence?: number;
-      };
+      const rawParsed: unknown = JSON.parse(cleanedText);
 
-      const confidence = typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : 0;
+      // Formal runtime validation (not a compile-time-only type
+      // assertion) — an AI response must never be trusted as-is (see
+      // GÜVENLİK). Every field independently falls back to a safe
+      // default via the schema's .catch() rules if Gemini's response is
+      // missing a field, uses an unexpected type, or falls outside the
+      // valid range.
+      const validated = photoAnalysisResponseSchema.parse(rawParsed);
+
       const analysis: PhotoAiAnalysis = {
-        growthStage: (parsed.growthStage as PhotoAiAnalysis["growthStage"]) || "Belirsiz",
-        healthScore: typeof parsed.healthScore === "number" ? Math.max(0, Math.min(100, parsed.healthScore)) : null,
-        diseaseIndication: parsed.diseaseIndication || null,
-        confidence,
-        isUncertain: isUncertainAnalysis(confidence),
+        growthStage: validated.growthStage,
+        healthScore: validated.healthScore,
+        diseaseIndication: validated.diseaseIndication,
+        confidence: validated.confidence,
+        isUncertain: isUncertainAnalysis(validated.confidence),
         analyzedAt: new Date().toISOString(),
       };
 
@@ -788,10 +858,12 @@ export class AIService {
       );
 
       const client = getGeminiClient();
-      aiUsageTrackerService.recordUsage(config.ai.generationModel);
-      const response = await client.models.generateContent({
-        model: config.ai.generationModel,
-        contents: prompt,
+      const response = await callGeminiWithRetry(() => {
+        aiUsageTrackerService.recordUsage(config.ai.generationModel);
+        return client.models.generateContent({
+          model: config.ai.generationModel,
+          contents: prompt,
+        });
       });
 
       if (!response.text) {

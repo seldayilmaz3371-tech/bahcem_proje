@@ -56,6 +56,15 @@ export class TreeRepository extends BaseRepository<Tree> {
   }
 
   /**
+   * Retrieves every "Referans Ağaç" across the entire farm, regardless of
+   * parcel. Used for the farm-wide Dashboard summary — see
+   * GET /api/reference-trees.
+   */
+  public async getAllReferenceTrees(): Promise<Tree[]> {
+    return this.find((tree) => !!tree.isReferenceTree);
+  }
+
+  /**
    * Find a specific tree by tree number within a parcel (e.g. "P1-T12").
    */
   public async getByTreeNumber(parcelId: string, treeNumber: string): Promise<Tree | null> {

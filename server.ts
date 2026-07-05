@@ -498,6 +498,42 @@ app.get("/api/parcels/:id/reference-tree-health", requireAuth, asyncHandler(asyn
   res.json(summary);
 }));
 
+// Farm-wide "Referans Ağaç" photo summary for the Dashboard — how many
+// reference trees exist across all parcels, and how many have never been
+// photographed. Pure aggregation over existing repository data; no
+// Gemini call involved.
+app.get("/api/reference-trees/summary", requireAuth, asyncHandler(async (req, res) => {
+  const referenceTrees = await treeRepository.getAllReferenceTrees();
+
+  let treesWithoutPhoto = 0;
+  let mostRecentPhoto: { photoUrl: string; treeNumber: string; parcelName: string; takenAt: string } | null = null;
+
+  for (const tree of referenceTrees) {
+    const latestPhoto = await photoRepository.getLatestPhotoByTreeId(tree.id);
+    if (!latestPhoto) {
+      treesWithoutPhoto++;
+      continue;
+    }
+
+    const photoTimestamp = latestPhoto.takenAt || latestPhoto.createdAt;
+    if (!mostRecentPhoto || new Date(photoTimestamp).getTime() > new Date(mostRecentPhoto.takenAt).getTime()) {
+      const parcel = await parcelRepository.getById(tree.parcelId);
+      mostRecentPhoto = {
+        photoUrl: latestPhoto.originalUrl,
+        treeNumber: tree.treeNumber,
+        parcelName: parcel?.name || "Bilinmeyen Parsel",
+        takenAt: photoTimestamp,
+      };
+    }
+  }
+
+  res.json({
+    totalReferenceTrees: referenceTrees.length,
+    treesWithoutPhoto,
+    mostRecentPhoto,
+  });
+}));
+
 // ==========================================
 // 3. FIELD OBSERVATIONS & EXIF GPS SIMULATION
 // ==========================================

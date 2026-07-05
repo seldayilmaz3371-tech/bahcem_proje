@@ -192,6 +192,25 @@
   "observations": [
     {
       "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
+      "treeId": "3fdf10c0-3ab3-41ee-b5c4-d82be09d4823",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-05T04:42:06.788Z",
+      "activityType": "Genel Gözlem",
+      "notes": "güney sıra 1 için hızlı ağaç fotoğrafı.",
+      "createdAt": "2026-07-05T04:42:06.789Z",
+      "id": "7b102f1b-ac47-4f5d-b143-9e242017df8e"
+    },
+    {
+      "parcelId": "1931ce5d-7a84-431a-a041-06ebf144d5ee",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-05",
+      "activityType": "Genel Gözlem",
+      "notes": "genel",
+      "createdAt": "2026-07-05T06:40:25.256Z",
+      "id": "830cb058-279a-47e9-a99b-779f6f748fe5"
+    },
+    {
+      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
       "observerId": "user-admin-default",
       "observationDate": "2026-07-04T11:01:17.153Z",
       "activityType": "Genel Gözlem",
@@ -237,13 +256,12 @@
     },
     {
       "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
-      "treeId": "3fdf10c0-3ab3-41ee-b5c4-d82be09d4823",
       "observerId": "user-admin-default",
-      "observationDate": "2026-07-05T04:42:06.788Z",
+      "observationDate": "2026-07-05T09:12:19.755Z",
       "activityType": "Genel Gözlem",
-      "notes": "güney sıra 1 için hızlı ağaç fotoğrafı.",
-      "createdAt": "2026-07-05T04:42:06.789Z",
-      "id": "7b102f1b-ac47-4f5d-b143-9e242017df8e"
+      "notes": "Yapay Zeka Karar Destek raporu için yüklenen teşhis fotoğrafı. Soru: \"Mevcut tarla gözlemleri, hava durumu ve stok envanter seviyelerine göre genel tarımsal durum analizi ve gelecek haftalık faaliyet reçetesi üret.\"",
+      "createdAt": "2026-07-05T09:12:19.755Z",
+      "id": "327bd41b-44f1-48a7-8b02-028b03c9c01e"
     }
   ],
   "photos": [
@@ -267,7 +285,15 @@
       "takenAt": "2026-07-03T10:28:23.791Z",
       "fileSize": 6139711,
       "createdAt": "2026-07-03T10:28:23.801Z",
-      "id": "db13c1dd-fb01-4211-a898-ac1487f7f8f8"
+      "id": "db13c1dd-fb01-4211-a898-ac1487f7f8f8",
+      "aiAnalysis": {
+        "growthStage": "Gelişim",
+        "healthScore": 75,
+        "diseaseIndication": "Yapraklarda galeri sineği (yaprak madencisi) tünelleri ve zararı gözlenmektedir.",
+        "confidence": 0.85,
+        "isUncertain": false,
+        "analyzedAt": "2026-07-05T06:41:55.456Z"
+      }
     },
     {
       "id": "c25697ed-dd91-4674-bac3-e8356a0a5a1b",
@@ -316,6 +342,36 @@
         "isUncertain": true,
         "analyzedAt": "2026-07-05T04:42:17.792Z"
       }
+    },
+    {
+      "id": "ebebcd2e-c33d-448c-9176-9bb7e8a0b648",
+      "observationId": "830cb058-279a-47e9-a99b-779f6f748fe5",
+      "originalUrl": "/uploads/photos/ebebcd2e-c33d-448c-9176-9bb7e8a0b648.jpg",
+      "thumbnailUrl": "/uploads/photos/ebebcd2e-c33d-448c-9176-9bb7e8a0b648.jpg",
+      "latitude": 36.912234,
+      "longitude": 34.423674,
+      "takenAt": "2026-07-05",
+      "fileSize": 499714,
+      "contentHash": "9219ba1dbd3369d9ec3e6ac1d5a989393a412c387fac14df31af2d38ab6199cb",
+      "createdAt": "2026-07-05T06:40:25.401Z",
+      "aiAnalysis": {
+        "growthStage": "Gelişim",
+        "healthScore": 75,
+        "diseaseIndication": "Görselin merkezindeki yapraklarda belirgin galeri sineği (yaprak madencisi) zararı ve tünelleri mevcuttur.",
+        "confidence": 0.9,
+        "isUncertain": false,
+        "analyzedAt": "2026-07-05T06:42:19.328Z"
+      }
+    },
+    {
+      "id": "97632f27-e862-4d5d-8783-bedd178de346",
+      "observationId": "327bd41b-44f1-48a7-8b02-028b03c9c01e",
+      "originalUrl": "/uploads/photos/97632f27-e862-4d5d-8783-bedd178de346.jpg",
+      "thumbnailUrl": "/uploads/photos/97632f27-e862-4d5d-8783-bedd178de346.jpg",
+      "takenAt": "2026-07-05T09:12:19.847Z",
+      "fileSize": 499714,
+      "contentHash": "9219ba1dbd3369d9ec3e6ac1d5a989393a412c387fac14df31af2d38ab6199cb",
+      "createdAt": "2026-07-05T09:12:19.847Z"
     }
   ],
   "inventory": [],
@@ -428,6 +484,42 @@
       "usedInventoryCount": 0,
       "createdDate": "2026-07-04T11:02:03.665Z",
       "id": "37b32c01-b776-4ccc-9a18-055bf53839c6"
+    },
+    {
+      "parcelId": "1931ce5d-7a84-431a-a041-06ebf144d5ee",
+      "recommendationType": "Gelişim Analizi",
+      "content": "Merhaba! Ben Mersin Toroslar ve Değirmençay bölgesinin kendine has mikro-klimasına, toprak yapısına ve tarımsal ihtiyaçlarına hakim Tarım Danışmanınızım. \n\nDeğirmençay bölgesinin temiz havasında, 0.01 dekar alanda yetiştirdiğiniz o tek ve kıymetli **\"çilek\"** bitkinizin 5 Nisan 2026 - 5 Temmuz 2026 dönemine ait gelişim sürecini, elimizdeki zaman sıralı analiz kayıtlarına dayanarak sizin için değerlendirdim.\n\nİşte parselinizdeki duruma dair detaylı analiz raporu:\n\n### 1. Görsel Değişim Özeti\nElimizdeki görsel analiz kayıtları Temmuz ayının başına (3 Temmuz ve 5 Temmuz) odaklanmaktadır. Bu kısa süreçteki değişim şu şekildedir:\n*   **3 Temmuz 2026:** Bitkiniz \"Gelişim\" evresindedir. Genel sağlık skoru **75/100** olarak belirlenmiş ve yapraklarda galeri sineği (yaprak madencisi) tünelleri tespit edilmiştir (Güven oranı: %85).\n*   **5 Temmuz 2026:** Bitkiniz \"Gelişim\" evresini sürdürmektedir. Sağlık skoru **75/100** ile sabit kalmıştır. Ancak bu tarihte, özellikle görselin merkezindeki yapraklarda galeri sineği (yaprak madencisi) zararı ve tünelleri daha net bir şekilde ayırt edilmiştir (Güven oranı: %90'a yükselmiştir).\n\n### 2. Sağlık Değerlendirmesi\nBitkinizin sağlık puanı 75/100 seviyesinde sabit kalarak orta-iyi düzeyde seyretmektedir. En belirgin sağlık sorunu, her iki tarihte de rapor edilen **Galeri Sineği (Yaprak Madencisi)** zararlısıdır. 5 Temmuz tarihli analizde bu zararlının özellikle **merkezdeki yapraklarda** yoğunlaştığı ve tüneller (galeriler) oluşturduğu netleşmiştir. Bu zararlı, yaprakların fotosentez kapasitesini düşürerek bitkiyi zayıflatabilir. Başka bir hastalık veya besin eksikliği belirtisi bu kayıtlarda rapor edilmemiştir.\n\n### 3. Gelişim Hızı Yorumu\nToroslar’ın Değirmençay bölgesindeki mikro-klima koşullarında (nispeten serin geceler ve güneşli yaz günleri), çilek bitkisinin Temmuz ayında oldukça aktif bir gelişim göstermesi beklenir. Analiz süresindeki 2 günlük çok kısa vadede bitkinin \"Gelişim\" evresinde sabit kalması normaldir. Ancak sağlık skorunun 75 seviyesinde takılı kalması, yaprak madencisi baskısının bitkinin enerjisini sınırladığını ve Toroslar'ın bu verimli döneminde potansiyel gelişim hızını biraz yavaşlattığını göstermektedir.\n\n### 4. Öneri (Sonraki Adım)\nYetiştirdiğiniz ürün yalnızca **1 adet çilek bitkisi** olduğu için kimyasal mücadeleye girmeden, çok pratik ve etkili lokal önlemler alabiliriz:\n*   **Mekanik Temizlik:** 5 Temmuz analizinde işaret edilen, özellikle merkezdeki tünel oluşmuş ve zarar görmüş yaprakları dikkatlice kopararak bahçeden uzaklaştırın (mümkünse yakın veya toprağa derin gömün). Bu, galeri sineği larvalarının döngüsünü kıracaktır.\n*   **Fiziksel Koruma:** Bitkinizin yakınına 1 adet sarı yapışkan tuzak asarak ergin galeri sineklerini yakalayabilir ve yeni yumurta bırakmalarını engelleyebilirsiniz.\n*   **Takip:** Tek bir bitki olduğu için her gün yaprak altlarını ve yeni çıkan sürgünleri elinizle kontrol edin.\n\n### 5. Belirsizlik\n*   Kayıtlarda doğrudan \"belirsiz\" olarak işaretlenmiş bir analiz **bulunmamaktadır**.\n*   **Önemli Not:** Değerlendirme dönemi 5 Nisan - 5 Temmuz 2026 olarak belirtilmiş olsa da elimizdeki görsel analiz verileri yalnızca 3 Temmuz ve 5 Temmuz tarihlerine aittir. Bu nedenle Nisan, Mayıs ve Haziran aylarındaki gelişim durumu verilerde yer almadığından, bu dönemler arasındaki gelişim hızı analiz dışı kalmıştır ve belirsizdir. Yorumlar sadece Temmuz ayının ilk günlerindeki mevcut duruma dayanmaktadır.\n\nÇilek bitkinizi sevgiyle ve bu küçük önlemlerle koruyarak Değirmençay'ın o güzel çilek lezzetine ulaştırmanızı dilerim! Her zaman buradayım.",
+      "confidenceScore": 0.85,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 0,
+      "usedWeatherCount": 0,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-05T08:40:17.985Z",
+      "id": "bae99628-5751-499c-a264-c65624c30b7d"
+    },
+    {
+      "parcelId": "1931ce5d-7a84-431a-a041-06ebf144d5ee",
+      "recommendationType": "Gelişim Analizi",
+      "content": "Merhaba! Mersin Toroslar ve Değirmençay bölgesinin kendine has mikro-klimasına, toprak yapısına ve tarımsal dinamiklerine hakim bir Tarım Danışmanı (Mersin Tarım Asistanı) olarak \"çilek\" parselinizdeki gelişmeleri memnuniyetle analiz ettim. \n\nDeğirmençay'ın esintili ve çilek yetiştiriciliğine uygun yüksek rakımlı havasında, 0.01 dekar alanda yetiştirdiğiniz bu tek çilek bitkisinin 3 Temmuz - 5 Temmuz 2026 tarihlerindeki durumunu, paylaştığınız AI analiz kayıtları doğrultusunda titizlikle değerlendirdim.\n\nİşte parselinize ait gelişim raporu:\n\n---\n\n### 1. Görsel Değişim Özeti\nKayıtlara göre, değerlendirme döneminin son günlerinde bitkinizin genel durumu şu şekildedir:\n*   **3 Temmuz 2026:** Bitkiniz \"Gelişim\" evresindedir. Genel sağlık skoru **75/100** olarak belirlenmiş ve yapraklarda galeri sineği (yaprak madencisi) tünelleri tespit edilmiştir (Güven oranı: %85).\n*   **5 Temmuz 2026:** İki gün sonra yapılan analizde, bitki yine \"Gelişim\" evresinde ve sağlık skoru sabit kalarak **75/100** seviyesindedir. Ancak bu tarihte zararlının etkisi daha netleşmiş; özellikle görselin merkezindeki yapraklarda belirgin galeri sineği zararı ve tünelleri raporlanmıştır (Güven oranı: %90).\n\n### 2. Sağlık Değerlendirmesi\nBitkinizin sağlık durumu **75/100** seviyesinde seyretmektedir. Bu puan, bitkinin hayatiyetini sürdürdüğünü ancak bir baskı altında olduğunu gösterir. \n*   **Zararlı Teşhisi:** Bitkide net bir şekilde **Galeri Sineği (Yaprak Madencisi)** zararı mevcuttur. Bu sineğin larvaları yaprak iki çeperi arasında beslenerek tüneller (galeriler) açmakta, 5 Temmuz raporuna göre özellikle merkezdeki taze/ana yapraklarda bu zarar belirgin şekilde yoğunlaşmaktadır. Kayıtlarda herhangi bir besin eksikliği ya da mantari hastalık belirtisi rapor edilmemiştir.\n\n### 3. Gelişim Hızı Yorumu\nToroslar ve Değirmençay bölgesinin Temmuz ayı sıcaklıkları, kıyı şeridine göre daha serin olsa da yaz sıcaklarının bastırdığı bir dönemdir. \n*   Elimizdeki veriler yalnızca 3 Temmuz ve 5 Temmuz arasındaki 2 günlük çok kısa bir kesiti kapsamaktadır. Bu 2 günlük süre zarfında bitkinin gelişim evresi \"Gelişim\" olarak sabit kalmıştır. \n*   Zararlı baskısı (galeri sineği) nedeniyle bitkinin bu sıcak dönemde gelişim hızının yavaşlamış olması muhtemeldir. Tek bir bitki olduğu için zararlının yaprak alanını azaltması fotosentez kapasitesini doğrudan etkilemektedir.\n\n### 4. Öneri\nSadece tek bir çilek bitkiniz (1 adet) olduğu ve alanınız çok küçük (0.01 Dekar) olduğu için mücadele oldukça kolay ve pratiktir:\n*   **Mekanik Mücadele (En Etkili Yol):** 5 Temmuz raporunda merkez yapraklarda yoğunlaştığı belirtilen galeri sineği tünellerini içeren yaprakları dikkatlice budayın ve bu yaprakları parselden uzaklaştırarak imha edin (toprağa gömebilir veya yakabilirsiniz). Böylece larvaların erginleşip tekrar bulaşmasını engellersiniz.\n*   **İzleme:** Yeni çıkacak olan yaprakları tünel oluşumuna karşı günlük olarak elinizle kontrol edin.\n\n### 5. Belirsizlik\n*   **Veri Eksikliği ve Dönemsel Belirsizlik:** Analiz talebiniz 5 Nisan 2026 ile 5 Temmuz 2026 arasındaki geniş bir dönemi kapsamaktadır. Ancak elimizdeki yapılandırılmış AI kayıtları **sadece 3 Temmuz ve 5 Temmuz 2026** tarihlerine aittir. Nisan, Mayıs ve Haziran aylarına ait hiçbir kayıt bulunmamaktadır. Bu nedenle, çilek bitkinizin ilkbahardan yaz başına kadar geçen süreçteki büyüme hızı, mevsimsel gelişimi ve sağlığı **tamamen belirsizdir**. Bu rapora dayalı gelişim yorumları sadece Temmuz ayının ilk günlerindeki durumunu yansıtmaktadır.\n*   Mevcut Temmuz kayıtlarında ise herhangi bir \"belirsiz\" işareti bulunmamakta, tespitler yüksek güven oranıyla (%85-%90) sunulmaktadır.\n\nDeğirmençay'daki çileğinizin sağlığına kavuşması ve bol meyve vermesi dileğiyle, her zaman yardıma hazırım!",
+      "confidenceScore": 0.85,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 0,
+      "usedWeatherCount": 0,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-05T08:50:01.529Z",
+      "id": "81af634e-d0b6-4da5-8a16-655326eff84b"
+    },
+    {
+      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
+      "recommendationType": "Hastalık",
+      "content": "Merhaba! Ben **Mersin Tarım Asistanı**, Toroslar ve Değirmençay bölgesinin kendine has mikro-kliması, killi-tınlı toprak yapısı ve zeytin yetiştiriciliği konusunda uzmanlaşmış yapay zeka destekli tarım danışmanınızım. \n\n\"Test2\" parseliniz için hazırladığım, 5 - 8 Temmuz 2026 tarihlerini kapsayan detaylı tarımsal durum analizi ve gelecek haftalık faaliyet reçeteniz aşağıdadır.\n\n---\n\n### 1. ANALİZ VE TEŞHİS (Görsel ve Saha Analizi)\n\n*   **Görsel Teşhis ve Önemli Uyarı:** \n    Yüklemiş olduğunuz fotoğrafı detaylıca inceledim. Sisteminizde kayıtlı olan \"Test2\" parseli **6 adet zeytin ağacı** barındırmaktadır; ancak **gönderdiğiniz fotoğrafta zeytin ağacı, zeytin yaprağı veya zeytin çiçeği bulunmamaktadır.** Fotoğrafta saksılarda yetiştirilen **çilek (Fragaria)**, **sardunya (Pelargonium)** ve diğer bazı otsu bahçe bitkileri görülmektedir.\n    *   **Fotoğraftaki Bitki Sağlığı Durumu:** Ortadaki otsu bitkinin yapraklarında kıvrımlı, harita benzeri beyaz yollar görülmektedir. Bu belirti, klasik bir **Yaprak Galeri Sineği (*Liriomyza spp.*)** zararıdır. Çilek yapraklarında ise genel olarak belirgin bir hastalık görülmemekle birlikte hafif besin noksanlığı başlangıcı sezilmektedir.\n    *   **Zeytin Ağaçlarınız İçin Durum:** Mevcut fotoğraf zeytin ağaçlarınıza ait olmadığı için zeytinlerinizde Halkalı Leke, Zeytin Sineği veya çiçek/meyve dökümü gibi sorunların olup olmadığını bu görsel üzerinden teşhis etmem mümkün değildir.\n    *   **Tavsiye:** Zeytin ağaçlarınızın genel durumunu doğru analiz edebilmem için lütfen ağaçların genel görünümünü, yaprakların alt ve üst yüzeylerini ve varsa meyve/çiçek salkımlarını yakından gösteren yeni fotoğraflar yükleyin.\n\n*   **Güven Seviyesi:** **BELİRSİZ (Düşük)**\n    *(Nedeni: Gönderilen fotoğrafın parseldeki ana ürün olan zeytin ağaçlarını temsil etmemesidir.)*\n\n> **KAYNAK:** Gemini Genel Bilgisi (Doküman Havuzunda bu teşhisle eşleşen bir kayıt bulunamadı)\n\n---\n\n### 2. HAFTALIK EYLEM PLANI (6 - 12 Temmuz 2026)\n\nDeğirmençay'ın Temmuz ayı mikro-kliması sıcak geçer ancak Toroslar'ın esintisi ve yüksek bağıl nemi (özellikle bu hafta %74 - %81 arası) hastalıklar için uygun ortam yaratabilir. Önümüzdeki günlerde beklenen yağışlar planlamamızı doğrudan etkileyecektir.\n\n#### A. Sulama Yönetimi (Damlama Sistemi)\n*   **Meteoroloji Durumu:** 6 Temmuz Pazartesi sağanak, 7-8 Temmuz Salı ve Çarşamba günleri ise hafif sağanak yağış beklenmektedir. Nem oranı %81'lere kadar çıkacaktır.\n*   **Toprak Yapısı Uyarıları:** Toprağınız **Killi-Tınlı** yapıdadır. Bu toprak tipi suyu çok iyi tutar ancak drenajı yavaştır. Yağışlı günlerde sulama yapmak köklerin havasız kalmasına (kök boğulması) ve kök çürüklüğü hastalıklarına yol açar.\n*   **Eylem:** \n    *   **Pazartesi, Salı ve Çarşamba günleri damlama sulama sistemini tamamen KAPALI tutun.**\n    *   Perşembe günü toprak nemini elinizle kontrol edin; eğer killi toprak hala çamurlu veya aşırı nemliyse sulamayı Cuma gününe kadar erteleyin.\n    *   Yağışlar kesildikten sonra, haftanın geri kalan kuru günlerinde ağaç başına günlük ortalama 30-40 litre su gelecek şekilde damlama sulama programı uygulayın.\n\n#### B. Gübreleme Programı\n*   Temmuz ayı, zeytinde dane gelişiminin ve çekirdek sertleşmesinin başladığı dönemdir. Bu dönemde potasyum (K) ihtiyacı artar.\n*   **Eylem:** Yağışlı günlerden hemen önce yapraktan gübreleme yapmayın (yağmur gübreyi yıkayacaktır). Yağışların bittiği Perşembe veya Cuma günü, damlama sulama sisteminiz üzerinden potasyum ağırlıklı damlama gübresi uygulayabilirsiniz.\n\n#### C. Hastalık ve Zararlı Mücadelesi\n*   **Zeytin Sineği (*Bactrocera oleae*) Uyarısı:** Yağış sonrası artan sıcaklık ve yüksek nem (%80 civarı), Değirmençay bölgesinde zeytin sineği aktivitesini tetikleyebilir. \n*   **Eylem:** Yağışlar durduktan sonra ağaçlarınızı zeytin sineği vuruğu (meyvelerde hilal şeklinde sarı-kahverengi lekeler) yönünden kontrol edin. Bahçenize izleme amaçlı sarı yapışkan tuzaklar asabilirsiniz.\n\n#### D. Don Riski Değerlendirmesi\n*   **METEOROLOJİ KAYNAK 2 Değerlendirmesi:** Önümüzdeki 4 gün boyunca en düşük sıcaklık 21°C civarındadır. **Herhangi bir don riski BULUNMAMAKTADIR.** Bu nedenle don önleme tedbirlerine ihtiyaç yoktur.\n\n---\n\n### 3. UYGULAMA VE DOZAJ HESAPLAMASI\n\nParseliniz küçük ölçekli (1 Dekar) olup içerisinde sadece **6 adet zeytin ağacı** bulunmaktadır. Ticari tarımda dekar başına verilen dozajlar bu küçük alan için çok fazla geleceğinden, ağaç başı hesaplama yapılması hayati önem taşır.\n\n*   **Önerilen Gübre:** Suda tamamen çözünür **Potasyum Nitrat** (Meyve büyümesi ve kalitesi için).\n    *   *Genel Dekar Dozu:* Damlamadan haftalık 2-3 kg/dekar (ortalama 50 ağaç için).\n    *   *Sizin Parseliniz İçin Hesaplanan Doz (6 Ağaç için):* Sulama tankınıza suyla karıştırılmak üzere **yaklaşık 250 - 300 gram Potasyum Nitrat** eklemeniz yeterlidir. Bu miktar 6 ağacınıza eşit şekilde dağıtılmalıdır.\n*   **Önemli Reçete Uyarısı:** Bu dozajlar genel tarımsal bilgilere dayanarak hesaplanmıştır, kesin bir reçete değildir. Herhangi bir ticari ürün uygulamadan önce mutlaka ürün ambalajı üzerindeki etiket bilgilerini okuyunuz, lisanslı bir ziraat mühendisine danışınız.\n\n---\n\n### 4. HASAT ÖNGÖRÜSÜ VE BEKLEME SÜRELERİ (PH)\n\nDeğirmençay bölgesinde zeytin hasadı (sofralık veya yağlık kullanım amacına göre) genellikle Eylül sonu ile Kasım/Aralık ayları arasında gerçekleşir. \n*   Şu an Temmuz başı itibariyle hasat dönemine minimum 2,5 - 3 ay süre vardır.\n*   Bu dönemde yapılacak ilaçlamalarda, pestisitlerin \"Son İlaçlama ile Hasat Arasındaki Süre (PH)\" sınırlarına dikkat edilmesi gelecekteki gıda güvenliği açısından sorun yaratmayacaktır. Ancak yine de çevre dostu ve arılara zarar vermeyen preparatların seçilmesi önerilir.\n\n---\n\n### 5. KULLANILAN KAYNAKLAR\n\n*   **Parsel ve Saha Gözlem Verileri:** Yerel Proje Verisi (Çiftçi beyanı ve geçmiş gözlem kayıtları).\n*   **Hava Durumu ve Don Riski:** Harici Web Verisi (Open-Meteo API kullanılarak alınan canlı Değirmençay verileri).\n*   **Fotoğraf Analizi ve Teşhis:** Gemini Genel Bilgisi (Sistemdeki doküman havuzunda bu görsel veya zeytin teşhisi ile eşleşen bir RAG dokümanı bulunmadığından genel tarımsal yapay zeka bilgisi kullanılmıştır).\n\n**Mersin Tarım Asistanı Önerisi:** Lütfen en kısa sürede zeytin ağaçlarınızın yaprak ve sürgünlerini gösteren net fotoğraflar çekerek sisteme yükleyin. Bereketli ve sağlıklı bir sezon dilerim!",
+      "confidenceScore": 0.7,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 4,
+      "usedWeatherCount": 4,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-05T09:13:01.276Z",
+      "id": "17b0eed7-f30e-404d-8162-cd23f428a778"
     }
   ],
   "uploadedDocuments": [
@@ -10886,6 +10978,27 @@
   "activityLogs": [
     {
       "userId": "user-admin-default",
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (Genel Gözlem). Genel parsel gözlemi.",
+      "createdAt": "2026-07-05T06:40:25.336Z",
+      "id": "7d9e55de-a856-466b-bc78-35049163e4ae"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "createdAt": "2026-07-05T04:55:49.298Z",
+      "id": "75019891-9171-4ca4-a33a-0b285124200e"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (Genel Gözlem). Ağaç ID: 3fdf10c0-3ab3-41ee-b5c4-d82be09d4823",
+      "createdAt": "2026-07-05T04:42:06.872Z",
+      "id": "21499b8b-5ef1-4b0c-b023-3b09ec0ca918"
+    },
+    {
+      "userId": "user-admin-default",
       "action": "LOGIN_SUCCESS",
       "details": "Kullanıcı sisteme giriş yaptı.",
       "createdAt": "2026-07-05T04:39:11.994Z",
@@ -11114,20 +11227,6 @@
       "details": "Kullanıcı sisteme giriş yaptı.",
       "createdAt": "2026-07-02T12:25:59.847Z",
       "id": "4fb9394f-6315-492c-b3a7-f05804793c4b"
-    },
-    {
-      "userId": "user-admin-default",
-      "action": "OBSERVATION_CREATE",
-      "details": "Yeni saha gözlemi kaydedildi (Genel Gözlem). Ağaç ID: 3fdf10c0-3ab3-41ee-b5c4-d82be09d4823",
-      "createdAt": "2026-07-05T04:42:06.872Z",
-      "id": "21499b8b-5ef1-4b0c-b023-3b09ec0ca918"
-    },
-    {
-      "userId": "user-admin-default",
-      "action": "LOGIN_SUCCESS",
-      "details": "Kullanıcı sisteme giriş yaptı.",
-      "createdAt": "2026-07-05T04:55:49.298Z",
-      "id": "75019891-9171-4ca4-a33a-0b285124200e"
     }
   ],
   "settings": [

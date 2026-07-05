@@ -90,19 +90,48 @@ export class PhotoRepository extends BaseRepository<Photo> {
    * @param treeId Unique tree ID
    * @returns The latest analyzed photo, or null if the tree has none yet
    */
-  public async getLatestAnalyzedPhotoByTreeId(treeId: string): Promise<Photo | null> {
+  /**
+   * Resolves the set of observation IDs linked to a specific tree.
+   * Shared join logic used by both photo-lookup methods below.
+   */
+  private async getObservationIdsForTree(treeId: string): Promise<Set<string>> {
     const rawDb = await db.readRaw();
-    const obsIds = new Set(
+    return new Set(
       (rawDb.observations || [])
         .filter((obs) => obs.treeId === treeId)
         .map((obs) => obs.id)
     );
+  }
+
+  public async getLatestAnalyzedPhotoByTreeId(treeId: string): Promise<Photo | null> {
+    const obsIds = await this.getObservationIdsForTree(treeId);
+    const rawDb = await db.readRaw();
 
     const analyzedPhotos = (rawDb.photos || [])
       .filter((p) => obsIds.has(p.observationId) && !!p.aiAnalysis)
       .sort((a, b) => new Date(b.takenAt || b.createdAt).getTime() - new Date(a.takenAt || a.createdAt).getTime());
 
     return analyzedPhotos[0] || null;
+  }
+
+  /**
+   * Finds the most recent photo taken of a specific tree, regardless of
+   * whether it has been analyzed yet. Used where the concern is simply
+   * "has this tree ever been photographed" (e.g. the farm-wide reference
+   * tree summary on the Dashboard), as opposed to
+   * `getLatestAnalyzedPhotoByTreeId`, which is specifically for
+   * one-time-analysis reuse logic.
+   * @param treeId Unique tree ID
+   */
+  public async getLatestPhotoByTreeId(treeId: string): Promise<Photo | null> {
+    const obsIds = await this.getObservationIdsForTree(treeId);
+    const rawDb = await db.readRaw();
+
+    const photos = (rawDb.photos || [])
+      .filter((p) => obsIds.has(p.observationId))
+      .sort((a, b) => new Date(b.takenAt || b.createdAt).getTime() - new Date(a.takenAt || a.createdAt).getTime());
+
+    return photos[0] || null;
   }
 }
 

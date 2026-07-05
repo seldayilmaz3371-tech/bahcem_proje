@@ -320,6 +320,22 @@ export interface AiModelUsage {
   percentageUsed: number | null;
 }
 
+/**
+ * Farm-wide "Referans Ağaç" photo summary shown on the Dashboard — see
+ * GET /api/reference-trees/summary. Purely aggregated counts and the
+ * single most recent photo; no AI analysis involved.
+ */
+export interface ReferenceTreeSummary {
+  totalReferenceTrees: number;
+  treesWithoutPhoto: number;
+  mostRecentPhoto: {
+    photoUrl: string;
+    treeNumber: string;
+    parcelName: string;
+    takenAt: string;
+  } | null;
+}
+
 export interface AiUsageSnapshot {
   pacificDate: string;
   models: AiModelUsage[];

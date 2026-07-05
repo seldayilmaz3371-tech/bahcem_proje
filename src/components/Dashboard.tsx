@@ -16,9 +16,10 @@ import {
   RefreshCw,
   Droplet,
   Wind,
-  CloudOff
+  CloudOff,
+  Camera
 } from "lucide-react";
-import { Parcel, InventoryItem, WeatherRecord, ActivityLog, LiveWeatherForecast, ActiveTab } from "../types";
+import { Parcel, WeatherRecord, ActivityLog, LiveWeatherForecast, ActiveTab, ReferenceTreeSummary } from "../types";
 
 interface DashboardProps {
   /** Navigates to another tab — same mechanism already used by Sidebar (see App.tsx). */
@@ -27,7 +28,7 @@ interface DashboardProps {
 
 export default function Dashboard({ setActiveTab }: DashboardProps) {
   const [parcels, setParcels] = useState<Parcel[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [referenceTreeSummary, setReferenceTreeSummary] = useState<ReferenceTreeSummary | null>(null);
   const [weatherHistory, setWeatherHistory] = useState<WeatherRecord[]>([]);
   const [recentLogs, setRecentLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,16 +47,16 @@ export default function Dashboard({ setActiveTab }: DashboardProps) {
     try {
       const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
       
-      const [parcelsRes, invRes, weatherRes, logsRes, liveWeatherRes] = await Promise.all([
+      const [parcelsRes, refTreesRes, weatherRes, logsRes, liveWeatherRes] = await Promise.all([
         fetch("/api/parcels", { headers }),
-        fetch("/api/inventory", { headers }),
+        fetch("/api/reference-trees/summary", { headers }),
         fetch("/api/weather", { headers }),
         fetch("/api/activities", { headers }),
         fetch(`/api/weather/live-forecast${forceWeatherRefresh ? "?refresh=true" : ""}`, { headers })
       ]);
 
       if (parcelsRes.ok) setParcels(await parcelsRes.json());
-      if (invRes.ok) setInventory(await invRes.json());
+      if (refTreesRes.ok) setReferenceTreeSummary(await refTreesRes.json());
       if (weatherRes.ok) setWeatherHistory(await weatherRes.json());
       if (logsRes.ok) setRecentLogs(await logsRes.json());
 
@@ -84,7 +85,6 @@ export default function Dashboard({ setActiveTab }: DashboardProps) {
   // Compute stats
   const totalLand = parcels.reduce((sum, p) => sum + p.areaDekar, 0);
   const totalTrees = parcels.reduce((sum, p) => sum + p.treeCount, 0);
-  const criticalItems = inventory.filter((item) => item.stockQuantity <= item.minStockAlert);
   const nextFrostRisk = liveForecast?.hasUpcomingFrostRisk ?? false;
 
   if (loading) {
@@ -157,28 +157,30 @@ export default function Dashboard({ setActiveTab }: DashboardProps) {
           </div>
         </button>
 
-        {/* Stock Warnings */}
+        {/* Reference Tree Photos */}
         <button
           type="button"
-          onClick={() => setActiveTab("inventory")}
-          title="Stok & Depo sayfasına git"
+          onClick={() => setActiveTab("parcels")}
+          title="Parseller & Ağaçlar sayfasına git"
           className={`text-left p-6 rounded-3xl border shadow-sm flex items-start justify-between hover:shadow-md transition-all cursor-pointer ${
-            criticalItems.length > 0 
-              ? "bg-amber-50/50 border-amber-200 text-amber-900 hover:border-amber-400" 
+            referenceTreeSummary && referenceTreeSummary.treesWithoutPhoto > 0
+              ? "bg-amber-50/50 border-amber-200 text-amber-900 hover:border-amber-400"
               : "bg-[#fcfdfc] border-[#e2e8df] text-[#1a2416] hover:border-[#556b2f]/40"
           }`}
         >
           <div>
-            <span className={`text-xs font-bold uppercase tracking-wider ${criticalItems.length > 0 ? "text-amber-800" : "text-[#80907a]"}`}>Kritik Stok Uyarısı</span>
-            <div className="mt-2 text-3xl font-bold font-display">{criticalItems.length} <span className="text-sm font-normal">Ürün</span></div>
+            <span className={`text-xs font-bold uppercase tracking-wider ${referenceTreeSummary && referenceTreeSummary.treesWithoutPhoto > 0 ? "text-amber-800" : "text-[#80907a]"}`}>Referans Ağaç Fotoğrafları</span>
+            <div className="mt-2 text-3xl font-bold font-display">{referenceTreeSummary?.totalReferenceTrees ?? 0} <span className="text-sm font-normal">Ağaç</span></div>
             <p className="mt-2 text-xs text-[#5a6a55] truncate max-w-[180px]">
-              {criticalItems.length > 0 
-                ? `${criticalItems[0].name} kritik seviyede` 
-                : "Gübre ve ilaç depoları güvenli seviyede"}
+              {!referenceTreeSummary || referenceTreeSummary.totalReferenceTrees === 0
+                ? "Henüz referans ağaç işaretlenmedi"
+                : referenceTreeSummary.treesWithoutPhoto > 0
+                ? `${referenceTreeSummary.treesWithoutPhoto} ağacın fotoğrafı eksik`
+                : "Tüm referans ağaçlar fotoğraflanmış"}
             </p>
           </div>
-          <div className={`p-3 rounded-2xl ${criticalItems.length > 0 ? "bg-amber-100 text-amber-700" : "bg-[#f0f4ee] text-[#556b2f]"}`}>
-            <AlertTriangle className="h-6 w-6" />
+          <div className={`p-3 rounded-2xl ${referenceTreeSummary && referenceTreeSummary.treesWithoutPhoto > 0 ? "bg-amber-100 text-amber-700" : "bg-[#f0f4ee] text-[#556b2f]"}`}>
+            <Camera className="h-6 w-6" />
           </div>
         </button>
 
