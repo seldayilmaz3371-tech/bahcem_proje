@@ -286,6 +286,16 @@ export interface UploadedDocument {
   summary?: string;
 }
 
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: "Frost" | "Rain" | "LowStock" | "Task" | "System";
+  isRead: boolean;
+  createdAt: string;
+  referenceKey?: string;
+}
+
 export interface ActivityLog {
   id: string;
   userId: string;

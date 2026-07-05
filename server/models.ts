@@ -457,6 +457,15 @@ export interface Notification {
   isRead: boolean;
   targetRole?: UserRole; // Broadcast to role
   createdAt: string;
+  /**
+   * Stable identifier for the specific condition this notification
+   * represents (e.g. "lowstock-<itemId>" or "frost-<date>"), used to
+   * avoid creating a duplicate unread notification for the same
+   * still-ongoing condition on every periodic check. Optional for
+   * backward compatibility with notifications created before this field
+   * existed.
+   */
+  referenceKey?: string;
 }
 
 /**

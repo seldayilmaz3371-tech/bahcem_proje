@@ -126,7 +126,7 @@ export default function App() {
 
       {/* Main View Area */}
       <main id="app-main-view" className="flex-1 overflow-y-auto bg-[#fcfdfc]">
-        {activeTab === "dashboard" && <Dashboard />}
+        {activeTab === "dashboard" && <Dashboard setActiveTab={handleActiveTabChange} />}
         {activeTab === "parcels" && <ParcelManager />}
         {activeTab === "observations" && <ObservationLog />}
         {activeTab === "inventory" && <InventoryManager />}

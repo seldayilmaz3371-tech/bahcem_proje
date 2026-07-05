@@ -11121,6 +11121,13 @@
       "details": "Yeni saha gözlemi kaydedildi (Genel Gözlem). Ağaç ID: 3fdf10c0-3ab3-41ee-b5c4-d82be09d4823",
       "createdAt": "2026-07-05T04:42:06.872Z",
       "id": "21499b8b-5ef1-4b0c-b023-3b09ec0ca918"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "createdAt": "2026-07-05T04:55:49.298Z",
+      "id": "75019891-9171-4ca4-a33a-0b285124200e"
     }
   ],
   "settings": [

@@ -85,6 +85,17 @@ export class NotificationRepository extends BaseRepository<Notification> {
   }
 
   /**
+   * Checks whether an unread notification already exists for the given
+   * reference key, to avoid creating a duplicate alert for a condition
+   * that was already reported and has not yet been acknowledged.
+   * @param referenceKey Stable identifier for the specific condition (e.g. "lowstock-<itemId>")
+   */
+  public async hasUnreadNotificationForKey(referenceKey: string): Promise<boolean> {
+    const existing = await this.findOne((n) => !n.isRead && n.referenceKey === referenceKey);
+    return existing !== null;
+  }
+
+  /**
    * Marks all notifications as read.
    */
   public async markAllAsRead(): Promise<void> {

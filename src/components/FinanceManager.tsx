@@ -19,6 +19,7 @@ import {
   Trash2
 } from "lucide-react";
 import { Cost, Sale, Harvest, Parcel } from "../types";
+import { calculateFinancialSummary } from "../utils/financeCalculations";
 
 export default function FinanceManager() {
   const [costs, setCosts] = useState<Cost[]>([]);
@@ -322,16 +323,18 @@ export default function FinanceManager() {
     }
   };
 
-  // Mathematical ROI calculation aggregates
-  const totalExpenses = costs.reduce((sum, c) => sum + c.amount, 0) + harvests.reduce((sum, h) => sum + h.totalCost, 0);
-  const totalRevenues = sales.reduce((sum, s) => sum + s.totalRevenue, 0);
-  const netProfit = totalRevenues - totalExpenses;
-  const roiPercent = totalExpenses > 0 ? (netProfit / totalExpenses) * 100 : 0;
-  
-  // Total yield
-  const totalYield = harvests.reduce((sum, h) => sum + h.quantityKg, 0);
-  const totalTrees = parcels.reduce((sum, p) => sum + p.treeCount, 0);
-  const yieldPerTree = totalTrees > 0 ? totalYield / totalTrees : 0;
+  // Financial and yield aggregates — calculation logic lives in
+  // financeCalculations.ts (see İş kuralları component içinde
+  // bulunmasın), not inline here.
+  const {
+    totalExpenses,
+    totalRevenues,
+    netProfit,
+    roiPercent,
+    totalYieldKg: totalYield,
+    yieldPerTree,
+    costPerKg,
+  } = calculateFinancialSummary(costs, sales, harvests, parcels);
 
   const getParcelName = (id: string) => parcels.find(p => p.id === id)?.name || "Genel Çiftlik";
 
@@ -850,7 +853,7 @@ export default function FinanceManager() {
               <div className="p-4 bg-[#f7f9f6] rounded-2xl border border-[#e2e8df] text-center">
                 <span className="text-[10px] text-[#80907a] uppercase font-bold tracking-wider">Ortalama Kg Maliyeti</span>
                 <p className="text-xl font-bold font-display text-[#1a2416] mt-1">
-                  {(totalYield > 0 ? totalExpenses / totalYield : 0).toFixed(1)} <span className="text-xs font-normal">TL/Kg</span>
+                  {costPerKg.toFixed(1)} <span className="text-xs font-normal">TL/Kg</span>
                 </p>
               </div>
             </div>

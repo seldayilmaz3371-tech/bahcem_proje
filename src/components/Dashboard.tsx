@@ -18,9 +18,14 @@ import {
   Wind,
   CloudOff
 } from "lucide-react";
-import { Parcel, InventoryItem, WeatherRecord, ActivityLog, LiveWeatherForecast } from "../types";
+import { Parcel, InventoryItem, WeatherRecord, ActivityLog, LiveWeatherForecast, ActiveTab } from "../types";
 
-export default function Dashboard() {
+interface DashboardProps {
+  /** Navigates to another tab — same mechanism already used by Sidebar (see App.tsx). */
+  setActiveTab: (tab: ActiveTab) => void;
+}
+
+export default function Dashboard({ setActiveTab }: DashboardProps) {
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [weatherHistory, setWeatherHistory] = useState<WeatherRecord[]>([]);
@@ -114,7 +119,12 @@ export default function Dashboard() {
       {/* Overview Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Total Land Size */}
-        <div className="bg-[#fcfdfc] p-6 rounded-3xl border border-[#e2e8df] shadow-sm flex items-start justify-between">
+        <button
+          type="button"
+          onClick={() => setActiveTab("parcels")}
+          title="Parseller & Ağaçlar sayfasına git"
+          className="text-left bg-[#fcfdfc] p-6 rounded-3xl border border-[#e2e8df] shadow-sm flex items-start justify-between hover:border-[#556b2f]/40 hover:shadow-md transition-all cursor-pointer"
+        >
           <div>
             <span className="text-xs font-bold text-[#80907a] uppercase tracking-wider">Toplam Arazi Büyüklüğü</span>
             <div className="mt-2 text-3xl font-bold font-display text-[#1a2416]">{totalLand.toFixed(1)} <span className="text-sm font-normal text-[#5a6a55]">Dekar</span></div>
@@ -126,10 +136,15 @@ export default function Dashboard() {
           <div className="p-3 bg-[#f0f4ee] text-[#556b2f] rounded-2xl">
             <MapPin className="h-6 w-6" />
           </div>
-        </div>
+        </button>
 
         {/* Total Trees */}
-        <div className="bg-[#fcfdfc] p-6 rounded-3xl border border-[#e2e8df] shadow-sm flex items-start justify-between">
+        <button
+          type="button"
+          onClick={() => setActiveTab("parcels")}
+          title="Parseller & Ağaçlar sayfasına git"
+          className="text-left bg-[#fcfdfc] p-6 rounded-3xl border border-[#e2e8df] shadow-sm flex items-start justify-between hover:border-[#556b2f]/40 hover:shadow-md transition-all cursor-pointer"
+        >
           <div>
             <span className="text-xs font-bold text-[#80907a] uppercase tracking-wider">Takipteki Zeytin Ağacı</span>
             <div className="mt-2 text-3xl font-bold font-display text-[#1a2416]">{totalTrees} <span className="text-sm font-normal text-[#5a6a55]">Adet</span></div>
@@ -140,14 +155,19 @@ export default function Dashboard() {
           <div className="p-3 bg-[#f0f4ee] text-[#556b2f] rounded-2xl">
             <Trees className="h-6 w-6" />
           </div>
-        </div>
+        </button>
 
         {/* Stock Warnings */}
-        <div className={`p-6 rounded-3xl border shadow-sm flex items-start justify-between ${
-          criticalItems.length > 0 
-            ? "bg-amber-50/50 border-amber-200 text-amber-900" 
-            : "bg-[#fcfdfc] border-[#e2e8df] text-[#1a2416]"
-        }`}>
+        <button
+          type="button"
+          onClick={() => setActiveTab("inventory")}
+          title="Stok & Depo sayfasına git"
+          className={`text-left p-6 rounded-3xl border shadow-sm flex items-start justify-between hover:shadow-md transition-all cursor-pointer ${
+            criticalItems.length > 0 
+              ? "bg-amber-50/50 border-amber-200 text-amber-900 hover:border-amber-400" 
+              : "bg-[#fcfdfc] border-[#e2e8df] text-[#1a2416] hover:border-[#556b2f]/40"
+          }`}
+        >
           <div>
             <span className={`text-xs font-bold uppercase tracking-wider ${criticalItems.length > 0 ? "text-amber-800" : "text-[#80907a]"}`}>Kritik Stok Uyarısı</span>
             <div className="mt-2 text-3xl font-bold font-display">{criticalItems.length} <span className="text-sm font-normal">Ürün</span></div>
@@ -160,16 +180,21 @@ export default function Dashboard() {
           <div className={`p-3 rounded-2xl ${criticalItems.length > 0 ? "bg-amber-100 text-amber-700" : "bg-[#f0f4ee] text-[#556b2f]"}`}>
             <AlertTriangle className="h-6 w-6" />
           </div>
-        </div>
+        </button>
 
         {/* Frost Warning Card */}
-        <div className={`p-6 rounded-3xl border shadow-sm flex items-start justify-between ${
-          weatherError
-            ? "bg-stone-50 border-stone-200"
-            : nextFrostRisk 
-            ? "bg-red-50/50 border-red-200 text-red-900" 
-            : "bg-[#fcfdfc] border-[#e2e8df]"
-        }`}>
+        <button
+          type="button"
+          onClick={() => setActiveTab("ai-advisor")}
+          title="Yapay Zeka Karar Destek sayfasına git"
+          className={`text-left p-6 rounded-3xl border shadow-sm flex items-start justify-between hover:shadow-md transition-all cursor-pointer ${
+            weatherError
+              ? "bg-stone-50 border-stone-200 hover:border-stone-400"
+              : nextFrostRisk 
+              ? "bg-red-50/50 border-red-200 text-red-900 hover:border-red-400" 
+              : "bg-[#fcfdfc] border-[#e2e8df] hover:border-[#556b2f]/40"
+          }`}
+        >
           <div>
             <span className={`text-xs font-bold uppercase tracking-wider ${weatherError ? "text-stone-500" : nextFrostRisk ? "text-red-800" : "text-[#80907a]"}`}>Don Riski / Ayaz Seviyesi</span>
             <div className="mt-2 text-3xl font-bold font-display">
@@ -184,7 +209,7 @@ export default function Dashboard() {
           <div className={`p-3 rounded-2xl ${weatherError ? "bg-stone-100 text-stone-500" : nextFrostRisk ? "bg-red-100 text-red-700 animate-pulse" : "bg-[#f0f4ee] text-[#556b2f]"}`}>
             <ThermometerSnowflake className="h-6 w-6" />
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Main Content Sections */}

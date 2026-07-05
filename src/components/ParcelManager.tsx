@@ -551,7 +551,7 @@ export default function ParcelManager() {
             <h2 className="text-sm font-bold text-[#5a6a55] uppercase tracking-wider">Parselleriniz ({parcels.length})</h2>
           </div>
 
-          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+          <div className="space-y-3 pr-1">
             {parcels.length > 0 ? (
               parcels.map((parcel) => {
                 const isSelected = selectedParcel?.id === parcel.id;
