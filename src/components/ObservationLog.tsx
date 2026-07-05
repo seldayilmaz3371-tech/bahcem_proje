@@ -26,6 +26,7 @@ import {
   Wheat
 } from "lucide-react";
 import { Observation, Parcel, Tree, Photo, ObservationActivityType } from "../types";
+import { enqueueObservation } from "../offline/offlineQueue";
 
 /**
  * Centralized display configuration (icon, label, and color classes) for
@@ -77,6 +78,7 @@ export default function ObservationLog() {
 
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [queuedNotice, setQueuedNotice] = useState("");
 
   const fetchData = async () => {
     setLoading(true);
@@ -186,25 +188,54 @@ export default function ObservationLog() {
     }
 
     setSaving(true);
+    setQueuedNotice("");
     try {
       const headers = { 
         "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
         "Content-Type": "application/json"
       };
 
-      // 1. Create Observation Log
-      const obsRes = await fetch("/api/observations", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          parcelId: selectedParcelId,
-          treeId: selectedTreeId || undefined,
-          activityType,
-          observationDate,
-          notes,
-          audioNotePath: simulatedAudioPath || undefined
-        })
-      });
+      const observationPayload = {
+        parcelId: selectedParcelId,
+        treeId: selectedTreeId || undefined,
+        activityType,
+        observationDate,
+        notes,
+      };
+
+      // 1. Create Observation Log. A genuine network failure (no
+      // connectivity at all — the request never reaches the server) is
+      // handled separately from a real server-side error: it is queued
+      // locally for automatic submission once connectivity returns,
+      // rather than being shown to the farmer as a failure. A server
+      // response that says "no" (validation error, etc.) is a real error
+      // and must never be silently queued as if it had succeeded.
+      let obsRes: Response;
+      try {
+        obsRes = await fetch("/api/observations", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(observationPayload),
+        });
+      } catch {
+        await enqueueObservation({
+          queueId: crypto.randomUUID(),
+          queuedAt: new Date().toISOString(),
+          payload: observationPayload,
+          photoBase64: base64Photo || undefined,
+        });
+
+        setQueuedNotice("İnternet bağlantısı yok. Gözlem cihazınıza kaydedildi, bağlantı gelince otomatik gönderilecek.");
+        setSelectedParcelId("");
+        setSelectedTreeId("");
+        setActivityType("Genel Gözlem");
+        setObservationDate(new Date().toISOString().split("T")[0]);
+        setNotes("");
+        setBase64Photo(null);
+        setSimulatedAudioPath(null);
+        setShowForm(false);
+        return;
+      }
 
       const obsData = await obsRes.json();
       if (!obsRes.ok) {
@@ -290,6 +321,7 @@ export default function ObservationLog() {
         <form onSubmit={handleSubmit} className="bg-[#fcfdfc] p-6 rounded-3xl border border-[#e2e8df] space-y-5 max-w-3xl animate-slide-up shadow-sm">
           <h2 className="text-md font-bold text-[#1a2416]">Yeni Saha Gözlem Kaydı</h2>
           {error && <p className="text-xs font-bold text-red-600 bg-red-50 p-3 rounded-xl">{error}</p>}
+          {queuedNotice && <p className="text-xs font-bold text-amber-700 bg-amber-50 p-3 rounded-xl">{queuedNotice}</p>}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>

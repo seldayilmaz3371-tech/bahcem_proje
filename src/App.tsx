@@ -16,8 +16,9 @@ import PhotoGrowthAnalysis from "./components/PhotoGrowthAnalysis";
 import DocumentHub from "./components/DocumentHub";
 import ActivityLogs from "./components/ActivityLogs";
 import { ActiveTab, User } from "./types";
-import { RefreshCw, WifiOff } from "lucide-react";
+import { RefreshCw, WifiOff, UploadCloud, Menu } from "lucide-react";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
+import { useOfflineSync } from "./hooks/useOfflineSync";
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem("agri_token"));
@@ -29,6 +30,8 @@ export default function App() {
   });
   const [initializing, setInitializing] = useState(true);
   const isOnline = useOnlineStatus();
+  const { pendingCount, isSyncing } = useOfflineSync(token);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const handleActiveTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
@@ -123,11 +126,23 @@ export default function App() {
         activeTab={activeTab} 
         setActiveTab={handleActiveTabChange} 
         user={user} 
-        onLogout={handleLogout} 
+        onLogout={handleLogout}
+        isMobileOpen={isMobileSidebarOpen}
+        onMobileClose={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main View Area */}
       <main id="app-main-view" className="flex-1 overflow-y-auto bg-[#fcfdfc]">
+        {/* Mobile-only menu button — the sidebar is a hidden drawer below the md: breakpoint (see Sidebar.tsx) and needs an always-visible way to open it. */}
+        <button
+          id="mobile-sidebar-toggle"
+          onClick={() => setIsMobileSidebarOpen(true)}
+          aria-label="Menüyü aç"
+          className="md:hidden sticky top-0 z-30 m-3 p-2.5 bg-[#23301f] text-white rounded-xl shadow-md"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
         {!isOnline && (
           <div
             id="offline-banner"
@@ -135,7 +150,17 @@ export default function App() {
             className="sticky top-0 z-50 bg-red-600 text-white px-4 py-2.5 flex items-center justify-center gap-2 text-sm font-semibold shadow-md"
           >
             <WifiOff className="h-4 w-4 shrink-0" />
-            <span>İnternet bağlantınız kesildi. Yeni veri kaydedemezsiniz — bağlantı geri gelene kadar bekleyin.</span>
+            <span>İnternet bağlantınız kesildi. Saha Gözlemi ve fotoğraf ekleyebilirsiniz — bağlantı gelince otomatik gönderilecek. Yapay Zeka özellikleri şu an kullanılamaz.</span>
+          </div>
+        )}
+        {isOnline && pendingCount > 0 && (
+          <div
+            id="pending-sync-banner"
+            role="status"
+            className="sticky top-0 z-50 bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 text-sm font-semibold shadow-md"
+          >
+            <UploadCloud className={`h-4 w-4 shrink-0 ${isSyncing ? "animate-bounce" : ""}`} />
+            <span>{isSyncing ? "Bekleyen kayıtlar gönderiliyor..." : `${pendingCount} bekleyen kayıt gönderilecek.`}</span>
           </div>
         )}
         {activeTab === "dashboard" && <Dashboard setActiveTab={handleActiveTabChange} />}

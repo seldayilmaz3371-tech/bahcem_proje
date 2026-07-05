@@ -30,9 +30,13 @@ interface SidebarProps {
   setActiveTab: (tab: ActiveTab) => void;
   user: User;
   onLogout: () => void;
+  /** Whether the mobile drawer is currently open. Ignored on desktop, where the sidebar is always visible (see the md: breakpoint classes below). */
+  isMobileOpen: boolean;
+  /** Called when the drawer should close on mobile — backdrop tap or a navigation item selected. */
+  onMobileClose: () => void;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, user, onLogout }: SidebarProps) {
+export default function Sidebar({ activeTab, setActiveTab, user, onLogout, isMobileOpen, onMobileClose }: SidebarProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -92,7 +96,24 @@ export default function Sidebar({ activeTab, setActiveTab, user, onLogout }: Sid
   ];
 
   return (
-    <div id="app-sidebar" className="flex flex-col w-64 bg-[#23301f] text-[#f1f5f0] border-r border-[#192416] shrink-0">
+    <>
+      {/* Mobile-only backdrop, dismisses the drawer when tapped. Never rendered on desktop (md:hidden), where the sidebar is a static column, not an overlay. */}
+      {isMobileOpen && (
+        <div
+          id="sidebar-mobile-backdrop"
+          onClick={onMobileClose}
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          aria-hidden="true"
+        />
+      )}
+
+      <div
+        id="app-sidebar"
+        className={`flex flex-col w-64 bg-[#23301f] text-[#f1f5f0] border-r border-[#192416] shrink-0
+          fixed inset-y-0 left-0 z-50 transition-transform duration-200
+          md:static md:translate-x-0
+          ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
       {/* Brand Header */}
       <div className="flex items-center gap-3 px-6 py-6 border-b border-[#2d3f28]">
         <div className="p-2 bg-[#556b2f] rounded-xl text-white">
@@ -182,7 +203,10 @@ export default function Sidebar({ activeTab, setActiveTab, user, onLogout }: Sid
             <button
               id={`sidebar-nav-${item.id}`}
               key={item.id}
-              onClick={() => setActiveTab(item.id as ActiveTab)}
+              onClick={() => {
+                setActiveTab(item.id as ActiveTab);
+                onMobileClose();
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${
                 isActive 
                   ? "bg-[#556b2f] text-white shadow-sm shadow-black/10" 
@@ -207,6 +231,7 @@ export default function Sidebar({ activeTab, setActiveTab, user, onLogout }: Sid
           <span>Oturumu Kapat</span>
         </button>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

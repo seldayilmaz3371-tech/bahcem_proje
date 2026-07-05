@@ -27,6 +27,7 @@ import {
   RefreshCw
 } from "lucide-react";
 import { Parcel, Tree, CropType, TreeCountChangeLog, TreeCountChangeReason, ParcelHealthSummary } from "../types";
+import { enqueueObservation } from "../offline/offlineQueue";
 
 export default function ParcelManager() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
@@ -335,16 +336,36 @@ export default function ParcelManager() {
           "Content-Type": "application/json"
         };
 
-        const obsRes = await fetch("/api/observations", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            parcelId: selectedParcel.id,
-            treeId: tree.id,
-            activityType: "Genel Gözlem",
-            notes: `${tree.treeNumber} için hızlı ağaç fotoğrafı.`
-          })
-        });
+        const observationPayload = {
+          parcelId: selectedParcel.id,
+          treeId: tree.id,
+          activityType: "Genel Gözlem",
+          notes: `${tree.treeNumber} için hızlı ağaç fotoğrafı.`
+        };
+
+        // A genuine network failure (no connectivity — the request never
+        // reaches the server) is queued locally for automatic submission
+        // once connectivity returns, matching the same pattern used in
+        // ObservationLog.tsx. A real server-side error (e.g. validation
+        // failure) is never queued — only reported.
+        let obsRes: Response;
+        try {
+          obsRes = await fetch("/api/observations", {
+            method: "POST",
+            headers,
+            body: JSON.stringify(observationPayload)
+          });
+        } catch {
+          await enqueueObservation({
+            queueId: crypto.randomUUID(),
+            queuedAt: new Date().toISOString(),
+            payload: observationPayload,
+            photoBase64: reader.result as string,
+          });
+          setError(""); // Clear any stale error — this is a successful (queued) outcome, not a failure.
+          return;
+        }
+
         const obsData = await obsRes.json();
         if (!obsRes.ok) {
           throw new Error(obsData.error || "Gözlem oluşturulamadı.");

@@ -71,6 +71,17 @@ app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 // instead of embedding the image data inside the JSON database.
 app.use("/uploads/photos", express.static(photoStorageService.getPhotosDirectoryPath()));
 
+// Minimal, unauthenticated connectivity check. Deliberately does no
+// database or business-logic work — its only purpose is to let the
+// frontend (see useOnlineStatus) verify genuine reachability of this
+// server, since the browser's own navigator.onLine only reflects
+// whether a network interface is active, not whether it can actually
+// reach anything (a known false-positive source on weak/flaky mobile
+// connections in the field).
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 // Types for Authenticated Request
 interface AuthenticatedRequest extends Request {
   user?: any;

@@ -105,21 +105,6 @@
       "id": "968afd30-7a1a-440b-823c-b4b197516c44"
     },
     {
-      "name": "test deneme 1",
-      "cropType": "Zeytin",
-      "areaDekar": 1,
-      "treeCount": 1,
-      "soilType": "Killi-Tınlı",
-      "irrigationType": "Damlama",
-      "latitude": 36.9123,
-      "longitude": 34.4234,
-      "notes": "",
-      "qrCodeData": "",
-      "createdAt": "2026-07-03T07:59:55.262Z",
-      "updatedAt": "2026-07-03T07:59:55.262Z",
-      "id": "2d128fe4-3eba-4e34-8348-e45f13e61f35"
-    },
-    {
       "name": "Karşı Ada Zeytin",
       "cropType": "Zeytin",
       "areaDekar": 0.1,
@@ -167,17 +152,6 @@
   ],
   "trees": [
     {
-      "parcelId": "2d128fe4-3eba-4e34-8348-e45f13e61f35",
-      "treeNumber": "güney sıra 1",
-      "variety": "Sarıulak",
-      "plantingYear": 2016,
-      "notes": "",
-      "createdAt": "2026-07-04T11:35:18.964Z",
-      "updatedAt": "2026-07-04T11:35:24.914Z",
-      "id": "38bcd8b6-18d0-44b8-89ac-d90e55c6a556",
-      "isReferenceTree": true
-    },
-    {
       "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
       "treeNumber": "güney sıra 1",
       "variety": "Sarıulak",
@@ -190,6 +164,15 @@
     }
   ],
   "observations": [
+    {
+      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-05T09:12:19.755Z",
+      "activityType": "Genel Gözlem",
+      "notes": "Yapay Zeka Karar Destek raporu için yüklenen teşhis fotoğrafı. Soru: \"Mevcut tarla gözlemleri, hava durumu ve stok envanter seviyelerine göre genel tarımsal durum analizi ve gelecek haftalık faaliyet reçetesi üret.\"",
+      "createdAt": "2026-07-05T09:12:19.755Z",
+      "id": "327bd41b-44f1-48a7-8b02-028b03c9c01e"
+    },
     {
       "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
       "treeId": "3fdf10c0-3ab3-41ee-b5c4-d82be09d4823",
@@ -253,15 +236,6 @@
       "createdAt": "2026-07-03T10:22:44.742Z",
       "id": "9416d328-d692-40c2-a482-d3f1ccb3e1ef",
       "activityType": "Genel Gözlem"
-    },
-    {
-      "parcelId": "37f942cc-d016-40b2-95d3-99b040e208e9",
-      "observerId": "user-admin-default",
-      "observationDate": "2026-07-05T09:12:19.755Z",
-      "activityType": "Genel Gözlem",
-      "notes": "Yapay Zeka Karar Destek raporu için yüklenen teşhis fotoğrafı. Soru: \"Mevcut tarla gözlemleri, hava durumu ve stok envanter seviyelerine göre genel tarımsal durum analizi ve gelecek haftalık faaliyet reçetesi üret.\"",
-      "createdAt": "2026-07-05T09:12:19.755Z",
-      "id": "327bd41b-44f1-48a7-8b02-028b03c9c01e"
     }
   ],
   "photos": [
@@ -11227,6 +11201,20 @@
       "details": "Kullanıcı sisteme giriş yaptı.",
       "createdAt": "2026-07-02T12:25:59.847Z",
       "id": "4fb9394f-6315-492c-b3a7-f05804793c4b"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "PARCEL_DELETE",
+      "details": "Parsel ve bağlı tüm ağaçlar silindi: 'test deneme 1'",
+      "createdAt": "2026-07-05T09:32:16.739Z",
+      "id": "88f9e4b6-4c48-4b51-a81f-7250bee45ed3"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "createdAt": "2026-07-05T10:26:53.256Z",
+      "id": "c2069a7c-2f85-44c8-81b0-1a36f6eb99b9"
     }
   ],
   "settings": [
