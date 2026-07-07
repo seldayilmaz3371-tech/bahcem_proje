@@ -26,7 +26,8 @@ import {
   Wheat,
   Layers,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Trash2
 } from "lucide-react";
 import { Observation, Parcel, Tree, Photo, ObservationActivityType } from "../types";
 import { useCreateObservation } from "../hooks/useCreateObservation";
@@ -139,6 +140,34 @@ export default function ObservationLog() {
     window.addEventListener("keydown", handleEscapeKey);
     return () => window.removeEventListener("keydown", handleEscapeKey);
   }, [lightboxPhoto]);
+
+  /**
+   * Permanently deletes a photo that was added by mistake (wrong parcel,
+   * wrong reference tree, or simply the wrong photo). Only the photo
+   * itself is removed — the parent Observation entry and its notes stay
+   * intact, since a mistakenly attached photo is a separate concern from
+   * the observation it was attached to. Available from the fullscreen
+   * lightbox, which is the single view this app uses for both general
+   * parcel photos and reference tree photos (a tree-linked observation
+   * is still an Observation, just with treeId set).
+   */
+  const handleDeletePhoto = async (photo: Photo) => {
+    if (!confirm("Bu fotoğrafı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) {
+      return;
+    }
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/observations/photos/${photo.id}`, { method: "DELETE", headers });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Fotoğraf silinemedi.");
+      }
+      setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      setLightboxPhoto(null);
+    } catch (err: any) {
+      setError(err.message || "Fotoğraf silinirken bir hata oluştu.");
+    }
+  };
 
   // Fetch trees when parcel selection changes
   useEffect(() => {
@@ -745,6 +774,17 @@ export default function ObservationLog() {
             className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
           >
             <X className="h-6 w-6" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleDeletePhoto(lightboxPhoto)}
+            title="Fotoğrafı sil"
+            aria-label="Fotoğrafı kalıcı olarak sil"
+            className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-1.5 px-3 py-2.5 bg-red-600/80 hover:bg-red-700 text-white rounded-full transition-colors text-xs font-bold"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Fotoğrafı Sil</span>
           </button>
 
           <div

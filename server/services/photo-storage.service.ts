@@ -183,6 +183,39 @@ export class PhotoStorageService {
   }
 
   /**
+   * Permanently removes a previously saved photo's file from disk, given
+   * its stored `originalUrl`. Legacy records whose `originalUrl` is still
+   * an inline base64 data URL (never migrated to a file) have nothing on
+   * disk to remove — this is a no-op for those, not an error, since the
+   * caller's job (deleting the Photo record) still succeeds regardless.
+   * A missing file (already deleted, or never wrote successfully) is
+   * likewise treated as success: the end state the caller wants — "no
+   * file on disk for this photo" — is already true.
+   * @param originalUrl The Photo record's `originalUrl` value
+   */
+  public deletePhotoFile(originalUrl: string): void {
+    if (!originalUrl.startsWith(this.urlPrefix)) {
+      return; // Legacy inline data URL — nothing on disk to delete.
+    }
+
+    const fileName = path.basename(originalUrl);
+    const filePath = path.join(this.photosDirectory, fileName);
+
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        logger.info("SYSTEM", `Fotoğraf dosyası diskten silindi: ${fileName}`);
+      }
+    } catch (error) {
+      // A failed disk deletion must never block removing the database
+      // record — an orphaned file on disk is a minor cleanup issue, but
+      // failing to let the user remove a mistakenly added photo from
+      // their observation history would be a worse outcome.
+      logger.error("SYSTEM", "Fotoğraf dosyası diskten silinirken hata oluştu (kayıt yine de silinecek).", error, { fileName });
+    }
+  }
+
+  /**
    * Reads a previously saved photo (whether stored as a file on disk or,
    * for not-yet-migrated legacy records, still embedded as an inline
    * base64 data URL) and returns it as base64-encoded inline data suitable

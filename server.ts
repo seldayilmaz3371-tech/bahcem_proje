@@ -932,6 +932,29 @@ app.get("/api/observations/photos", requireAuth, asyncHandler(async (req, res) =
   res.json(list);
 }));
 
+// Permanently removes a single photo — e.g. one added to the wrong
+// observation or reference tree by mistake. Only the photo itself is
+// removed; the parent Observation record (and its notes) is left
+// intact, since a mistakenly attached photo is a separate concern from
+// the observation entry it was attached to.
+app.delete("/api/observations/photos/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const photo = await photoRepository.getById(req.params.id);
+  if (!photo) {
+    return res.status(404).json({ error: "Silinmek istenen fotoğraf kaydı bulunamadı." });
+  }
+
+  photoStorageService.deletePhotoFile(photo.originalUrl);
+  await photoRepository.delete(req.params.id);
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "PHOTO_DELETE",
+    `Bir saha gözlem fotoğrafı silindi. Gözlem ID: '${photo.observationId}'`
+  );
+
+  res.json({ success: true, message: "Fotoğraf başarıyla silindi." });
+}));
+
 // ==========================================
 // 4. INVENTORY & STOCK ALERT ENDPOINTS
 // ==========================================
