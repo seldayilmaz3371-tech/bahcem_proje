@@ -146,16 +146,24 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
 }
 
 /**
- * Performs a vector search over all chunks to locate similar references.
+ * Performs a vector search over chunks to locate similar references.
  * @param query The user's query text
  * @param limit Maximum number of relevant chunks to retrieve
+ * @param documentIds Optional scoping filter: when provided, only chunks
+ *   belonging to one of these document IDs are searched (e.g. restricting
+ *   a search to a single piece of equipment's uploaded manual instead of
+ *   the entire shared knowledge base). When omitted, searches all chunks,
+ *   exactly as before this parameter was introduced.
  */
-export async function searchSimilarChunks(query: string, limit = 4): Promise<{ chunk: VectorChunk; score: number }[]> {
+export async function searchSimilarChunks(query: string, limit = 4, documentIds?: string[]): Promise<{ chunk: VectorChunk; score: number }[]> {
   try {
     const queryEmbedding = await generateEmbedding(query);
     const allChunks = await vectorChunkRepository.getAll();
+    const candidateChunks = documentIds
+      ? allChunks.filter((chunk) => documentIds.includes(chunk.documentId))
+      : allChunks;
 
-    const matches = allChunks.map((chunk) => {
+    const matches = candidateChunks.map((chunk) => {
       // Embeddings are stored as individual files on disk (see
       // EmbeddingStorageService); a not-yet-migrated legacy chunk may
       // still carry its embedding inline in the record itself.

@@ -14,6 +14,7 @@ import { MAX_USER_QUERY_LENGTH } from "./server/prompts/prompt-safety.util";
 import { userRepository } from "./server/repositories/user.repository";
 import { parcelRepository, treeRepository, treeCountChangeLogRepository } from "./server/repositories/parcel.repository";
 import { observationRepository, photoRepository } from "./server/repositories/observation.repository";
+import { equipmentRepository } from "./server/repositories/equipment.repository";
 import { summarizeParcelHealthFromReferenceTrees, ReferenceTreeStatus } from "./server/services/growth-scoring.util";
 import { 
   inventoryItemRepository, 
@@ -333,6 +334,216 @@ app.delete("/api/parcels/:id", requireAuth, asyncHandler(async (req: Authenticat
   );
 
   res.json({ success: true, message: "Parsel başarıyla silindi." });
+}));
+
+// ==========================================================================
+// EQUIPMENT (Ekipman / Demirbaş) API
+// ==========================================================================
+
+app.get("/api/equipment", requireAuth, asyncHandler(async (req, res) => {
+  const list = await equipmentRepository.getAll();
+  list.sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  res.json(list);
+}));
+
+app.post("/api/equipment", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { name, category, brand, model, parcelId, purchaseDate, purchasePrice, status, notes } = req.body;
+  if (!name || !category) {
+    return res.status(400).json({ error: "Ekipman adı ve kategorisi zorunludur." });
+  }
+
+  const timestamp = new Date().toISOString();
+  const newEquipment = await equipmentRepository.create({
+    name,
+    category,
+    brand: brand || undefined,
+    model: model || undefined,
+    parcelId: parcelId || undefined,
+    purchaseDate: purchaseDate || undefined,
+    purchasePrice: purchasePrice ? parseFloat(purchasePrice) : undefined,
+    status: status || "Aktif",
+    notes: notes || undefined,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "EQUIPMENT_CREATE",
+    `Yeni ekipman kaydı oluşturuldu: '${name}' (${category})`
+  );
+
+  res.status(201).json(newEquipment);
+}));
+
+app.put("/api/equipment/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const exists = await equipmentRepository.getById(req.params.id);
+  if (!exists) {
+    return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
+  }
+
+  const { name, category, brand, model, parcelId, purchaseDate, purchasePrice, status, notes } = req.body;
+  const updated = await equipmentRepository.update(req.params.id, {
+    name: name ?? exists.name,
+    category: category ?? exists.category,
+    brand: brand ?? exists.brand,
+    model: model ?? exists.model,
+    parcelId: parcelId === "" ? undefined : (parcelId ?? exists.parcelId),
+    purchaseDate: purchaseDate ?? exists.purchaseDate,
+    purchasePrice: purchasePrice !== undefined ? parseFloat(purchasePrice) : exists.purchasePrice,
+    status: status ?? exists.status,
+    notes: notes ?? exists.notes,
+    updatedAt: new Date().toISOString()
+  });
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "EQUIPMENT_UPDATE",
+    `Ekipman güncellendi: '${exists.name}'`
+  );
+
+  res.json(updated);
+}));
+
+app.delete("/api/equipment/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const exists = await equipmentRepository.getById(req.params.id);
+  if (!exists) {
+    return res.status(404).json({ error: "Silinmek istenen ekipman kaydı bulunamadı." });
+  }
+
+  await equipmentRepository.delete(req.params.id);
+
+  // Cascade-delete linked manuals (and their vector chunks / embeddings)
+  // — an orphaned manual for a deleted piece of equipment has no further
+  // use and would otherwise silently linger in storage. Cost records
+  // referencing this equipment (referenceId) are intentionally left
+  // untouched, consistent with how deleting a Parcel does not erase its
+  // historical cost records — financial history must survive the asset
+  // being retired.
+  const linkedManuals = await uploadedDocumentRepository.getByLinkedEntity("equipment", req.params.id);
+  for (const manual of linkedManuals) {
+    await aiService.removeDocument(manual.id);
+  }
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "EQUIPMENT_DELETE",
+    `Ekipman silindi: '${exists.name}' (${linkedManuals.length} bağlı kılavuz da kaldırıldı)`
+  );
+
+  res.json({ success: true, message: "Ekipman ve bağlı kılavuzları başarıyla silindi." });
+}));
+
+// Expenses (maintenance, fuel, repair) recorded against this equipment —
+// reuses the existing Cost model's referenceId field, no separate
+// equipment-expense table needed.
+app.get("/api/equipment/:id/costs", requireAuth, asyncHandler(async (req, res) => {
+  const exists = await equipmentRepository.getById(req.params.id);
+  if (!exists) {
+    return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
+  }
+
+  const list = await costRepository.getByReferenceId(req.params.id);
+  list.sort((a, b) => new Date(b.costDate).getTime() - new Date(a.costDate).getTime());
+  res.json(list);
+}));
+
+// Lists the manuals uploaded for one piece of equipment.
+app.get("/api/equipment/:id/documents", requireAuth, asyncHandler(async (req, res) => {
+  const exists = await equipmentRepository.getById(req.params.id);
+  if (!exists) {
+    return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
+  }
+
+  const docs = await uploadedDocumentRepository.getByLinkedEntity("equipment", req.params.id);
+  res.json(docs);
+}));
+
+// Uploads a user manual for one piece of equipment. Reuses the exact
+// same RAG ingestion pipeline (chunk → embed → index) as the general
+// knowledge base upload, but tags the resulting document so it can be
+// searched in isolation (see AIService.processDocument's linkedEntityType
+// parameter and queryChatAssistant's documentIds scoping).
+app.post("/api/equipment/:id/documents", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const exists = await equipmentRepository.getById(req.params.id);
+  if (!exists) {
+    return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
+  }
+
+  const { fileName, fileType, textContent } = req.body;
+  if (!fileName || !textContent) {
+    return res.status(400).json({ error: "Doküman adı ve doküman içeriği (metin) zorunludur." });
+  }
+
+  const textBytes = Buffer.byteLength(textContent, "utf8");
+  const doc = await aiService.processDocument(
+    req.user.fullName,
+    fileName,
+    fileType || "text/plain",
+    textBytes,
+    textContent,
+    "equipment",
+    req.params.id
+  );
+
+  if (!doc) {
+    return res.status(500).json({ error: "Kılavuz işlenirken ve vektör dizini oluşturulurken bir hata oluştu." });
+  }
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "EQUIPMENT_MANUAL_UPLOAD",
+    `'${exists.name}' ekipmanı için kullanım kılavuzu yüklendi: '${fileName}'`
+  );
+
+  res.status(201).json(doc);
+}));
+
+// Removes one manual belonging to this equipment. Verifies the document
+// actually belongs to this equipment before deleting (data-integrity
+// guard against deleting an unrelated document via a mismatched ID).
+app.delete("/api/equipment/:id/documents/:docId", requireAuth, asyncHandler(async (req, res) => {
+  const doc = await uploadedDocumentRepository.getById(req.params.docId);
+  if (!doc || doc.linkedEntityType !== "equipment" || doc.linkedEntityId !== req.params.id) {
+    return res.status(404).json({ error: "Bu ekipmana ait belirtilen kılavuz kaydı bulunamadı." });
+  }
+
+  const success = await aiService.removeDocument(req.params.docId);
+  if (!success) {
+    return res.status(500).json({ error: "Kılavuz silinirken bir hata oluştu." });
+  }
+
+  res.json({ success: true, message: "Kılavuz başarıyla silindi." });
+}));
+
+// Equipment-specific AI troubleshooting support. Answers are grounded
+// EXCLUSIVELY in this equipment's own uploaded manual(s) — never mixed
+// with the general farming knowledge base — per the explicit design
+// decision to prioritize accuracy over breadth for equipment
+// troubleshooting (see AIChatAssistantService.queryChatAssistant).
+app.post("/api/equipment/:id/ai-support", requireAuth, asyncHandler(async (req, res) => {
+  const exists = await equipmentRepository.getById(req.params.id);
+  if (!exists) {
+    return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
+  }
+
+  const { query } = req.body;
+  if (!query) {
+    return res.status(400).json({ error: "Soru alanı boş bırakılamaz." });
+  }
+  if (typeof query === "string" && query.length > MAX_USER_QUERY_LENGTH) {
+    return res.status(400).json({ error: `Soru metni en fazla ${MAX_USER_QUERY_LENGTH} karakter olabilir.` });
+  }
+
+  const manuals = await uploadedDocumentRepository.getByLinkedEntity("equipment", req.params.id);
+  const documentIds = manuals.map((m) => m.id);
+
+  const result = await aiService.queryChatAssistant(query, documentIds);
+  res.json({
+    response: result.text,
+    text: result.text,
+    usedChunks: result.usedChunks
+  });
 }));
 
 // Tree-by-tree Tracking
@@ -821,7 +1032,7 @@ app.get("/api/finance/costs", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/finance/costs", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { parcelId, amount, category, costDate, description } = req.body;
+  const { parcelId, amount, category, costDate, description, referenceId } = req.body;
   if (!amount || !category || !costDate) {
     return res.status(400).json({ error: "Tutar, gider kategorisi ve gider tarihi zorunludur." });
   }
@@ -832,6 +1043,7 @@ app.post("/api/finance/costs", requireAuth, asyncHandler(async (req: Authenticat
     category,
     costDate,
     description: description || "",
+    referenceId: referenceId || undefined,
     createdAt: new Date().toISOString()
   });
 
@@ -1075,9 +1287,17 @@ app.post("/api/notifications/mark-read", requireAuth, asyncHandler(async (req: A
 // ==========================================
 
 // List Guide Documents
+// Lists documents belonging to the general shared knowledge base only.
+// Equipment manuals (linkedEntityType === "equipment") are intentionally
+// excluded here — they belong to their own equipment's manual panel
+// (see /api/equipment/:id/documents), not the general RAG Doküman
+// Havuzu. This is purely a display-scope filter; it does not affect
+// retrieval isolation, which is already enforced independently by
+// searchSimilarChunks'/queryChatAssistant's documentIds parameter.
 app.get("/api/ai/documents", requireAuth, asyncHandler(async (req, res) => {
   const docs = await uploadedDocumentRepository.getAll();
-  res.json(docs);
+  const generalDocs = docs.filter((doc) => !doc.linkedEntityType);
+  res.json(generalDocs);
 }));
 
 // Parse a PDF or DOCX file and extract its text content

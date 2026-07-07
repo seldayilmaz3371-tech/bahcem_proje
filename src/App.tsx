@@ -10,6 +10,7 @@ import Dashboard from "./components/Dashboard";
 import ParcelManager from "./components/ParcelManager";
 import ObservationLog from "./components/ObservationLog";
 import InventoryManager from "./components/InventoryManager";
+import EquipmentManager from "./components/EquipmentManager";
 import FinanceManager from "./components/FinanceManager";
 import AIRecommendations from "./components/AIRecommendations";
 import PhotoGrowthAnalysis from "./components/PhotoGrowthAnalysis";
@@ -179,6 +180,7 @@ export default function App() {
         {activeTab === "parcels" && <ParcelManager />}
         {activeTab === "observations" && <ObservationLog />}
         {activeTab === "inventory" && <InventoryManager />}
+        {activeTab === "equipment" && <EquipmentManager />}
         {activeTab === "finance" && <FinanceManager />}
         {activeTab === "ai-advisor" && <AIRecommendations />}
         {activeTab === "photo-growth" && <PhotoGrowthAnalysis />}

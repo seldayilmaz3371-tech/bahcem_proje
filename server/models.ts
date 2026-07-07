@@ -227,6 +227,32 @@ export interface Photo {
 }
 
 /**
+ * 6b. Equipment Table Schema (Tarımsal Ekipman / Demirbaş Takibi)
+ *
+ * Distinct from InventoryItem (7): InventoryItem models consumable stock
+ * (fertilizer, pesticide — has stockQuantity, unit, expiryDate). Equipment
+ * models durable assets (motorized tools, machinery) that are used, may
+ * break down, have maintenance history and manuals, but are never
+ * "consumed" or restocked in units.
+ */
+export type EquipmentStatus = "Aktif" | "Bakımda" | "Arızalı" | "Hizmet Dışı";
+
+export interface Equipment {
+  id: string;
+  name: string; // e.g. "Honda GX35 Çapa Motoru"
+  category: string; // e.g. "Çapa Motoru", "Su Motoru", "Ot Biçme Makinesi", "Budama Makası"
+  brand?: string;
+  model?: string;
+  parcelId?: string; // Optional FK: bos birakilirsa genel ciftlik demirbasidir (birden fazla parselde kullanilabilir)
+  purchaseDate?: string;
+  purchasePrice?: number; // TL
+  status: EquipmentStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * 7. Inventory Table Schema (Depo stok takibi)
  */
 export interface InventoryItem {
@@ -433,6 +459,14 @@ export interface UploadedDocument {
   uploadedBy: string; // User ID
   uploadDate: string;
   summary?: string;
+  // Optional scoping: when set, this document belongs to a specific
+  // entity (e.g. one piece of equipment's user manual) rather than the
+  // general shared knowledge base. Undefined/omitted (the default for
+  // every document uploaded before this field existed, and for general
+  // farming documents uploaded today) means "part of the global RAG
+  // pool", exactly as before this field was introduced.
+  linkedEntityType?: "equipment";
+  linkedEntityId?: string;
 }
 
 /**
@@ -501,6 +535,7 @@ export interface DatabaseSchema {
   observations: Observation[];
   photos: Photo[];
   inventory: InventoryItem[];
+  equipment: Equipment[];
   inventoryCategories: InventoryCategory[];
   fertilizers: Fertilizer[];
   chemicals: Chemical[];

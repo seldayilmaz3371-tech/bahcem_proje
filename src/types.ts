@@ -139,6 +139,23 @@ export interface Photo {
   aiAnalysis?: PhotoAiAnalysis;
 }
 
+export type EquipmentStatus = "Aktif" | "Bakımda" | "Arızalı" | "Hizmet Dışı";
+
+export interface Equipment {
+  id: string;
+  name: string;
+  category: string;
+  brand?: string;
+  model?: string;
+  parcelId?: string;
+  purchaseDate?: string;
+  purchasePrice?: number;
+  status: EquipmentStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface InventoryItem {
   id: string;
   categoryId: string;
@@ -284,6 +301,8 @@ export interface UploadedDocument {
   uploadedBy: string;
   uploadDate: string;
   summary?: string;
+  linkedEntityType?: "equipment";
+  linkedEntityId?: string;
 }
 
 export interface Notification {
@@ -346,6 +365,7 @@ export type ActiveTab =
   | "parcels" 
   | "observations" 
   | "inventory" 
+  | "equipment"
   | "finance" 
   | "ai-advisor" 
   | "photo-growth"

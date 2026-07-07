@@ -53,8 +53,23 @@ export class ChatAssistantService {
    * Trivial greetings/thanks are answered locally without calling Gemini
    * at all (see `isTrivialGreeting`), since they carry no agricultural
    * question content to ground an AI response in.
+   *
+   * @param userQuery The farmer's free-text question
+   * @param documentIds Optional scoping filter (see searchSimilarChunks).
+   *   Used for equipment-specific troubleshooting support: when a
+   *   caller passes the document IDs belonging to one piece of
+   *   equipment's uploaded manual, the answer is grounded ONLY in that
+   *   manual, never mixed with the general farming knowledge base — this
+   *   is a deliberate accuracy choice (see AI PHILOSOPHY / RAG
+   *   principles: AI must never produce information that contradicts or
+   *   is unrelated to the retrieved source documents). If an empty array
+   *   is passed (the entity has no documents uploaded yet), Gemini is
+   *   never called — there is nothing to ground an answer in, and
+   *   guessing about equipment troubleshooting without its manual would
+   *   violate the "never present uncertain information as certain"
+   *   principle.
    */
-  public async queryChatAssistant(userQuery: string): Promise<{ text: string; usedChunks: string[] }> {
+  public async queryChatAssistant(userQuery: string, documentIds?: string[]): Promise<{ text: string; usedChunks: string[] }> {
     const safeQuery = capUserQueryLength(userQuery);
 
     if (isTrivialGreeting(safeQuery)) {
@@ -64,8 +79,15 @@ export class ChatAssistantService {
       };
     }
 
+    if (documentIds && documentIds.length === 0) {
+      return {
+        text: "Bu ekipman için henüz bir kullanım kılavuzu yüklenmemiş. Sağlıklı bir arıza tavsiyesi verebilmem için lütfen önce ekipmanın kullanım kılavuzunu (PDF/DOCX/TXT) yükleyin.",
+        usedChunks: [],
+      };
+    }
+
     try {
-      const matches = await searchSimilarChunks(safeQuery, 3);
+      const matches = await searchSimilarChunks(safeQuery, 3, documentIds);
       const ragContext = matches.length > 0
         ? matches.map((m, idx) => `[Referans ${idx + 1}]: ${m.chunk.content}`).join("\n\n")
         : "Eşleşen spesifik bir döküman bulunamadı.";

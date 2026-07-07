@@ -22,13 +22,21 @@ export class DocumentService {
   /**
    * Registers a document, generates overlapping text chunks, vectorizes them,
    * and populates the local vector database.
+   *
+   * @param linkedEntityType Optional scoping tag (see UploadedDocument).
+   *   Pass "equipment" with linkedEntityId when this document is a
+   *   specific equipment's manual, so it can later be searched in
+   *   isolation from the general knowledge base. Omit both for a normal
+   *   general-purpose RAG document (unchanged default behavior).
    */
   public async processDocument(
     uploadedBy: string,
     fileName: string,
     fileType: string,
     fileSize: number,
-    textContent: string
+    textContent: string,
+    linkedEntityType?: "equipment",
+    linkedEntityId?: string
   ): Promise<UploadedDocument | null> {
     try {
       // Step 1: Create uploaded document entry
@@ -39,6 +47,8 @@ export class DocumentService {
         fileSize,
         uploadedBy,
         uploadDate: timestamp,
+        linkedEntityType,
+        linkedEntityId,
       });
 
       // Step 2: Split text into overlapping segments

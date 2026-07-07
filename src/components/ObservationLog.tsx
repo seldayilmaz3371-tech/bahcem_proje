@@ -23,10 +23,27 @@ import {
   Droplet,
   Scissors,
   Sprout,
-  Wheat
+  Wheat,
+  Layers,
+  CheckCircle2,
+  XCircle
 } from "lucide-react";
 import { Observation, Parcel, Tree, Photo, ObservationActivityType } from "../types";
 import { useCreateObservation } from "../hooks/useCreateObservation";
+
+/**
+ * Outcome of a single parcel's submission within a bulk ("Tüm Parsellere
+ * Uygula") operation. Each parcel is submitted through the exact same
+ * single-observation path (create → optional photo upload → offline
+ * queue fallback) as a normal single-parcel entry — "queued" here means
+ * the same thing it does for a single entry: no network reached the
+ * server, so the observation was saved locally pending reconnection.
+ */
+interface BulkObservationOutcome {
+  parcelName: string;
+  status: "success" | "queued" | "failed";
+  message?: string;
+}
 
 /**
  * Centralized display configuration (icon, label, and color classes) for
@@ -63,6 +80,14 @@ export default function ObservationLog() {
   const [activityType, setActivityType] = useState<ObservationActivityType>("Genel Gözlem");
   const [observationDate, setObservationDate] = useState(new Date().toISOString().split("T")[0]);
   const [notes, setNotes] = useState("");
+
+  // "Tüm Parsellere Uygula" modu: aynı faaliyet (örn. Sulama, İlaçlama) tek
+  // seferde her parsele ayrı ayrı gözlem kaydı olarak işlenir. Tekil parsel
+  // seçimiyle karşılıklı dışlayıcıdır (bulkMode açıkken parsel/ağaç seçimi
+  // devre dışı kalır, çünkü faaliyet zaten tüm parsellere uygulanacaktır).
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
+  const [bulkResults, setBulkResults] = useState<BulkObservationOutcome[] | null>(null);
 
   // List filter (by activity type). "Tümü" (All) is represented as null.
   const [activeFilter, setActiveFilter] = useState<ObservationActivityType | null>(null);
@@ -168,12 +193,39 @@ export default function ObservationLog() {
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
+  /**
+   * Resets all form fields shared by both the single-parcel and bulk
+   * submission paths. Kept as one function so the two paths can never
+   * drift into resetting different subsets of fields.
+   */
+  const resetForm = () => {
+    setSelectedParcelId("");
+    setSelectedTreeId("");
+    setActivityType("Genel Gözlem");
+    setObservationDate(new Date().toISOString().split("T")[0]);
+    setNotes("");
+    setBase64Photo(null);
+    setSimulatedAudioPath(null);
+    setBulkMode(false);
+    setShowForm(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setQueuedNotice("");
+    setBulkResults(null);
 
-    if (!selectedParcelId || !notes) {
+    if (!bulkMode && !selectedParcelId) {
       setError("Parsel seçimi ve gözlem notları zorunludur.");
+      return;
+    }
+    if (!notes) {
+      setError("Parsel seçimi ve gözlem notları zorunludur.");
+      return;
+    }
+    if (bulkMode && parcels.length === 0) {
+      setError("Uygulanacak kayıtlı parsel bulunmuyor.");
       return;
     }
 
@@ -187,7 +239,18 @@ export default function ObservationLog() {
       return;
     }
 
-    setQueuedNotice("");
+    if (bulkMode) {
+      await handleBulkSubmit();
+    } else {
+      await handleSingleSubmit();
+    }
+  };
+
+  /**
+   * Existing single-parcel submission path — unchanged in behavior from
+   * before bulk mode was introduced.
+   */
+  const handleSingleSubmit = async () => {
     try {
       const observationPayload = {
         parcelId: selectedParcelId,
@@ -207,21 +270,75 @@ export default function ObservationLog() {
         setQueuedNotice("İnternet bağlantısı yok. Gözlem cihazınıza kaydedildi, bağlantı gelince otomatik gönderilecek.");
       }
 
-      // Reset
-      setSelectedParcelId("");
-      setSelectedTreeId("");
-      setActivityType("Genel Gözlem");
-      setObservationDate(new Date().toISOString().split("T")[0]);
-      setNotes("");
-      setBase64Photo(null);
-      setSimulatedAudioPath(null);
-      setShowForm(false);
+      resetForm();
 
       if (!result.queued) {
         fetchData();
       }
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  /**
+   * Bulk submission path: applies the identical activity (type, date,
+   * notes, and — per user's explicit choice — the same photo/audio
+   * attachment) to every registered parcel, by calling the exact same
+   * single-observation creation flow once per parcel, sequentially.
+   *
+   * Sequential (not parallel/Promise.all) intentionally: the backend's
+   * write queue (see db.transaction) would serialize concurrent writes
+   * safely either way, but sequential execution lets each parcel's
+   * outcome (success / offline-queued / failed) be attributed correctly
+   * and reported individually, and lets a real-time "X/N" progress
+   * indicator reflect genuine completion order rather than an
+   * unpredictable race.
+   *
+   * A failure on one parcel never aborts the remaining parcels — each
+   * parcel's creation is independently wrapped, consistent with this
+   * project's error-handling principle that one failure must not bring
+   * down an operation covering many independent records.
+   */
+  const handleBulkSubmit = async () => {
+    const outcomes: BulkObservationOutcome[] = [];
+    setBulkProgress({ current: 0, total: parcels.length });
+
+    for (let i = 0; i < parcels.length; i++) {
+      const parcel = parcels[i];
+      setBulkProgress({ current: i + 1, total: parcels.length });
+
+      try {
+        const result = await createObservation(
+          {
+            parcelId: parcel.id,
+            activityType,
+            observationDate,
+            notes,
+          },
+          base64Photo || undefined,
+          { takenAt: observationDate, label: "Saha Gözlemi Görseli (Toplu Giriş)" }
+        );
+
+        outcomes.push({
+          parcelName: parcel.name,
+          status: result.queued ? "queued" : "success",
+        });
+      } catch (err: any) {
+        outcomes.push({
+          parcelName: parcel.name,
+          status: "failed",
+          message: err.message || "Bilinmeyen hata.",
+        });
+      }
+    }
+
+    setBulkProgress(null);
+    setBulkResults(outcomes);
+    resetForm();
+
+    const anySucceededOnline = outcomes.some((o) => o.status === "success");
+    if (anySucceededOnline) {
+      fetchData();
     }
   };
 
@@ -268,19 +385,63 @@ export default function ObservationLog() {
           {error && <p className="text-xs font-bold text-red-600 bg-red-50 p-3 rounded-xl">{error}</p>}
           {queuedNotice && <p className="text-xs font-bold text-amber-700 bg-amber-50 p-3 rounded-xl">{queuedNotice}</p>}
 
+          {bulkResults && (
+            <div className="text-xs font-medium bg-[#f0f4ee] border border-[#dee5db] rounded-xl p-3 space-y-1.5">
+              <p className="font-bold text-[#1a2416]">
+                Toplu giriş tamamlandı: {bulkResults.filter(r => r.status !== "failed").length}/{bulkResults.length} parsele kaydedildi.
+              </p>
+              {bulkResults.map((r) => (
+                <div key={r.parcelName} className="flex items-center gap-1.5">
+                  {r.status === "failed" ? (
+                    <XCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  )}
+                  <span className={r.status === "failed" ? "text-red-700" : "text-[#5a6a55]"}>
+                    {r.parcelName}{r.status === "queued" ? " (çevrimdışı kaydedildi)" : ""}{r.status === "failed" ? ` — ${r.message}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <label className="flex items-center gap-2.5 bg-[#f0f4ee] border border-[#dee5db] rounded-xl px-4 py-2.5 cursor-pointer w-fit">
+            <input
+              type="checkbox"
+              checked={bulkMode}
+              onChange={(e) => {
+                setBulkMode(e.target.checked);
+                setSelectedParcelId("");
+                setSelectedTreeId("");
+              }}
+              className="h-4 w-4 rounded accent-[#556b2f]"
+            />
+            <Layers className="h-4 w-4 text-[#556b2f]" />
+            <span className="text-xs font-bold text-[#1a2416]">
+              Tüm Parsellere Uygula ({parcels.length} parsel)
+            </span>
+          </label>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Gözlem Yapılan Parsel</label>
-              <select
-                value={selectedParcelId}
-                onChange={(e) => setSelectedParcelId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:ring-2 focus:ring-[#556b2f]"
-              >
-                <option value="">Parsel Seçin</option>
-                {parcels.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+              {bulkMode ? (
+                <div className="w-full px-4 py-2.5 bg-[#f0f4ee] border border-[#dee5db] rounded-2xl text-sm text-[#556b2f] font-bold flex items-center gap-1.5">
+                  <Layers className="h-3.5 w-3.5" />
+                  Tüm Parseller ({parcels.length} adet)
+                </div>
+              ) : (
+                <select
+                  value={selectedParcelId}
+                  onChange={(e) => setSelectedParcelId(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:ring-2 focus:ring-[#556b2f]"
+                >
+                  <option value="">Parsel Seçin</option>
+                  {parcels.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>
@@ -288,7 +449,8 @@ export default function ObservationLog() {
               <select
                 value={selectedTreeId}
                 onChange={(e) => setSelectedTreeId(e.target.value)}
-                disabled={!selectedParcelId}
+                disabled={!selectedParcelId || bulkMode}
+                title={bulkMode ? "Toplu girişte tüm parsel geneline uygulanır, tekil ağaç seçilemez." : undefined}
                 className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:ring-2 focus:ring-[#556b2f] disabled:opacity-50"
               >
                 <option value="">Genel Gözlem (Tüm Parsel)</option>
@@ -436,10 +598,16 @@ export default function ObservationLog() {
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || bulkProgress !== null}
             className="w-full py-3 bg-[#556b2f] text-white font-bold rounded-2xl text-xs hover:bg-[#415324] transition-all disabled:opacity-50"
           >
-            {saving ? "Gözlem Hafızaya Kaydediliyor..." : "Gözlem Raporunu Kaydet"}
+            {bulkProgress
+              ? `Kaydediliyor... (${bulkProgress.current}/${bulkProgress.total} parsel)`
+              : saving
+                ? "Gözlem Hafızaya Kaydediliyor..."
+                : bulkMode
+                  ? `${parcels.length} Parsele Aynı Anda Kaydet`
+                  : "Gözlem Raporunu Kaydet"}
           </button>
         </form>
       )}

@@ -261,6 +261,7 @@ class DatabaseManager {
       observations: [],
       photos: [],
       inventory: [],
+      equipment: [],
       inventoryCategories: defaultCategories,
       fertilizers: [],
       chemicals: [],
@@ -296,6 +297,7 @@ class DatabaseManager {
     // Table safety guards: Ensure all properties of DatabaseSchema are present
     const tables: Array<keyof DatabaseSchema> = [
       "users", "roles", "parcels", "trees", "treeCountChangeLogs", "observations", "photos", "inventory",
+      "equipment",
       "inventoryCategories", "fertilizers", "chemicals", "applications", "irrigation",
       "harvest", "costs", "sales", "profitReports", "weatherHistory", "aiTasks",
       "aiRecommendations", "uploadedDocuments", "vectorChunks", "notifications",
@@ -453,6 +455,7 @@ class DatabaseManager {
       {
         id: "parcel-1",
         name: "Kuzey Yamaç Zeytinliği",
+        cropType: "Zeytin",
         latitude: 36.9312,
         longitude: 34.4255,
         areaDekar: 12.5,
@@ -466,6 +469,7 @@ class DatabaseManager {
       {
         id: "parcel-2",
         name: "Derekenarı Düzlüğü",
+        cropType: "Zeytin",
         latitude: 36.9288,
         longitude: 34.4290,
         areaDekar: 8.0,
@@ -479,6 +483,7 @@ class DatabaseManager {
       {
         id: "parcel-3",
         name: "Tepebağ Eski Bahçe",
+        cropType: "Zeytin",
         latitude: 36.9340,
         longitude: 34.4210,
         areaDekar: 6.2,

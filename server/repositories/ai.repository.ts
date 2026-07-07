@@ -46,6 +46,15 @@ export class UploadedDocumentRepository extends BaseRepository<UploadedDocument>
   public async getByFileName(fileName: string): Promise<UploadedDocument | null> {
     return this.findOne((doc) => doc.fileName === fileName);
   }
+
+  /**
+   * Retrieves documents scoped to a specific entity (e.g. all manuals
+   * uploaded for one piece of equipment), as opposed to the general
+   * shared knowledge base.
+   */
+  public async getByLinkedEntity(entityType: "equipment", entityId: string): Promise<UploadedDocument[]> {
+    return this.find((doc) => doc.linkedEntityType === entityType && doc.linkedEntityId === entityId);
+  }
 }
 
 /**
