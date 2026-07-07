@@ -18,9 +18,10 @@ import {
   Download,
   Camera,
   Image as ImageIcon,
+  AlertTriangle,
   X
 } from "lucide-react";
-import { Parcel, AIRecommendation, AiUsageSnapshot } from "../types";
+import { Parcel, Photo, AIRecommendation, AiUsageSnapshot } from "../types";
 
 const MAX_DIAGNOSIS_PHOTOS = 3;
 
@@ -45,6 +46,19 @@ export default function AIRecommendations() {
   // sent to the server — the server receives the raw files via FormData).
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+
+  // In-app gallery picker: lets the farmer pick from photos already
+  // recorded for this parcel (via Saha Gözlemleri, including its
+  // reference trees) instead of being sent to the device's OS-level photo
+  // gallery, where finding the right field-observation photo among
+  // unrelated personal photos was reported as difficult. These photos are
+  // never re-uploaded — only their IDs are sent, and the server reads the
+  // already-stored image bytes directly (see ParcelRecommendationService).
+  const [showGalleryPicker, setShowGalleryPicker] = useState(false);
+  const [galleryPhotos, setGalleryPhotos] = useState<Photo[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryError, setGalleryError] = useState("");
+  const [selectedExistingPhotos, setSelectedExistingPhotos] = useState<Photo[]>([]);
   
   const [generating, setGenerating] = useState(false);
   const [currentReport, setCurrentReport] = useState<AIRecommendation | null>(() => {
@@ -142,15 +156,62 @@ export default function AIRecommendations() {
       if (currentReport && currentReport.parcelId !== selectedParcelId) {
         saveAndSetCurrentReport(null);
       }
+      // A gallery pick is only meaningful for the parcel it was picked
+      // for — switching parcels must not silently carry over a photo
+      // selection that no longer matches the target of the request.
+      setSelectedExistingPhotos([]);
     }
   }, [selectedParcelId]);
+
+  const openGalleryPicker = async () => {
+    if (!selectedParcelId) return;
+    setShowGalleryPicker(true);
+    setGalleryLoading(true);
+    setGalleryError("");
+    setGalleryPhotos([]);
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/parcels/${selectedParcelId}/photos-in-range?sort=desc`, { headers });
+      if (res.ok) {
+        setGalleryPhotos(await res.json());
+      } else {
+        const data = await res.json().catch(() => null);
+        setGalleryError(data?.error || `Fotoğraflar yüklenemedi (HTTP ${res.status}).`);
+      }
+    } catch (err) {
+      console.error(err);
+      setGalleryError("Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.");
+    } finally {
+      setGalleryLoading(false);
+    }
+  };
+
+  const totalSelectedPhotoCount = photoFiles.length + selectedExistingPhotos.length;
+
+  const toggleExistingPhotoSelection = (photo: Photo) => {
+    setSelectedExistingPhotos((prev) => {
+      const alreadySelected = prev.some((p) => p.id === photo.id);
+      if (alreadySelected) {
+        return prev.filter((p) => p.id !== photo.id);
+      }
+      if (totalSelectedPhotoCount >= MAX_DIAGNOSIS_PHOTOS) {
+        setError(`En fazla ${MAX_DIAGNOSIS_PHOTOS} teşhis fotoğrafı ekleyebilirsiniz.`);
+        return prev;
+      }
+      return [...prev, photo];
+    });
+  };
+
+  const handleRemoveExistingPhoto = (photoId: string) => {
+    setSelectedExistingPhotos((prev) => prev.filter((p) => p.id !== photoId));
+  };
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // Allow re-selecting the same file consecutively
     if (!file) return;
 
-    if (photoFiles.length >= MAX_DIAGNOSIS_PHOTOS) {
+    if (totalSelectedPhotoCount >= MAX_DIAGNOSIS_PHOTOS) {
       setError(`En fazla ${MAX_DIAGNOSIS_PHOTOS} teşhis fotoğrafı ekleyebilirsiniz.`);
       return;
     }
@@ -188,6 +249,9 @@ export default function AIRecommendations() {
       const formData = new FormData();
       formData.append("userQuery", resolvedQuery);
       photoFiles.forEach((file) => formData.append("photos", file));
+      if (selectedExistingPhotos.length > 0) {
+        formData.append("existingPhotoIds", JSON.stringify(selectedExistingPhotos.map((p) => p.id)));
+      }
 
       const res = await fetch(`/api/ai/recommend/${selectedParcelId}`, {
         method: "POST",
@@ -209,6 +273,7 @@ export default function AIRecommendations() {
       setUserQuery("");
       setPhotoFiles([]);
       setPhotoPreviews([]);
+      setSelectedExistingPhotos([]);
       fetchParcelHistory(selectedParcelId); // Refresh history feed
       fetchAiUsage(); // Refresh usage indicator — a call was just made
     } catch (err: any) {
@@ -301,7 +366,7 @@ export default function AIRecommendations() {
                 </label>
                 <div className="flex items-center gap-2 flex-wrap">
                   <label className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl cursor-pointer transition-all border ${
-                    photoFiles.length >= MAX_DIAGNOSIS_PHOTOS
+                    totalSelectedPhotoCount >= MAX_DIAGNOSIS_PHOTOS
                       ? "bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed"
                       : "bg-[#f0f4ee] hover:bg-[#e4ebdf] text-[#556b2f] border-[#dee5db]"
                   }`}>
@@ -312,36 +377,48 @@ export default function AIRecommendations() {
                       accept="image/*"
                       capture="environment"
                       onChange={handlePhotoSelect}
-                      disabled={photoFiles.length >= MAX_DIAGNOSIS_PHOTOS}
+                      disabled={totalSelectedPhotoCount >= MAX_DIAGNOSIS_PHOTOS}
                       className="hidden"
                     />
                   </label>
 
-                  <label className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl cursor-pointer transition-all border ${
-                    photoFiles.length >= MAX_DIAGNOSIS_PHOTOS
-                      ? "bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed"
-                      : "bg-[#f0f4ee] hover:bg-[#e4ebdf] text-[#556b2f] border-[#dee5db]"
-                  }`}>
+                  <button
+                    type="button"
+                    onClick={openGalleryPicker}
+                    disabled={!selectedParcelId || totalSelectedPhotoCount >= MAX_DIAGNOSIS_PHOTOS}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl transition-all border ${
+                      totalSelectedPhotoCount >= MAX_DIAGNOSIS_PHOTOS || !selectedParcelId
+                        ? "bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed"
+                        : "bg-[#f0f4ee] hover:bg-[#e4ebdf] text-[#556b2f] border-[#dee5db]"
+                    }`}
+                  >
                     <ImageIcon className="h-3.5 w-3.5" />
-                    <span>Galeriden Seç</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhotoSelect}
-                      disabled={photoFiles.length >= MAX_DIAGNOSIS_PHOTOS}
-                      className="hidden"
-                    />
-                  </label>
+                    <span>Bu Parselin Fotoğraflarından Seç</span>
+                  </button>
                 </div>
 
-                {photoPreviews.length > 0 && (
+                {(photoPreviews.length > 0 || selectedExistingPhotos.length > 0) && (
                   <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                     {photoPreviews.map((preview, index) => (
-                      <div key={index} className="relative h-14 w-14 rounded-lg overflow-hidden border border-[#cdd4ca]">
+                      <div key={`new-${index}`} className="relative h-14 w-14 rounded-lg overflow-hidden border border-[#cdd4ca]">
                         <img src={preview} alt={`Teşhis fotoğrafı ${index + 1}`} className="h-full w-full object-cover" />
                         <button
                           type="button"
                           onClick={() => handleRemovePhoto(index)}
+                          title="Fotoğrafı kaldır"
+                          aria-label="Fotoğrafı kaldır"
+                          className="absolute top-0 right-0 p-0.5 bg-black/60 hover:bg-red-700 text-white rounded-bl transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {selectedExistingPhotos.map((photo) => (
+                      <div key={`existing-${photo.id}`} className="relative h-14 w-14 rounded-lg overflow-hidden border border-[#cdd4ca]">
+                        <img src={photo.thumbnailUrl || photo.originalUrl} alt="Saha gözlem fotoğrafı" className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveExistingPhoto(photo.id)}
                           title="Fotoğrafı kaldır"
                           aria-label="Fotoğrafı kaldır"
                           className="absolute top-0 right-0 p-0.5 bg-black/60 hover:bg-red-700 text-white rounded-bl transition-colors"
@@ -518,6 +595,96 @@ export default function AIRecommendations() {
           )}
         </div>
       </div>
+
+      {showGalleryPicker && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowGalleryPicker(false)}>
+          <div
+            className="bg-white rounded-3xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-5 border-b border-[#e2e8df]">
+              <div>
+                <h3 className="text-sm font-bold text-[#1a2416]">Bu Parselin Fotoğrafları</h3>
+                <p className="text-xs text-[#5a6a55] mt-0.5">
+                  Saha gözlemlerinde bu parsele ve referans ağaçlarına eklenen fotoğraflar, en yeniden eskiye sıralı
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGalleryPicker(false)}
+                className="p-1.5 rounded-lg text-[#80907a] hover:text-[#1a2416] hover:bg-[#f0f4ee] transition-all"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-5">
+              {galleryLoading ? (
+                <p className="text-sm text-[#5a6a55] text-center py-8">Fotoğraflar yükleniyor...</p>
+              ) : galleryError ? (
+                <div className="text-center py-8">
+                  <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-3" />
+                  <p className="text-sm font-bold text-red-700">{galleryError}</p>
+                  <button
+                    type="button"
+                    onClick={openGalleryPicker}
+                    className="mt-3 text-xs font-bold text-[#556b2f] hover:underline"
+                  >
+                    Tekrar Dene
+                  </button>
+                </div>
+              ) : galleryPhotos.length === 0 ? (
+                <div className="text-center py-8">
+                  <ImageIcon className="h-8 w-8 text-[#a8b5a2] mx-auto mb-3" />
+                  <p className="text-sm text-[#5a6a55]">Bu parsel için Saha Gözlemleri'nde henüz kayıtlı bir fotoğraf yok.</p>
+                  <p className="text-xs text-[#80907a] mt-1">Saha Gözlemleri ekranından bir fotoğraf ekleyip buraya dönebilirsiniz.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                  {galleryPhotos.map((photo) => {
+                    const isSelected = selectedExistingPhotos.some((p) => p.id === photo.id);
+                    return (
+                      <button
+                        type="button"
+                        key={photo.id}
+                        onClick={() => toggleExistingPhotoSelection(photo)}
+                        className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                          isSelected ? "border-[#556b2f] ring-2 ring-[#556b2f]/30" : "border-[#e2e8df] hover:border-[#cdd4ca]"
+                        }`}
+                      >
+                        <img src={photo.thumbnailUrl || photo.originalUrl} alt="Saha gözlem fotoğrafı" className="h-full w-full object-cover" />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-[#556b2f]/20 flex items-center justify-center">
+                            <div className="h-6 w-6 rounded-full bg-[#556b2f] flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">✓</span>
+                            </div>
+                          </div>
+                        )}
+                        {(photo.takenAt || photo.createdAt) && (
+                          <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[9px] text-center py-0.5">
+                            {new Date(photo.takenAt || photo.createdAt).toLocaleDateString("tr-TR")}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between p-5 border-t border-[#e2e8df]">
+              <p className="text-xs text-[#5a6a55]">{selectedExistingPhotos.length}/{MAX_DIAGNOSIS_PHOTOS} fotoğraf seçildi</p>
+              <button
+                type="button"
+                onClick={() => setShowGalleryPicker(false)}
+                className="px-4 py-2 bg-[#556b2f] text-white text-xs font-bold rounded-xl hover:bg-[#415324] transition-all"
+              >
+                Seçimi Onayla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

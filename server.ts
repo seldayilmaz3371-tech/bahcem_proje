@@ -1454,30 +1454,42 @@ app.post("/api/ai/chat", requireAuth, asyncHandler(async (req, res) => {
 
 // Get photos for a parcel within a date range (live preview before running AI analysis)
 app.get("/api/parcels/:parcelId/photos-in-range", requireAuth, asyncHandler(async (req, res) => {
-  const { startDate, endDate } = req.query;
-  if (!startDate || !endDate) {
-    return res.status(400).json({ error: "Başlangıç ve bitiş tarihi (startDate, endDate) zorunludur." });
-  }
+  // startDate/endDate are OPTIONAL: when the caller (e.g. the AI Karar
+  // Destek gallery picker) omits them, every photo for the parcel is
+  // returned. When provided, both must be present together and filter
+  // the result to that date range (e.g. Fotografli Gelisim Analizi's
+  // range preview). "sort" (asc|desc) controls chronological order;
+  // defaults to ascending (oldest first) for backward compatibility.
+  const { startDate, endDate, sort } = req.query;
 
   const parcel = await parcelRepository.getById(req.params.parcelId);
   if (!parcel) {
     return res.status(404).json({ error: "Parsel bulunamadı." });
   }
 
-  const rangeStart = new Date(startDate as string);
-  const rangeEnd = new Date(endDate as string);
-  if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime())) {
-    return res.status(400).json({ error: "Geçersiz tarih formatı." });
+  let rangeStart: Date | null = null;
+  let rangeEnd: Date | null = null;
+  if (startDate || endDate) {
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: "Tarih aralığı belirtiliyorsa başlangıç ve bitiş tarihinin ikisi de zorunludur." });
+    }
+    rangeStart = new Date(startDate as string);
+    rangeEnd = new Date(endDate as string);
+    if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime())) {
+      return res.status(400).json({ error: "Geçersiz tarih formatı." });
+    }
+    rangeEnd.setHours(23, 59, 59, 999);
   }
-  rangeEnd.setHours(23, 59, 59, 999);
 
   const allPhotos = await photoRepository.getPhotosByParcelId(req.params.parcelId);
+  const sortMultiplier = sort === "desc" ? -1 : 1;
   const photosInRange = allPhotos
     .filter((p) => {
+      if (!rangeStart || !rangeEnd) return true;
       const photoDate = new Date(p.takenAt || p.createdAt);
       return photoDate.getTime() >= rangeStart.getTime() && photoDate.getTime() <= rangeEnd.getTime();
     })
-    .sort((a, b) => new Date(a.takenAt || a.createdAt).getTime() - new Date(b.takenAt || b.createdAt).getTime());
+    .sort((a, b) => sortMultiplier * (new Date(a.takenAt || a.createdAt).getTime() - new Date(b.takenAt || b.createdAt).getTime()));
 
   res.json(photosInRange);
 }));
