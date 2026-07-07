@@ -6,7 +6,7 @@
 import { logger } from "../../logger";
 import { config } from "../../config";
 import { AIRecommendation, Photo, PhotoAiAnalysis } from "../../models";
-import { parcelRepository } from "../../repositories/parcel.repository";
+import { parcelRepository, treeRepository } from "../../repositories/parcel.repository";
 import { photoRepository } from "../../repositories/observation.repository";
 import { aiRecommendationRepository } from "../../repositories/ai.repository";
 import { aiUsageTrackerService } from "../ai-usage-tracker.service";
@@ -25,32 +25,49 @@ const MAX_GROWTH_ANALYSIS_PHOTOS = 12;
  */
 export class GrowthAnalysisService {
   /**
-   * Analyzes the visual development of a parcel over a date range.
+   * Analyzes the visual development of a parcel — or, when `treeId` is
+   * given, a single reference tree within that parcel — over a date
+   * range.
    *
    * Each photo's image is sent to Gemini's vision model AT MOST ONCE,
    * ever — the resulting structured analysis (growth stage, health
    * score, disease indication, confidence) is persisted on the Photo
    * record and reused for every subsequent growth-analysis request that
    * covers the same photo, including overlapping or repeated date
-   * ranges. A separate, purely text-based Gemini call then synthesizes
-   * these stored structured summaries into a narrative comparison — this
-   * step never includes any raw image data.
+   * ranges, and regardless of whether that later request is parcel-wide
+   * or tree-scoped. A separate, purely text-based Gemini call then
+   * synthesizes these stored structured summaries into a narrative
+   * comparison — this step never includes any raw image data.
    *
    * @param parcelId Target parcel identifier
    * @param startDate ISO date string (inclusive) marking the start of the range
    * @param endDate ISO date string (inclusive) marking the end of the range
    * @param userQuery Optional free-text focus question from the farmer
+   * @param treeId Optional reference tree ID. When provided, only that
+   *   tree's own photos are analyzed instead of the whole parcel's, and
+   *   the report is saved as scoped to that tree. The tree must belong
+   *   to `parcelId` — a mismatched combination is rejected rather than
+   *   silently analyzing the wrong tree's photos.
    */
   public async generateGrowthAnalysis(
     parcelId: string,
     startDate: string,
     endDate: string,
-    userQuery?: string
+    userQuery?: string,
+    treeId?: string
   ): Promise<{ recommendation: AIRecommendation; photosUsed: Photo[] } | null> {
     try {
       const parcel = await parcelRepository.getById(parcelId);
       if (!parcel) {
         throw new Error("Analiz istenen parsel kaydı bulunamadı.");
+      }
+
+      let tree = null;
+      if (treeId) {
+        tree = await treeRepository.getById(treeId);
+        if (!tree || tree.parcelId !== parcelId) {
+          throw new Error("Belirtilen referans ağaç, bu parsele ait değil veya bulunamadı.");
+        }
       }
 
       const rangeStart = new Date(startDate);
@@ -62,12 +79,14 @@ export class GrowthAnalysisService {
         throw new Error("Başlangıç tarihi, bitiş tarihinden sonra olamaz.");
       }
 
-      const allParcelPhotos = await photoRepository.getPhotosByParcelId(parcelId);
+      const candidatePhotos = tree
+        ? await photoRepository.getPhotosByTreeId(tree.id)
+        : await photoRepository.getPhotosByParcelId(parcelId);
 
       const rangeEndInclusive = new Date(rangeEnd);
       rangeEndInclusive.setHours(23, 59, 59, 999);
 
-      const photosInRange = allParcelPhotos
+      const photosInRange = candidatePhotos
         .filter((p) => {
           const photoDate = new Date(p.takenAt || p.createdAt);
           return photoDate.getTime() >= rangeStart.getTime() && photoDate.getTime() <= rangeEndInclusive.getTime();
@@ -75,8 +94,9 @@ export class GrowthAnalysisService {
         .sort((a, b) => new Date(a.takenAt || a.createdAt).getTime() - new Date(b.takenAt || b.createdAt).getTime());
 
       if (photosInRange.length < 2) {
+        const scopeText = tree ? `'${tree.treeNumber}' referans ağacı` : "bu parsel";
         throw new Error(
-          `Seçilen tarih aralığında karşılaştırma yapabilmek için en az 2 fotoğraf gerekiyor. Bulunan fotoğraf sayısı: ${photosInRange.length}. Lütfen Saha Gözlemleri bölümünden bu parsele daha fazla fotoğraf ekleyin veya tarih aralığını genişletin.`
+          `Seçilen tarih aralığında karşılaştırma yapabilmek için en az 2 fotoğraf gerekiyor. Bulunan fotoğraf sayısı: ${photosInRange.length}. Lütfen Saha Gözlemleri bölümünden ${scopeText} için daha fazla fotoğraf ekleyin veya tarih aralığını genişletin.`
         );
       }
 
@@ -97,6 +117,7 @@ export class GrowthAnalysisService {
         .join("\n");
 
       const safeUserQuery = userQuery ? capUserQueryLength(userQuery) : undefined;
+      const treeLabel = tree ? `${tree.treeNumber} (${tree.variety}) referans ağacı` : undefined;
       const prompt = buildGrowthAnalysisPrompt(
         parcel.name,
         parcel.cropType,
@@ -105,7 +126,8 @@ export class GrowthAnalysisService {
         dateFormatter.format(rangeStart),
         dateFormatter.format(rangeEnd),
         photoSummaries,
-        safeUserQuery
+        safeUserQuery,
+        treeLabel
       );
 
       const client = getGeminiClient();
@@ -132,6 +154,7 @@ export class GrowthAnalysisService {
       const timestamp = new Date().toISOString();
       const recommendation = await aiRecommendationRepository.create({
         parcelId,
+        treeId: tree?.id,
         recommendationType: "Gelişim Analizi",
         content: response.text.trim(),
         confidenceScore: parseFloat(Math.max(0.5, overallConfidence).toFixed(2)),
@@ -144,12 +167,12 @@ export class GrowthAnalysisService {
 
       logger.info(
         "AI",
-        `Fotoğraf tabanlı gelişim analizi üretildi. Parsel: '${parcel.name}', kullanılan fotoğraf sayısı: ${sampledPhotos.length}/${photosInRange.length}.`
+        `Fotoğraf tabanlı gelişim analizi üretildi. Parsel: '${parcel.name}'${tree ? `, Ağaç: '${tree.treeNumber}'` : ""}, kullanılan fotoğraf sayısı: ${sampledPhotos.length}/${photosInRange.length}.`
       );
 
       return { recommendation, photosUsed: sampledPhotos };
     } catch (error) {
-      logger.error("AI", `Gelişim analizi başarısız oldu. Parsel ID: '${parcelId}'`, error);
+      logger.error("AI", `Gelişim analizi başarısız oldu. Parsel ID: '${parcelId}'${treeId ? `, Ağaç ID: '${treeId}'` : ""}`, error);
       throw error;
     }
   }

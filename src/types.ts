@@ -283,6 +283,7 @@ export interface LiveWeatherForecast {
 export interface AIRecommendation {
   id: string;
   parcelId?: string;
+  treeId?: string;
   recommendationType: "Hastalık" | "Gübreleme" | "Sulama" | "Genel" | "Gelişim Analizi";
   content: string;
   confidenceScore: number;

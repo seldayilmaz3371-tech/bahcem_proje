@@ -17,7 +17,7 @@ import {
   RefreshCw,
   AlertTriangle
 } from "lucide-react";
-import { Parcel, AIRecommendation, Photo } from "../types";
+import { Parcel, Tree, AIRecommendation, Photo } from "../types";
 
 /**
  * Formats a Date object as a "YYYY-MM-DD" string suitable for <input type="date">.
@@ -31,6 +31,14 @@ export default function PhotoGrowthAnalysis() {
   const [selectedParcelId, setSelectedParcelId] = useState(() => {
     return localStorage.getItem("agri_growth_parcel_id") || "";
   });
+
+  // Reference trees for the selected parcel, and an optional single-tree
+  // scope. Empty string = whole-parcel analysis (original behavior);
+  // only reference trees are offered, since individual photo-based
+  // monitoring in this app is specifically a "Referans Ağaç" concept
+  // (see ParcelHealthSummary / TreeManager).
+  const [trees, setTrees] = useState<Tree[]>([]);
+  const [selectedTreeId, setSelectedTreeId] = useState("");
 
   const [startDate, setStartDate] = useState(() => {
     const threeMonthsAgo = new Date();
@@ -54,6 +62,7 @@ export default function PhotoGrowthAnalysis() {
   const changeSelectedParcelId = (id: string) => {
     setSelectedParcelId(id);
     localStorage.setItem("agri_growth_parcel_id", id);
+    setSelectedTreeId("");
     setResult(null);
     setError("");
   };
@@ -79,14 +88,36 @@ export default function PhotoGrowthAnalysis() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const fetchTrees = useCallback(async () => {
+    if (!selectedParcelId) {
+      setTrees([]);
+      return;
+    }
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/parcels/${selectedParcelId}/trees`, { headers });
+      if (res.ok) {
+        const data: Tree[] = await res.json();
+        setTrees(data.filter((t) => t.isReferenceTree));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [selectedParcelId]);
+
+  useEffect(() => {
+    fetchTrees();
+  }, [fetchTrees]);
+
   const fetchPreviewPhotos = useCallback(async () => {
     if (!selectedParcelId || !startDate || !endDate) return;
     setLoadingPreview(true);
     setError("");
     try {
       const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const treeParam = selectedTreeId ? `&treeId=${selectedTreeId}` : "";
       const res = await fetch(
-        `/api/parcels/${selectedParcelId}/photos-in-range?startDate=${startDate}&endDate=${endDate}`,
+        `/api/parcels/${selectedParcelId}/photos-in-range?startDate=${startDate}&endDate=${endDate}${treeParam}`,
         { headers }
       );
       if (res.ok) {
@@ -97,7 +128,7 @@ export default function PhotoGrowthAnalysis() {
     } finally {
       setLoadingPreview(false);
     }
-  }, [selectedParcelId, startDate, endDate]);
+  }, [selectedParcelId, selectedTreeId, startDate, endDate]);
 
   useEffect(() => {
     fetchPreviewPhotos();
@@ -153,7 +184,7 @@ export default function PhotoGrowthAnalysis() {
       const res = await fetch(`/api/ai/growth-analysis/${selectedParcelId}`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ startDate, endDate, userQuery: userQuery || undefined })
+        body: JSON.stringify({ startDate, endDate, userQuery: userQuery || undefined, treeId: selectedTreeId || undefined })
       });
 
       const data = await res.json();
@@ -171,6 +202,11 @@ export default function PhotoGrowthAnalysis() {
   };
 
   const selectedParcel = parcels.find((p) => p.id === selectedParcelId);
+  const getTreeLabel = (treeId?: string) => {
+    if (!treeId) return null;
+    const tree = trees.find((t) => t.id === treeId);
+    return tree ? `${tree.treeNumber} (${tree.variety})` : null;
+  };
   const dateFormatter = new Intl.DateTimeFormat("tr-TR", { year: "numeric", month: "long", day: "numeric" });
 
   return (
@@ -204,6 +240,28 @@ export default function PhotoGrowthAnalysis() {
                 ))}
               </select>
             </div>
+
+            {trees.length > 0 && (
+              <div>
+                <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">
+                  Kapsam
+                </label>
+                <select
+                  value={selectedTreeId}
+                  onChange={(e) => {
+                    setSelectedTreeId(e.target.value);
+                    setResult(null);
+                    setError("");
+                  }}
+                  className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
+                >
+                  <option value="">Tüm Parsel (Genel)</option>
+                  {trees.map((t) => (
+                    <option key={t.id} value={t.id}>{t.treeNumber} ({t.variety}) — Referans Ağaç</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -320,6 +378,7 @@ export default function PhotoGrowthAnalysis() {
                   >
                     <span className="text-[11px] text-[#5a6a55]">
                       {dateFormatter.format(new Date(h.createdDate))}
+                      {getTreeLabel(h.treeId) && <span className="text-[#80907a]"> · {getTreeLabel(h.treeId)}</span>}
                     </span>
                     <ChevronRight className="h-3.5 w-3.5 text-[#80907a] shrink-0" />
                   </button>
@@ -345,7 +404,9 @@ export default function PhotoGrowthAnalysis() {
               <div className="flex items-center justify-between border-b border-[#f0f4ee] pb-4">
                 <div>
                   <h2 className="text-lg font-bold font-display text-[#1a2416]">
-                    {selectedParcel?.name || "Parsel"} — Gelişim Raporu
+                    {selectedParcel?.name || "Parsel"}
+                    {getTreeLabel(result.recommendation.treeId) ? ` — ${getTreeLabel(result.recommendation.treeId)}` : ""}
+                    {" — Gelişim Raporu"}
                   </h2>
                   <p className="text-xs text-[#5a6a55] mt-0.5">
                     {dateFormatter.format(new Date(result.recommendation.createdDate))} tarihinde üretildi

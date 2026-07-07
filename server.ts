@@ -1460,7 +1460,10 @@ app.get("/api/parcels/:parcelId/photos-in-range", requireAuth, asyncHandler(asyn
   // the result to that date range (e.g. Fotografli Gelisim Analizi's
   // range preview). "sort" (asc|desc) controls chronological order;
   // defaults to ascending (oldest first) for backward compatibility.
-  const { startDate, endDate, sort } = req.query;
+  // "treeId" optionally narrows the result to a single reference tree's
+  // own photos instead of the whole parcel's (see Gelisim Analizi's
+  // per-tree scoping).
+  const { startDate, endDate, sort, treeId } = req.query;
 
   const parcel = await parcelRepository.getById(req.params.parcelId);
   if (!parcel) {
@@ -1481,7 +1484,9 @@ app.get("/api/parcels/:parcelId/photos-in-range", requireAuth, asyncHandler(asyn
     rangeEnd.setHours(23, 59, 59, 999);
   }
 
-  const allPhotos = await photoRepository.getPhotosByParcelId(req.params.parcelId);
+  const allPhotos = treeId
+    ? await photoRepository.getPhotosByTreeId(treeId as string)
+    : await photoRepository.getPhotosByParcelId(req.params.parcelId);
   const sortMultiplier = sort === "desc" ? -1 : 1;
   const photosInRange = allPhotos
     .filter((p) => {
@@ -1496,12 +1501,12 @@ app.get("/api/parcels/:parcelId/photos-in-range", requireAuth, asyncHandler(asyn
 
 // Generate an AI-powered visual growth/development analysis from parcel photos over a date range
 app.post("/api/ai/growth-analysis/:parcelId", requireAuth, asyncHandler(async (req, res) => {
-  const { startDate, endDate, userQuery } = req.body;
+  const { startDate, endDate, userQuery, treeId } = req.body;
   if (!startDate || !endDate) {
     return res.status(400).json({ error: "Başlangıç ve bitiş tarihi zorunludur." });
   }
 
-  const result = await aiService.generateGrowthAnalysis(req.params.parcelId, startDate, endDate, userQuery);
+  const result = await aiService.generateGrowthAnalysis(req.params.parcelId, startDate, endDate, userQuery, treeId || undefined);
   if (!result) {
     return res.status(500).json({ error: "Gelişim analizi oluşturulamadı." });
   }

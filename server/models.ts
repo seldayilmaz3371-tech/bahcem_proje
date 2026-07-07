@@ -438,6 +438,7 @@ export interface AITask {
 export interface AIRecommendation {
   id: string;
   parcelId?: string;
+  treeId?: string; // Set only when the report is scoped to a single reference tree (see Gelişim Analizi)
   recommendationType: "Hastalık" | "Gübreleme" | "Sulama" | "Genel" | "Gelişim Analizi";
   content: string;
   confidenceScore: number; // AI Güven Skoru

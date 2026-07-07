@@ -133,6 +133,20 @@ export class PhotoRepository extends BaseRepository<Photo> {
 
     return photos[0] || null;
   }
+
+  /**
+   * Loads all photos ever taken of a specific reference tree, joining
+   * through that tree's observations. Symmetric with
+   * `getPhotosByParcelId`, but scoped to a single tree instead of the
+   * whole parcel — used when a farmer wants a growth analysis for just
+   * one reference tree rather than the parcel's aggregate photo set.
+   * @param treeId Unique tree ID
+   */
+  public async getPhotosByTreeId(treeId: string): Promise<Photo[]> {
+    const obsIds = await this.getObservationIdsForTree(treeId);
+    const rawDb = await db.readRaw();
+    return (rawDb.photos || []).filter((p) => obsIds.has(p.observationId));
+  }
 }
 
 export const observationRepository = new ObservationRepository();

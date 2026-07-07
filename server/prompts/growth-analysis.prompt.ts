@@ -16,6 +16,9 @@ import { buildSafeUserQuerySection } from "./prompt-safety.util";
  * photo is never re-sent to Gemini's vision model more than once, no
  * matter how many overlapping growth-analysis requests are made.
  * @param photoSummaries Pre-formatted, chronologically ordered text block of each photo's structured analysis
+ * @param treeLabel When set (e.g. "T-101 (Gemlik) referans ağacı"), scopes
+ *   the analysis language to a single tree instead of the whole parcel.
+ *   Omit for the original parcel-wide behavior.
  */
 export function buildGrowthAnalysisPrompt(
   parcelName: string,
@@ -25,19 +28,26 @@ export function buildGrowthAnalysisPrompt(
   rangeStartLabel: string,
   rangeEndLabel: string,
   photoSummaries: string,
-  userQuery?: string
+  userQuery?: string,
+  treeLabel?: string
 ): string {
   const plantLabel = cropType === "Zeytin" ? "ağaç" : "bitki";
   const userQuerySection = userQuery ? `\n${buildSafeUserQuerySection(userQuery)}\n` : "";
+  const subjectDescription = treeLabel
+    ? `"${parcelName}" parselindeki ${treeLabel}`
+    : `"${parcelName}" adlı parsel (Ürün Türü: ${cropType}, ${areaDekar} Dekar, ${treeCount} adet ${plantLabel})`;
+  const analysisScopeNote = treeLabel
+    ? "Bu analiz yalnızca belirtilen tekil referans ağacına aittir; parselin geneli hakkında değildir."
+    : "Bu analiz parselin geneline aittir.";
 
   return `
 Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış bir Tarım Danışmanısın (Mersin Tarım Asistanı).
-"${parcelName}" adlı parsel (Ürün Türü: ${cropType}, ${areaDekar} Dekar, ${treeCount} adet ${plantLabel}) için, ${rangeStartLabel} ile ${rangeEndLabel} arasındaki gelişimi değerlendireceksin.
+${subjectDescription} için, ${rangeStartLabel} ile ${rangeEndLabel} arasındaki gelişimi değerlendireceksin. ${analysisScopeNote}
 
 === ZAMAN SIRALI FOTOĞRAF ANALİZLERİ (KAYNAK: AI Analizi - Her Fotoğraf İçin Tek Seferlik Yapılandırılmış Kayıt) ===
 ${photoSummaries}
 
-Yukarıdaki yapılandırılmış kayıtları zaman sırasına göre inceleyerek parseldeki gelişimi analiz et:
+Yukarıdaki yapılandırılmış kayıtları zaman sırasına göre inceleyerek gelişimi analiz et:
 1. **Görsel Değişim Özeti**: Sağlık skoru, büyüme evresi ve hastalık göstergelerindeki değişimi tarih sırasıyla anlat.
 2. **Sağlık Değerlendirmesi**: Hastalık, zararlı veya besin eksikliği belirtisi varsa vurgula.
 3. **Gelişim Hızı Yorumu**: Bu süre zarfında gelişimin normal, yavaş veya hızlı olduğuna dair bölgesel (Toroslar mikro-klimasına uygun) bir değerlendirme yap.
