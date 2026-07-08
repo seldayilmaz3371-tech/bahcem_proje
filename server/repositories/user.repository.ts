@@ -26,22 +26,14 @@ export class UserRepository extends BaseRepository<User> {
   }
 
   /**
-   * Retrieves a user by their registered email address.
+   * Retrieves a user by their registered email address. Used during
+   * registration to reject duplicate email addresses (see
+   * AuthService.registerUser).
    */
   public async getByEmail(email: string): Promise<User | null> {
     const records = await this.getAll();
     const lowerEmail = email.toLowerCase();
     return records.find((u) => u.email.toLowerCase() === lowerEmail) || null;
-  }
-
-  /**
-   * Updates user profile info safely, ensuring timestamps are set.
-   */
-  public async updateProfile(id: string, updates: Partial<Omit<User, "id" | "passwordHash">>): Promise<User | null> {
-    return this.update(id, {
-      ...updates,
-      updatedAt: new Date().toISOString()
-    } as any);
   }
 }
 

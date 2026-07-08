@@ -429,7 +429,7 @@ function EquipmentDetailPanel({ equipment: initialEquipment, parcelName, onBack 
     if (!file) return;
 
     const extension = file.name.split(".").pop()?.toLowerCase();
-    const allowedExtensions = ["txt", "md", "pdf", "docx", "doc"];
+    const allowedExtensions = ["txt", "md", "pdf", "docx"];
     if (!allowedExtensions.includes(extension || "")) {
       setUploadError("Yalnızca .txt, .md, .pdf, .doc ve .docx uzantılı dosyalar desteklenmektedir.");
       e.target.value = "";
@@ -460,7 +460,7 @@ function EquipmentDetailPanel({ equipment: initialEquipment, parcelName, onBack 
       let mappedType = "text/plain";
       if (extension === "md") mappedType = "text/markdown";
       else if (extension === "pdf") mappedType = "application/pdf";
-      else if (extension === "docx" || extension === "doc") mappedType = "application/msword";
+      else if (extension === "docx") mappedType = "application/msword";
 
       const uploadRes = await fetch(`/api/equipment/${equipment.id}/documents`, {
         method: "POST",
@@ -656,7 +656,7 @@ function EquipmentDetailPanel({ equipment: initialEquipment, parcelName, onBack 
             <span className="text-xs font-bold text-[#5a6a55]">
               {parsingFile ? "İşleniyor..." : "Kullanım kılavuzu yüklemek için tıklayın (.pdf, .docx, .txt, .md)"}
             </span>
-            <input type="file" className="hidden" onChange={handleFileSelect} disabled={parsingFile} accept=".pdf,.docx,.doc,.txt,.md" />
+            <input type="file" className="hidden" onChange={handleFileSelect} disabled={parsingFile} accept=".pdf,.docx,.txt,.md" />
           </label>
 
           {uploadError && <p className="text-xs font-bold text-red-600 bg-red-50 p-3 rounded-xl">{uploadError}</p>}

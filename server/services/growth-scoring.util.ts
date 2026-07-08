@@ -36,34 +36,6 @@ export function isUncertainAnalysis(confidence: number): boolean {
   return confidence <= LOW_CONFIDENCE_THRESHOLD;
 }
 
-/**
- * Compares two structured photo analyses and produces a plain-language
- * summary of what changed between them, entirely from stored data — no
- * AI call involved. Returns null if either analysis is uncertain, since
- * comparing two unreliable data points would itself be unreliable.
- * @param earlier The earlier (chronologically first) photo's analysis
- * @param later The later (chronologically second) photo's analysis
- */
-export function compareAnalyses(
-  earlier: PhotoAiAnalysis,
-  later: PhotoAiAnalysis
-): { healthDelta: number | null; stageChanged: boolean; newDiseaseDetected: boolean } | null {
-  if (earlier.isUncertain || later.isUncertain) {
-    return null;
-  }
-
-  const healthDelta =
-    earlier.healthScore !== null && later.healthScore !== null
-      ? later.healthScore - earlier.healthScore
-      : null;
-
-  return {
-    healthDelta,
-    stageChanged: earlier.growthStage !== later.growthStage,
-    newDiseaseDetected: !earlier.diseaseIndication && !!later.diseaseIndication,
-  };
-}
-
 // ==========================================================================
 // PARCEL-LEVEL AGGREGATION FROM REFERENCE TREES
 //

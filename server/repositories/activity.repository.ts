@@ -52,20 +52,6 @@ export class WeatherRepository extends BaseRepository<WeatherRecord> {
   constructor() {
     super("weatherHistory");
   }
-
-  /**
-   * Finds local weather history by a specific date string (YYYY-MM-DD).
-   */
-  public async getByDate(dateStr: string): Promise<WeatherRecord | null> {
-    return this.findOne((w) => w.recordDate === dateStr);
-  }
-
-  /**
-   * Retrieves records of dates that presented active frost warning levels.
-   */
-  public async getFrostRiskDays(): Promise<WeatherRecord[]> {
-    return this.find((w) => w.hasFrostRisk);
-  }
 }
 
 /**

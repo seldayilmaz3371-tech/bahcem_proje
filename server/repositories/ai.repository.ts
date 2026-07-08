@@ -4,17 +4,8 @@
  */
 
 import { BaseRepository } from "./base.repository";
-import { AITask, AIRecommendation, UploadedDocument, VectorChunk } from "../models";
+import { AIRecommendation, UploadedDocument, VectorChunk } from "../models";
 import { db } from "../database";
-
-/**
- * Repository to manage AITasks.
- */
-export class AITaskRepository extends BaseRepository<AITask> {
-  constructor() {
-    super("aiTasks");
-  }
-}
 
 /**
  * Repository to manage Decision-Support AI Recommendations.
@@ -86,7 +77,6 @@ export class VectorChunkRepository extends BaseRepository<VectorChunk> {
   }
 }
 
-export const aiTaskRepository = new AITaskRepository();
 export const aiRecommendationRepository = new AIRecommendationRepository();
 export const uploadedDocumentRepository = new UploadedDocumentRepository();
 export const vectorChunkRepository = new VectorChunkRepository();

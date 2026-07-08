@@ -145,7 +145,17 @@ export class PhotoStorageService {
       throw new Error("Fotoğraf verisi geçersiz bir base64 formatında (data:image/...;base64,... bekleniyor).");
     }
 
-    const extension = MIME_TO_EXTENSION[parsed.mimeType.toLowerCase()] || ".bin";
+    const extension = MIME_TO_EXTENSION[parsed.mimeType.toLowerCase()];
+    if (!extension) {
+      // Reject unrecognized MIME types outright rather than accepting
+      // them under a generic ".bin" extension. This endpoint is
+      // specifically for photo storage, and /uploads/photos is served
+      // publicly via express.static — silently accepting arbitrary file
+      // types would let unvalidated content be hosted and served back
+      // to anyone (see GÜVENLİK: dosya yükleme açıkları).
+      throw new Error(`Desteklenmeyen görsel formatı: '${parsed.mimeType}'. Yalnızca JPEG, PNG, WEBP, GIF ve HEIC/HEIF desteklenmektedir.`);
+    }
+
     const fileName = `${photoId}${extension}`;
     const finalPath = path.join(this.photosDirectory, fileName);
     const tempPath = `${finalPath}.tmp`;

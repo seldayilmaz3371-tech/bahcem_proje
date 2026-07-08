@@ -56,19 +56,83 @@ export class TreeRepository extends BaseRepository<Tree> {
   }
 
   /**
-   * Retrieves every "Referans Ağaç" across the entire farm, regardless of
-   * parcel. Used for the farm-wide Dashboard summary — see
-   * GET /api/reference-trees.
-   */
-  public async getAllReferenceTrees(): Promise<Tree[]> {
-    return this.find((tree) => !!tree.isReferenceTree);
-  }
-
-  /**
    * Find a specific tree by tree number within a parcel (e.g. "P1-T12").
    */
   public async getByTreeNumber(parcelId: string, treeNumber: string): Promise<Tree | null> {
     return this.findOne((tree) => tree.parcelId === parcelId && tree.treeNumber === treeNumber);
+  }
+
+  /**
+   * Computes the farm-wide reference tree summary (total count, how many
+   * still lack any photo, and the single most recently taken photo
+   * across all of them) used by the Dashboard.
+   *
+   * Performs exactly ONE `db.readRaw()` call and does the tree →
+   * observation → photo → parcel join entirely in memory. A prior
+   * version of this logic lived directly in the route handler and
+   * called a repository method inside a loop once per reference tree —
+   * for N reference trees, that meant N full reads of the JSON database
+   * file for a single API request (see denetim bulgusu: KRİTİK-002,
+   * Katman 3). This version scales with the size of the farm's data,
+   * not with an extra file read per tree.
+   */
+  public async getReferenceTreesSummary(): Promise<{
+    totalReferenceTrees: number;
+    treesWithoutPhoto: number;
+    mostRecentPhoto: { photoUrl: string; treeNumber: string; parcelName: string; takenAt: string } | null;
+  }> {
+    const rawDb = await db.readRaw();
+    const referenceTrees = (rawDb.trees || []).filter((tree) => !!tree.isReferenceTree);
+
+    const parcelNameById = new Map((rawDb.parcels || []).map((p) => [p.id, p.name]));
+
+    // Group observation IDs by the tree they belong to, once, instead of
+    // re-scanning the full observations array for every reference tree.
+    const observationIdsByTreeId = new Map<string, Set<string>>();
+    for (const obs of rawDb.observations || []) {
+      if (!obs.treeId) continue;
+      if (!observationIdsByTreeId.has(obs.treeId)) {
+        observationIdsByTreeId.set(obs.treeId, new Set());
+      }
+      observationIdsByTreeId.get(obs.treeId)!.add(obs.id);
+    }
+
+    let treesWithoutPhoto = 0;
+    let mostRecentPhoto: { photoUrl: string; treeNumber: string; parcelName: string; takenAt: string } | null = null;
+
+    for (const tree of referenceTrees) {
+      const obsIds = observationIdsByTreeId.get(tree.id);
+      const treePhotos = obsIds
+        ? (rawDb.photos || []).filter((p) => obsIds.has(p.observationId))
+        : [];
+
+      if (treePhotos.length === 0) {
+        treesWithoutPhoto++;
+        continue;
+      }
+
+      const latestPhoto = treePhotos.reduce((latest, p) => {
+        const pTime = new Date(p.takenAt || p.createdAt).getTime();
+        const latestTime = new Date(latest.takenAt || latest.createdAt).getTime();
+        return pTime > latestTime ? p : latest;
+      });
+
+      const photoTimestamp = latestPhoto.takenAt || latestPhoto.createdAt;
+      if (!mostRecentPhoto || new Date(photoTimestamp).getTime() > new Date(mostRecentPhoto.takenAt).getTime()) {
+        mostRecentPhoto = {
+          photoUrl: latestPhoto.originalUrl,
+          treeNumber: tree.treeNumber,
+          parcelName: parcelNameById.get(tree.parcelId) || "Bilinmeyen Parsel",
+          takenAt: photoTimestamp,
+        };
+      }
+    }
+
+    return {
+      totalReferenceTrees: referenceTrees.length,
+      treesWithoutPhoto,
+      mostRecentPhoto,
+    };
   }
 }
 

@@ -41,7 +41,7 @@ export default function DocumentHub() {
     if (!file) return;
 
     const extension = file.name.split('.').pop()?.toLowerCase();
-    const allowedExtensions = ["txt", "md", "pdf", "docx", "doc"];
+    const allowedExtensions = ["txt", "md", "pdf", "docx"];
     if (!allowedExtensions.includes(extension || "")) {
       setError("Yalnızca .txt, .md, .pdf, .doc ve .docx uzantılı dosyalar desteklenmektedir.");
       return;
@@ -257,7 +257,7 @@ export default function DocumentHub() {
             {!parsingFile && (
               <input 
                 type="file" 
-                accept=".txt,.md,.pdf,.docx,.doc"
+                accept=".txt,.md,.pdf,.docx"
                 onChange={handleFileChange}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />

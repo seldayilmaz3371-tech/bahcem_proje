@@ -15,14 +15,6 @@ export class EquipmentRepository extends BaseRepository<Equipment> {
   constructor() {
     super("equipment");
   }
-
-  /**
-   * Retrieves equipment assigned to a specific land parcel. Equipment
-   * with no parcelId (general farm equipment) is not included.
-   */
-  public async getByParcelId(parcelId: string): Promise<Equipment[]> {
-    return this.find((e) => e.parcelId === parcelId);
-  }
 }
 
 export const equipmentRepository = new EquipmentRepository();

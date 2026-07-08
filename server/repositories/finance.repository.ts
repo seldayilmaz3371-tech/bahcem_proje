@@ -4,7 +4,7 @@
  */
 
 import { BaseRepository } from "./base.repository";
-import { Harvest, Cost, Sale, ProfitReport } from "../models";
+import { Harvest, Cost, Sale } from "../models";
 import { db } from "../database";
 
 /**
@@ -62,23 +62,6 @@ export class SaleRepository extends BaseRepository<Sale> {
   }
 }
 
-/**
- * Repository to manage annual Profit and ROI Reports.
- */
-export class ProfitReportRepository extends BaseRepository<ProfitReport> {
-  constructor() {
-    super("profitReports");
-  }
-
-  /**
-   * Retrieves annual performance metrics for a specific parcel or general farm.
-   */
-  public async getReport(year: number, parcelId?: string): Promise<ProfitReport | null> {
-    return this.findOne((r) => r.year === year && r.parcelId === parcelId);
-  }
-}
-
 export const harvestRepository = new HarvestRepository();
 export const costRepository = new CostRepository();
 export const saleRepository = new SaleRepository();
-export const profitReportRepository = new ProfitReportRepository();

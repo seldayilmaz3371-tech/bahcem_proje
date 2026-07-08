@@ -82,15 +82,6 @@ export class PhotoRepository extends BaseRepository<Photo> {
   }
 
   /**
-   * Finds the most recent photo, with a completed AI analysis, taken of a
-   * specific individual tree — joining through that tree's observations.
-   * Used to infer a reference tree's current condition without
-   * re-analyzing every photo ever taken of it (see
-   * growth-scoring.util.ts's summarizeParcelHealthFromReferenceTrees).
-   * @param treeId Unique tree ID
-   * @returns The latest analyzed photo, or null if the tree has none yet
-   */
-  /**
    * Resolves the set of observation IDs linked to a specific tree.
    * Shared join logic used by both photo-lookup methods below.
    */
@@ -103,6 +94,15 @@ export class PhotoRepository extends BaseRepository<Photo> {
     );
   }
 
+  /**
+   * Finds the most recent photo, with a completed AI analysis, taken of a
+   * specific individual tree — joining through that tree's observations.
+   * Used to infer a reference tree's current condition without
+   * re-analyzing every photo ever taken of it (see
+   * growth-scoring.util.ts's summarizeParcelHealthFromReferenceTrees).
+   * @param treeId Unique tree ID
+   * @returns The latest analyzed photo, or null if the tree has none yet
+   */
   public async getLatestAnalyzedPhotoByTreeId(treeId: string): Promise<Photo | null> {
     const obsIds = await this.getObservationIdsForTree(treeId);
     const rawDb = await db.readRaw();

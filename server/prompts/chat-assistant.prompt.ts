@@ -25,6 +25,6 @@ ${ragContext}
 
 ${userQuerySection}
 
-Lütfen soruyu tamamen doğru, bilimsel ve pratik bir yaklaşımla, zeytin ağaçlarının sağlığını korumaya yönelik, Türkçe tonunda yanıtla. Bilgi deposunda eşleşen bir kaynak yoksa bunu açıkça belirt; var olmayan bir referanstan alıntı yapıyormuş gibi davranma. Markdown formatını kullan.
+Lütfen soruyu tamamen doğru, bilimsel ve pratik bir yaklaşımla, zeytin ağaçlarının sağlığını korumaya yönelik, Türkçe tonunda yanıtla. Yalnızca yukarıdaki bilgi deposu referanslarına dayan; bu referanslarda yer almayan hiçbir bilgiyi (genel eğitim verinden veya varsayımdan) cevaba dahil etme. Bilgi deposunda eşleşen bir kaynak yoksa bunu açıkça belirt; var olmayan bir referanstan alıntı yapıyormuş gibi davranma. Markdown formatını kullan.
 `;
 }

@@ -386,23 +386,6 @@ export interface Sale {
 }
 
 /**
- * 16. ProfitReports Table Schema (Performans ve Maliyet Analizleri)
- */
-export interface ProfitReport {
-  id: string;
-  year: number;
-  parcelId?: string; // If undefined, represents overall farm
-  totalYieldKg: number;
-  totalExpenses: number;
-  totalRevenue: number;
-  netProfit: number;
-  roi: number; // Return on Investment %
-  yieldPerTreeKg: number;
-  costPerKg: number;
-  createdAt: string;
-}
-
-/**
  * 17. WeatherHistory Table Schema
  */
 export interface WeatherRecord {
@@ -416,19 +399,6 @@ export interface WeatherRecord {
   condition: string;
   hasFrostRisk: boolean;
   soilTemperature?: number;
-  createdAt: string;
-}
-
-/**
- * 18. AITasks Table Schema (Yapay Zeka Zamanlı Görevler/Takipler)
- */
-export interface AITask {
-  id: string;
-  taskType: string; // e.g. "Hastalık Analizi", "Dozaj Hesaplama", "Genel Değerlendirme"
-  status: "Pending" | "Completed" | "Failed";
-  promptTemplate: string;
-  results?: string;
-  executionDate: string;
   createdAt: string;
 }
 
@@ -545,9 +515,7 @@ export interface DatabaseSchema {
   harvest: Harvest[];
   costs: Cost[];
   sales: Sale[];
-  profitReports: ProfitReport[];
   weatherHistory: WeatherRecord[];
-  aiTasks: AITask[];
   aiRecommendations: AIRecommendation[];
   uploadedDocuments: UploadedDocument[];
   vectorChunks: VectorChunk[];

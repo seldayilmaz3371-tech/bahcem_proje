@@ -88,21 +88,6 @@ export class SettingService {
     }
     return dict;
   }
-
-  /**
-   * Returns central farm coordinates as numerical values for mapping and weather integration.
-   */
-  public async getFarmCoordinates(): Promise<{ latitude: number; longitude: number; name: string }> {
-    const latStr = await this.getSetting("location_lat", "36.8741");
-    const lngStr = await this.getSetting("location_lng", "34.4512");
-    const name = await this.getSetting("location_name", "Toroslar, Değirmençay, Mersin");
-
-    return {
-      latitude: parseFloat(latStr) || 36.8741,
-      longitude: parseFloat(lngStr) || 34.4512,
-      name
-    };
-  }
 }
 
 export const settingService = new SettingService();

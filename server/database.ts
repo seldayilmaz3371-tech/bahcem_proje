@@ -270,9 +270,7 @@ class DatabaseManager {
       harvest: [],
       costs: [],
       sales: [],
-      profitReports: [],
       weatherHistory: [],
-      aiTasks: [],
       aiRecommendations: [],
       uploadedDocuments: [],
       vectorChunks: [],
@@ -299,7 +297,7 @@ class DatabaseManager {
       "users", "roles", "parcels", "trees", "treeCountChangeLogs", "observations", "photos", "inventory",
       "equipment",
       "inventoryCategories", "fertilizers", "chemicals", "applications", "irrigation",
-      "harvest", "costs", "sales", "profitReports", "weatherHistory", "aiTasks",
+      "harvest", "costs", "sales", "weatherHistory",
       "aiRecommendations", "uploadedDocuments", "vectorChunks", "notifications",
       "activityLogs", "settings"
     ];

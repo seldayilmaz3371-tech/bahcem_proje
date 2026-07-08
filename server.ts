@@ -26,8 +26,7 @@ import { activityLogRepository, weatherRepository, notificationRepository } from
 import { 
   harvestRepository, 
   costRepository, 
-  saleRepository, 
-  profitReportRepository 
+  saleRepository 
 } from "./server/repositories/finance.repository";
 import { uploadedDocumentRepository, aiRecommendationRepository } from "./server/repositories/ai.repository";
 import { weatherService } from "./server/services/weather.service";
@@ -125,10 +124,90 @@ const asyncHandler = (fn: (req: any, res: Response, next: NextFunction) => Promi
   return (req: Request, res: Response, next: NextFunction) => {
     fn(req, res, next).catch((err) => {
       logger.error("SYSTEM", `Unhandled endpoint error at ${req.method} ${req.path}`, err);
+      // NOT: err.message burada bilinçli olarak istemciye gönderiliyor,
+      // çünkü servis katmanındaki birçok fonksiyon (örn.
+      // generateGrowthAnalysis, ekipman AI desteği) anlamlı, kullanıcı
+      // dostu Türkçe hata mesajlarını throw ederek buraya kadar
+      // yükseltiyor ve bunları kendi route'unda ayrıca yakalamıyor. Bunu
+      // körü körüne susturmak (denendi, geri alındı) bu mesajları
+      // kullanıcıdan gizler. Doğru çözüm — "beklenen" (kullanıcıya
+      // gösterilmesi güvenli) hatalarla "beklenmeyen" (iç detay
+      // içerebilecek) hataları ayıran özel bir hata sınıfı/işaretleyici
+      // — ayrı, kontrollü bir iş kalemi olarak ele alınmalı; bu haliyle
+      // değiştirmek çalışan hata mesajlarını bozma riski taşır.
       res.status(500).json({ error: err.message || "İşlem gerçekleştirilirken bir sunucu hatası oluştu." });
     });
   };
 };
+
+// ==========================================================================
+// NUMERIC INPUT VALIDATION HELPERS
+//
+// Centralizes NaN-safety across every route that parses a numeric form
+// field. Previously, `parseFloat`/`parseInt` calls throughout this file
+// had no follow-up `isNaN` check: a malformed numeric input (e.g. an
+// empty string, or a typo like "12o") silently became `NaN`, which
+// `JSON.stringify` then serializes as `null` — corrupting the record
+// without ever surfacing an error to the user or the logs (see denetim
+// bulgusu: KRİTİK-001, Katman 3 - "sistemik NaN doğrulaması eksikliği").
+// Throwing here relies on asyncHandler's existing catch-and-report
+// behavior to turn this into a clear 500 response naming the exact
+// invalid field, consistent with how service-layer validation errors
+// already surface to the client elsewhere in this codebase.
+// ==========================================================================
+
+/**
+ * Parses a required numeric form field. Throws a clear, field-named
+ * error if the value is missing, empty, or not a valid number.
+ * @param value Raw value from the request body/query
+ * @param fieldName Human-readable Turkish field name for the error message
+ */
+function parseRequiredNumber(value: unknown, fieldName: string): number {
+  if (value === undefined || value === null || value === "") {
+    throw new Error(`${fieldName} zorunludur.`);
+  }
+  const parsed = typeof value === "number" ? value : parseFloat(String(value));
+  if (isNaN(parsed)) {
+    throw new Error(`${fieldName} geçerli bir sayı olmalıdır.`);
+  }
+  return parsed;
+}
+
+/**
+ * Parses an optional numeric form field, returning `fallback` when the
+ * value is missing/empty. A value that IS present but invalid (e.g. the
+ * literal text "abc") is still rejected rather than silently coerced to
+ * NaN — "optional" means the field may be omitted, not that a garbled
+ * value should be accepted.
+ */
+function parseOptionalNumber(value: unknown, fieldName: string, fallback: number): number {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  return parseRequiredNumber(value, fieldName);
+}
+
+/**
+ * Integer counterpart of parseRequiredNumber (e.g. tree counts, years,
+ * personnel counts) — rejects fractional or non-numeric input.
+ */
+function parseRequiredInt(value: unknown, fieldName: string): number {
+  const parsed = parseRequiredNumber(value, fieldName);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${fieldName} tam sayı olmalıdır.`);
+  }
+  return parsed;
+}
+
+/**
+ * Integer counterpart of parseOptionalNumber.
+ */
+function parseOptionalInt(value: unknown, fieldName: string, fallback: number): number {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  return parseRequiredInt(value, fieldName);
+}
 
 /**
  * Strips sensitive fields (bcrypt password hash) from a User entity before
@@ -152,7 +231,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Kullanıcı adı ve şifre zorunludur." });
   }
 
-  const result = await authService.login(username, password);
+  const result = await authService.login(username, password, req.ip);
   if (!result) {
     return res.status(401).json({ error: "Hatalı kullanıcı adı veya şifre." });
   }
@@ -267,7 +346,7 @@ app.post("/api/parcels", requireAuth, asyncHandler(async (req: AuthenticatedRequ
   const newParcel = await parcelRepository.create({
     name,
     cropType: resolvedCropType as Parcel["cropType"],
-    areaDekar: parseFloat(areaDekar),
+    areaDekar: parseRequiredNumber(areaDekar, "Alan (dekar)"),
     treeCount: resolvedTreeCount,
     soilType,
     irrigationType,
@@ -297,7 +376,7 @@ app.put("/api/parcels/:id", requireAuth, asyncHandler(async (req: AuthenticatedR
 
   const updated = await parcelRepository.update(req.params.id, {
     name: name ?? exists.name,
-    areaDekar: areaDekar ? parseFloat(areaDekar) : exists.areaDekar,
+    areaDekar: areaDekar ? parseRequiredNumber(areaDekar, "Alan (dekar)") : exists.areaDekar,
     soilType: soilType ?? exists.soilType,
     irrigationType: irrigationType ?? exists.irrigationType,
     notes: notes ?? exists.notes,
@@ -360,7 +439,7 @@ app.post("/api/equipment", requireAuth, asyncHandler(async (req: AuthenticatedRe
     model: model || undefined,
     parcelId: parcelId || undefined,
     purchaseDate: purchaseDate || undefined,
-    purchasePrice: purchasePrice ? parseFloat(purchasePrice) : undefined,
+    purchasePrice: purchasePrice ? parseRequiredNumber(purchasePrice, "Satın alma fiyatı") : undefined,
     status: status || "Aktif",
     notes: notes || undefined,
     createdAt: timestamp,
@@ -390,7 +469,7 @@ app.put("/api/equipment/:id", requireAuth, asyncHandler(async (req: Authenticate
     model: model ?? exists.model,
     parcelId: parcelId === "" ? undefined : (parcelId ?? exists.parcelId),
     purchaseDate: purchaseDate ?? exists.purchaseDate,
-    purchasePrice: purchasePrice !== undefined ? parseFloat(purchasePrice) : exists.purchasePrice,
+    purchasePrice: purchasePrice !== undefined ? parseRequiredNumber(purchasePrice, "Satın alma fiyatı") : exists.purchasePrice,
     status: status ?? exists.status,
     notes: notes ?? exists.notes,
     updatedAt: new Date().toISOString()
@@ -562,7 +641,7 @@ app.post("/api/parcels/:id/trees", requireAuth, asyncHandler(async (req: Authent
     parcelId: req.params.id,
     treeNumber,
     variety: variety || "Bilinmeyen",
-    plantingYear: plantingYear ? parseInt(plantingYear) : new Date().getFullYear(),
+    plantingYear: plantingYear ? parseRequiredInt(plantingYear, "Dikim yılı") : new Date().getFullYear(),
     notes: notes || "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -588,7 +667,7 @@ app.put("/api/trees/:id", requireAuth, asyncHandler(async (req, res) => {
 
   const updated = await treeRepository.update(req.params.id, {
     variety: variety ?? exists.variety,
-    plantingYear: plantingYear ? parseInt(plantingYear) : exists.plantingYear,
+    plantingYear: plantingYear ? parseRequiredInt(plantingYear, "Dikim yılı") : exists.plantingYear,
     notes: notes ?? exists.notes,
     isReferenceTree: isReferenceTree !== undefined ? !!isReferenceTree : exists.isReferenceTree,
     updatedAt: new Date().toISOString()
@@ -725,35 +804,8 @@ app.get("/api/parcels/:id/reference-tree-health", requireAuth, asyncHandler(asyn
 // photographed. Pure aggregation over existing repository data; no
 // Gemini call involved.
 app.get("/api/reference-trees/summary", requireAuth, asyncHandler(async (req, res) => {
-  const referenceTrees = await treeRepository.getAllReferenceTrees();
-
-  let treesWithoutPhoto = 0;
-  let mostRecentPhoto: { photoUrl: string; treeNumber: string; parcelName: string; takenAt: string } | null = null;
-
-  for (const tree of referenceTrees) {
-    const latestPhoto = await photoRepository.getLatestPhotoByTreeId(tree.id);
-    if (!latestPhoto) {
-      treesWithoutPhoto++;
-      continue;
-    }
-
-    const photoTimestamp = latestPhoto.takenAt || latestPhoto.createdAt;
-    if (!mostRecentPhoto || new Date(photoTimestamp).getTime() > new Date(mostRecentPhoto.takenAt).getTime()) {
-      const parcel = await parcelRepository.getById(tree.parcelId);
-      mostRecentPhoto = {
-        photoUrl: latestPhoto.originalUrl,
-        treeNumber: tree.treeNumber,
-        parcelName: parcel?.name || "Bilinmeyen Parsel",
-        takenAt: photoTimestamp,
-      };
-    }
-  }
-
-  res.json({
-    totalReferenceTrees: referenceTrees.length,
-    treesWithoutPhoto,
-    mostRecentPhoto,
-  });
+  const summary = await treeRepository.getReferenceTreesSummary();
+  res.json(summary);
 }));
 
 // ==========================================
@@ -980,10 +1032,10 @@ app.post("/api/inventory", requireAuth, asyncHandler(async (req: AuthenticatedRe
     categoryId,
     brand: brand || "",
     sku: sku || "",
-    stockQuantity: parseFloat(stockQuantity),
+    stockQuantity: parseRequiredNumber(stockQuantity, "Stok miktarı"),
     unit,
-    minStockAlert: parseFloat(minStockAlert),
-    unitPrice: unitPrice ? parseFloat(unitPrice) : 0,
+    minStockAlert: parseRequiredNumber(minStockAlert, "Minimum stok uyarısı"),
+    unitPrice: unitPrice ? parseRequiredNumber(unitPrice, "Birim fiyat") : 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   });
@@ -993,7 +1045,7 @@ app.post("/api/inventory", requireAuth, asyncHandler(async (req: AuthenticatedRe
     await fertilizerRepository.create({
       inventoryItemId: newItem.id,
       npkRatio: specificDetails.npkRatio || "15-15-15",
-      organicContentPercent: parseFloat(specificDetails.organicContentPercent || 0),
+      organicContentPercent: parseOptionalNumber(specificDetails.organicContentPercent, "Organik içerik yüzdesi", 0),
       microElements: specificDetails.microElements || ""
     });
   } else if (type === "Chemical" && specificDetails) {
@@ -1001,7 +1053,7 @@ app.post("/api/inventory", requireAuth, asyncHandler(async (req: AuthenticatedRe
       inventoryItemId: newItem.id,
       activeIngredient: specificDetails.activeIngredient || "",
       targetPests: specificDetails.targetPests || [],
-      preHarvestIntervalDays: parseInt(specificDetails.preHarvestIntervalDays || 0)
+      preHarvestIntervalDays: parseOptionalInt(specificDetails.preHarvestIntervalDays, "Hasat öncesi bekleme süresi", 0)
     });
   }
 
@@ -1025,14 +1077,15 @@ app.post("/api/inventory/adjust", requireAuth, asyncHandler(async (req: Authenti
     return res.status(404).json({ error: "Ürün bulunamadı." });
   }
 
-  const success = await inventoryItemRepository.adjustStock(id, parseFloat(delta));
+  const parsedDelta = parseRequiredNumber(delta, "Değişim miktarı");
+  const success = await inventoryItemRepository.adjustStock(id, parsedDelta);
   if (!success) {
     return res.status(400).json({ error: "Stok seviyesi sıfırın altına düşemez. Değişim iptal edildi." });
   }
 
   const updatedItem = await inventoryItemRepository.getById(id);
 
-  if (parseFloat(delta) < 0 && notes) {
+  if (parsedDelta < 0 && notes) {
     await activityLogRepository.writeLog(
       req.user.id,
       "INVENTORY_ADJUST",
@@ -1062,7 +1115,7 @@ app.post("/api/finance/costs", requireAuth, asyncHandler(async (req: Authenticat
 
   const newCost = await costRepository.create({
     parcelId: parcelId || undefined,
-    amount: parseFloat(amount),
+    amount: parseRequiredNumber(amount, "Tutar"),
     category,
     costDate,
     description: description || "",
@@ -1111,13 +1164,15 @@ app.post("/api/finance/sales", requireAuth, asyncHandler(async (req: Authenticat
     return res.status(400).json({ error: "Ürün türü, miktar (kg), birim fiyat ve satış tarihi zorunludur." });
   }
 
-  const totalRevenue = parseFloat(quantityKg) * parseFloat(unitPrice);
+  const parsedQuantityKg = parseRequiredNumber(quantityKg, "Miktar (kg)");
+  const parsedUnitPrice = parseRequiredNumber(unitPrice, "Birim fiyat");
+  const totalRevenue = parsedQuantityKg * parsedUnitPrice;
 
   const newSale = await saleRepository.create({
     buyerName: buyerName || "Bilinmeyen Alıcı",
     productType,
-    quantityKg: parseFloat(quantityKg),
-    unitPrice: parseFloat(unitPrice),
+    quantityKg: parsedQuantityKg,
+    unitPrice: parsedUnitPrice,
     totalRevenue,
     isOrganikSaglikBrand: !!isOrganikSaglikBrand,
     saleDate,
@@ -1165,15 +1220,15 @@ app.post("/api/finance/harvests", requireAuth, asyncHandler(async (req: Authenti
     return res.status(400).json({ error: "Parsel seçimi, miktar (kg), kalite sınıfı ve hasat tarihi zorunludur." });
   }
 
-  const personnelCountNum = parseInt(personnelCount || 0);
-  const laborCostNum = parseFloat(laborCost || 0);
-  const transportCostNum = parseFloat(transportCost || 0);
-  const otherCostsNum = parseFloat(otherCosts || 0);
+  const personnelCountNum = parseOptionalInt(personnelCount, "Personel sayısı", 0);
+  const laborCostNum = parseOptionalNumber(laborCost, "İşçilik maliyeti", 0);
+  const transportCostNum = parseOptionalNumber(transportCost, "Nakliye maliyeti", 0);
+  const otherCostsNum = parseOptionalNumber(otherCosts, "Diğer maliyetler", 0);
   const totalCostNum = laborCostNum + transportCostNum + otherCostsNum;
 
   const newHarvest = await harvestRepository.create({
     parcelId,
-    quantityKg: parseFloat(quantityKg),
+    quantityKg: parseRequiredNumber(quantityKg, "Miktar (kg)"),
     qualityGrade,
     harvestDate,
     notes: notes || "",
@@ -1213,14 +1268,6 @@ app.delete("/api/finance/harvests/:id", requireAuth, asyncHandler(async (req: Au
   res.json({ success: true, message: "Hasat kaydı başarıyla silindi." });
 }));
 
-// Annual ROI and Profitability Analysis Reports
-app.get("/api/finance/profit-reports", requireAuth, asyncHandler(async (req, res) => {
-  const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
-  const list = await profitReportRepository.getAll();
-  const yearReports = list.filter((r) => r.year === year);
-  res.json(yearReports);
-}));
-
 // ==========================================
 // 6. SYSTEM SETTINGS & GENERAL UTILITIES
 // ==========================================
@@ -1255,11 +1302,11 @@ app.post("/api/weather/record", requireAuth, asyncHandler(async (req, res) => {
 
   const newRecord = await weatherRepository.create({
     recordDate,
-    tempMax: parseFloat(tempMax),
-    tempMin: parseFloat(tempMin),
-    humidity: humidity ? parseFloat(humidity) : 55,
-    windSpeed: windSpeed ? parseFloat(windSpeed) : 12,
-    precipitationMm: precipitationMm ? parseFloat(precipitationMm) : 0,
+    tempMax: parseRequiredNumber(tempMax, "En yüksek sıcaklık"),
+    tempMin: parseRequiredNumber(tempMin, "En düşük sıcaklık"),
+    humidity: parseOptionalNumber(humidity, "Nem", 55),
+    windSpeed: parseOptionalNumber(windSpeed, "Rüzgar hızı", 12),
+    precipitationMm: parseOptionalNumber(precipitationMm, "Yağış miktarı", 0),
     condition: condition || "Açık",
     hasFrostRisk: !!hasFrostRisk,
     createdAt: new Date().toISOString()
@@ -1345,12 +1392,13 @@ app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHan
     } else if (extension === "docx") {
       const result = await mammoth.extractRawText({ buffer: file.buffer });
       text = result.value;
-    } else if (extension === "doc") {
-      const result = await mammoth.extractRawText({ buffer: file.buffer });
-      text = result.value;
     } else if (extension === "txt" || extension === "md") {
       text = file.buffer.toString("utf8");
     } else {
+      // Legacy binary .doc is intentionally NOT accepted: mammoth only
+      // supports the OOXML-based .docx format, so a genuine .doc file
+      // would silently produce garbled or empty text rather than a
+      // clear error — worse than simply not offering the format.
       return res.status(400).json({ error: "Desteklenmeyen dosya formatı. Sadece .pdf, .docx, .txt ve .md desteklenmektedir." });
     }
 
