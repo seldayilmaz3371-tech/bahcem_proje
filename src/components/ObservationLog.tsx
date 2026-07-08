@@ -99,8 +99,24 @@ export default function ObservationLog() {
   // Audio Note Simulation
   const [isRecording, setIsRecording] = useState(false);
   const [recordedDuration, setRecordedDuration] = useState(0);
-  const [simulatedAudioPath, setSimulatedAudioPath] = useState<string | null>(null);
+  const [speechNotSupported, setSpeechNotSupported] = useState(false);
   const timerRef = useRef<any>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Ensures the microphone is never left listening in the background if
+  // the user navigates away mid-recording — a privacy-sensitive resource
+  // (unlike the old fake simulator, this now controls a real microphone
+  // stream and must be explicitly released).
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
 
   const [error, setError] = useState("");
   const [queuedNotice, setQueuedNotice] = useState("");
@@ -200,7 +216,66 @@ export default function ObservationLog() {
   };
 
   // Simulated Voice Note
+  /**
+   * Starts real, live speech-to-text using the browser's built-in Web
+   * Speech API (window.SpeechRecognition / webkitSpeechRecognition) —
+   * replacing the previous fake "Audio Memo Simulator" (see git history)
+   * that neither accessed the microphone nor saved anything.
+   *
+   * Deliberately uses the free, client-side browser API rather than
+   * recording real audio and transcribing it via Gemini: this app's
+   * Gemini quota is a genuine, limited resource (see denetim/audit
+   * notes throughout this session), and the farmer's actual field
+   * browser is Chrome, which fully supports this API at zero API cost.
+   * Opera (used for admin/desktop work) does not support it — this is a
+   * real Chromium browser inconsistency, not a bug in this code; see
+   * the unsupported-browser guard below.
+   *
+   * Turkish ("tr-TR") is set explicitly so recognition isn't left to
+   * guess the browser's default language.
+   */
   const startRecording = () => {
+    const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      setSpeechNotSupported(true);
+      return;
+    }
+    setSpeechNotSupported(false);
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = "tr-TR";
+    recognition.continuous = true; // Keep listening until explicitly stopped, not just one phrase
+    recognition.interimResults = false; // Only append text once a phrase is finalized, avoiding partial/duplicate words
+
+    recognition.onresult = (event: any) => {
+      let newFinalText = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          newFinalText += event.results[i][0].transcript;
+        }
+      }
+      if (newFinalText.trim()) {
+        // Appended directly into the same notes field used for typed
+        // text — per explicit design decision, spoken and typed notes
+        // share one field rather than being kept separate, regardless
+        // of whether this observation is parcel-level or tied to a
+        // (reference) tree.
+        setNotes((prev) => (prev ? `${prev.trim()} ${newFinalText.trim()}` : newFinalText.trim()));
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      // "no-speech" fires routinely (e.g. a pause) and isn't a real
+      // failure — only surface a message for genuine problems like a
+      // denied microphone permission.
+      if (event.error !== "no-speech") {
+        setError(`Ses tanıma hatası: ${event.error === "not-allowed" ? "Mikrofon izni verilmedi." : event.error}`);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+
     setIsRecording(true);
     setRecordedDuration(0);
     timerRef.current = setInterval(() => {
@@ -209,11 +284,14 @@ export default function ObservationLog() {
   };
 
   const stopRecording = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
     setIsRecording(false);
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
-    setSimulatedAudioPath(`/audio/memos/memo_${Date.now()}.mp3`);
   };
 
   const formatDuration = (sec: number) => {
@@ -234,7 +312,7 @@ export default function ObservationLog() {
     setObservationDate(new Date().toISOString().split("T")[0]);
     setNotes("");
     setBase64Photo(null);
-    setSimulatedAudioPath(null);
+    stopRecording();
     setBulkMode(false);
     setShowForm(false);
   };
@@ -588,10 +666,10 @@ export default function ObservationLog() {
 
             </div>
 
-            {/* Audio Memo Simulator */}
+            {/* Live Speech-to-Text (Web Speech API) */}
             <div className="space-y-2">
               <span className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider">Sesli Arazi Notu</span>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 {!isRecording ? (
                   <button
                     type="button"
@@ -612,16 +690,19 @@ export default function ObservationLog() {
                   </button>
                 )}
 
-                {simulatedAudioPath && (
-                  <div className="flex items-center gap-1.5 bg-[#f0f4ee] px-3 py-1.5 rounded-lg text-xs font-mono text-[#556b2f] border border-[#dee5db]">
+                {isRecording && (
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-[#556b2f]">
                     <Volume2 className="h-3.5 w-3.5" />
-                    <span>SesliNot.mp3</span>
-                    <button type="button" onClick={() => setSimulatedAudioPath(null)} className="text-[#80907a] hover:text-red-600 ml-1">
-                      <X className="h-3 w-3" />
-                    </button>
+                    <span>Dinleniyor... söylediğiniz not alanına ekleniyor</span>
                   </div>
                 )}
               </div>
+
+              {speechNotSupported && (
+                <p className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Bu tarayıcı sesli not özelliğini desteklemiyor (Opera gibi bazı tarayıcılarda çalışmaz). Sahada Chrome kullanmanız önerilir.
+                </p>
+              )}
             </div>
           </div>
 
