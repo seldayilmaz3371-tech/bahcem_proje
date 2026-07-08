@@ -158,6 +158,31 @@ export default function ObservationLog() {
   }, [lightboxPhoto]);
 
   /**
+   * Permanently deletes an entire observation entry — the note, activity
+   * type, date, and any attached photos — not just a single photo (see
+   * handleDeletePhoto above, which only removes the photo). Used for
+   * cleaning up test/mistaken entries (e.g. "deneme 1 2 3") directly
+   * from the observation history feed.
+   */
+  const handleDeleteObservation = async (obs: Observation) => {
+    if (!confirm(`"${obs.notes}" notlu gözlem kaydını ve varsa bağlı fotoğraflarını kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
+      return;
+    }
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/observations/${obs.id}`, { method: "DELETE", headers });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gözlem silinemedi.");
+      }
+      setObservations((prev) => prev.filter((o) => o.id !== obs.id));
+      setPhotos((prev) => prev.filter((p) => p.observationId !== obs.id));
+    } catch (err: any) {
+      setError(err.message || "Gözlem silinirken bir hata oluştu.");
+    }
+  };
+
+  /**
    * Permanently deletes a photo that was added by mistake (wrong parcel,
    * wrong reference tree, or simply the wrong photo). Only the photo
    * itself is removed — the parent Observation entry and its notes stay
@@ -766,13 +791,23 @@ export default function ObservationLog() {
               const typeConfig = ACTIVITY_TYPE_CONFIG[obs.activityType] || ACTIVITY_TYPE_CONFIG["Genel Gözlem"];
               const TypeIcon = typeConfig.icon;
               return (
-                <div id={`obs-card-${obs.id}`} key={obs.id} className="bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
+                <div id={`obs-card-${obs.id}`} key={obs.id} className="bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-5 shadow-sm space-y-4 flex flex-col justify-between relative group">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteObservation(obs)}
+                    title="Gözlem kaydını sil"
+                    aria-label="Gözlem kaydını sil"
+                    className="absolute top-3 right-3 p-1.5 rounded-lg text-[#a8b5a2] hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+
                   <div className="space-y-3">
                     <div className="flex justify-between items-start gap-2">
                       <span className="text-xs bg-[#f0f4ee] text-[#556b2f] px-2.5 py-1 rounded-full font-bold">
                         {getParcelName(obs.parcelId)}
                       </span>
-                      <span className="text-[10px] font-mono text-[#80907a] flex items-center gap-0.5 shrink-0">
+                      <span className="text-[10px] font-mono text-[#80907a] flex items-center gap-0.5 shrink-0 mr-6">
                         <Calendar className="h-3 w-3" />
                         {new Date(obs.observationDate).toLocaleDateString("tr-TR")}
                       </span>

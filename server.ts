@@ -1036,6 +1036,38 @@ app.delete("/api/observations/photos/:id", requireAuth, requirePermission("obser
   res.json({ success: true, message: "Fotoğraf başarıyla silindi." });
 }));
 
+// Permanently deletes an entire field observation entry (note, activity
+// type, date — the whole record), not just a single photo. Cascades to
+// every photo attached to this observation (both the database record
+// and the physical file on disk via photoStorageService.deletePhotoFile,
+// same as the standalone photo-delete route above) — an observation
+// with no remaining photos to point to would otherwise leave orphaned
+// image files with nothing referencing them. This mirrors the same
+// cascade-on-delete convention already used for Equipment (deletes its
+// manuals) and Parcel (deletes its trees) elsewhere in this file.
+app.delete("/api/observations/:id", requireAuth, requirePermission("observations:delete"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const observation = await observationRepository.getById(req.params.id);
+  if (!observation) {
+    return res.status(404).json({ error: "Silinmek istenen gözlem kaydı bulunamadı." });
+  }
+
+  const linkedPhotos = await photoRepository.getByObservationId(req.params.id);
+  for (const photo of linkedPhotos) {
+    photoStorageService.deletePhotoFile(photo.originalUrl);
+    await photoRepository.delete(photo.id);
+  }
+
+  await observationRepository.delete(req.params.id);
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "OBSERVATION_DELETE",
+    `Bir saha gözlem kaydı silindi (${linkedPhotos.length} bağlı fotoğraf dahil). Not: '${observation.notes?.substring(0, 60) || ""}'`
+  );
+
+  res.json({ success: true, message: "Gözlem kaydı ve bağlı fotoğrafları başarıyla silindi." });
+}));
+
 // ==========================================
 // 4. INVENTORY & STOCK ALERT ENDPOINTS
 // ==========================================
@@ -1489,7 +1521,7 @@ app.delete("/api/ai/documents/:id", requireAuth, requirePermission("documents:de
 // recommendation is grounded in a multimodal (text + vision) analysis
 // that prioritizes the RAG document pool before falling back to the
 // model's general knowledge — see AIService.generateParcelRecommendation.
-app.post("/api/ai/recommend/:parcelId", requireAuth, requirePermission("parcels:read"), upload.array("photos", 3), asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/ai/recommend/:parcelId", requireAuth, requirePermission("ai:read"), upload.array("photos", 3), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { userQuery } = req.body;
   const uploadedFiles = (req.files as Express.Multer.File[]) || [];
 
@@ -1518,7 +1550,7 @@ app.post("/api/ai/recommend/:parcelId", requireAuth, requirePermission("parcels:
 }));
 
 // Get historical recommendation for a single parcel
-app.get("/api/ai/recommendations/:parcelId", requireAuth, requirePermission("parcels:read"), asyncHandler(async (req, res) => {
+app.get("/api/ai/recommendations/:parcelId", requireAuth, requirePermission("ai:read"), asyncHandler(async (req, res) => {
   const list = await aiRecommendationRepository.getAll();
   const parcelHistory = list.filter((r) => r.parcelId === req.params.parcelId);
   parcelHistory.sort((a, b) => new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime());
@@ -1534,7 +1566,7 @@ app.get("/api/ai/usage", requireAuth, requirePermission("ai:read"), asyncHandler
 }));
 
 // Ask general question to the RAG chat-bot assistant
-app.post("/api/ai/chat", requireAuth, requirePermission("documents:read"), asyncHandler(async (req, res) => {
+app.post("/api/ai/chat", requireAuth, requirePermission("ai:read"), asyncHandler(async (req, res) => {
   const { query } = req.body;
   if (!query) {
     return res.status(400).json({ error: "Soru alanı boş bırakılamaz." });
@@ -1600,7 +1632,7 @@ app.get("/api/parcels/:parcelId/photos-in-range", requireAuth, requirePermission
 }));
 
 // Generate an AI-powered visual growth/development analysis from parcel photos over a date range
-app.post("/api/ai/growth-analysis/:parcelId", requireAuth, requirePermission("parcels:read"), asyncHandler(async (req, res) => {
+app.post("/api/ai/growth-analysis/:parcelId", requireAuth, requirePermission("ai:read"), asyncHandler(async (req, res) => {
   const { startDate, endDate, userQuery, treeId } = req.body;
   if (!startDate || !endDate) {
     return res.status(400).json({ error: "Başlangıç ve bitiş tarihi zorunludur." });
