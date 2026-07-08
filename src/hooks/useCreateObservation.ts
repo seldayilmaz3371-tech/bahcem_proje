@@ -35,12 +35,12 @@ export function useCreateObservation() {
   /**
    * @param payload Observation fields (matches POST /api/observations' body shape)
    * @param photoBase64 Optional full base64 data URL of an attached photo
-   * @param photoOptions Optional overrides for the photo upload call — `takenAt` backdates the photo (e.g. to match a retroactively logged observation's date) and `label` tags its origin for display purposes
+   * @param photoOptions Optional overrides for the photo upload call — `takenAt` backdates the photo (e.g. to match a retroactively logged observation's date), `label` tags its origin for display purposes, and `analyzeNow` opts into immediate AI analysis for a reference-tree photo (defaults to false — see server.ts's upload-photo route for why this must be explicit rather than automatic)
    */
   const createObservation = async (
     payload: QueuedObservationPayload,
     photoBase64?: string,
-    photoOptions?: { takenAt?: string; label?: string }
+    photoOptions?: { takenAt?: string; label?: string; analyzeNow?: boolean }
   ): Promise<CreateObservationResult> => {
     setSaving(true);
     setError("");
@@ -84,6 +84,7 @@ export function useCreateObservation() {
             base64Data: photoBase64,
             takenAt: photoOptions?.takenAt,
             label: photoOptions?.label,
+            analyzeNow: photoOptions?.analyzeNow || false,
           })
         });
         if (!photoRes.ok) {

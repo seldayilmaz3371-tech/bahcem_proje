@@ -31,6 +31,12 @@ export default function TreeManager({ parcel, trees, healthSummary, plantLabel, 
   const [treeNotes, setTreeNotes] = useState("");
   const [error, setError] = useState("");
   const [uploadingPhotoForTreeId, setUploadingPhotoForTreeId] = useState<string | null>(null);
+  // Governs whether the next quick-photo upload (see handleQuickTreePhoto)
+  // also triggers an immediate Gemini analysis. Defaults to OFF: analysis
+  // used to run automatically on every reference-tree photo upload,
+  // silently consuming API quota — the farmer now opts in explicitly (see
+  // server.ts's upload-photo route for the corresponding backend change).
+  const [analyzeOnUpload, setAnalyzeOnUpload] = useState(false);
   const { createObservation } = useCreateObservation();
 
   const handleAddTree = async (e: React.FormEvent) => {
@@ -137,7 +143,7 @@ export default function TreeManager({ parcel, trees, healthSummary, plantLabel, 
           notes: `${tree.treeNumber} için hızlı ağaç fotoğrafı.`
         };
 
-        const result = await createObservation(observationPayload, reader.result as string);
+        const result = await createObservation(observationPayload, reader.result as string, { analyzeNow: analyzeOnUpload });
 
         if (!result.queued) {
           // Refresh the reference-tree health summary, since a
@@ -285,6 +291,19 @@ export default function TreeManager({ parcel, trees, healthSummary, plantLabel, 
             <Star className="h-3 w-3 inline mb-0.5" /> ile işaretlenenler &quot;Referans {plantLabel}&quot; — parselin genel durumu bunlardan hesaplanır.
           </p>
         </div>
+
+        <label className="flex items-center gap-2 bg-[#f0f4ee] border border-[#dee5db] rounded-xl px-3 py-2 w-fit cursor-pointer">
+          <input
+            type="checkbox"
+            checked={analyzeOnUpload}
+            onChange={(e) => setAnalyzeOnUpload(e.target.checked)}
+            className="h-3.5 w-3.5 rounded accent-[#556b2f]"
+          />
+          <span className="text-[11px] font-semibold text-[#5a6a55]">
+            📷 ile eklenen referans ağaç fotoğraflarını şimdi analiz et
+            {!analyzeOnUpload && <span className="text-[#8a9585]"> (kapalı — Gemini kotası tasarrufu, fotoğraf yine kaydedilir, analiz Gelişim Analizi'nde istediğinizde yapılır)</span>}
+          </span>
+        </label>
 
         {trees.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

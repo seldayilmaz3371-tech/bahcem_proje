@@ -931,7 +931,7 @@ app.post("/api/observations", requireAuth, requirePermission("observations:write
  * how many photos have been collected.
  */
 app.post("/api/observations/upload-photo", requireAuth, requirePermission("observations:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { observationId, base64Data, label, takenAt } = req.body;
+  const { observationId, base64Data, label, takenAt, analyzeNow } = req.body;
   if (!observationId || !base64Data) {
     return res.status(400).json({ error: "Gözlem referansı ve görsel verisi zorunludur." });
   }
@@ -973,31 +973,35 @@ app.post("/api/observations/upload-photo", requireAuth, requirePermission("obser
     createdAt: new Date().toISOString()
   });
 
-  // If this photo belongs to a "Referans Ağaç" (reference tree), analyze
-  // it immediately rather than waiting for a later Fotoğraflı Gelişim
-  // Analizi request — reference trees exist specifically for close,
-  // up-to-date monitoring, so their health summary should reflect a new
-  // photo right away. Photos on non-reference trees or general parcel
-  // observations are unaffected and remain analyzed lazily, preserving
-  // this application's existing "don't spend AI quota until needed"
-  // behavior (see PERFORMANS: gereksiz API çağrısı yapma).
-  try {
-    const observation = await observationRepository.getById(observationId);
-    if (observation?.treeId) {
-      const tree = await treeRepository.getById(observation.treeId);
-      if (tree?.isReferenceTree) {
-        const parcel = await parcelRepository.getById(tree.parcelId);
-        if (parcel) {
-          newPhoto.aiAnalysis = await aiService.analyzePhotoOnce(newPhoto, parcel.cropType);
+  // If this photo belongs to a "Referans Ağaç" (reference tree) AND the
+  // caller explicitly opted in (analyzeNow), analyze it immediately
+  // rather than waiting for a later Fotoğraflı Gelişim Analizi request.
+  // Defaults to NOT analyzing — automatic analysis on every reference
+  // tree photo upload was silently consuming Gemini quota on each field
+  // photo, which becomes a real problem when quota is limited (see
+  // PERFORMANS: gereksiz API çağrısı yapma). The farmer now explicitly
+  // chooses, per upload, whether this specific photo is worth spending
+  // quota on immediately versus being analyzed later in a batch via
+  // Gelişim Analizi (which remains unaffected either way).
+  if (analyzeNow === true) {
+    try {
+      const observation = await observationRepository.getById(observationId);
+      if (observation?.treeId) {
+        const tree = await treeRepository.getById(observation.treeId);
+        if (tree?.isReferenceTree) {
+          const parcel = await parcelRepository.getById(tree.parcelId);
+          if (parcel) {
+            newPhoto.aiAnalysis = await aiService.analyzePhotoOnce(newPhoto, parcel.cropType);
+          }
         }
       }
+    } catch (error) {
+      // analyzePhotoOnce already fails safe internally and never throws,
+      // but this route must never fail the upload itself even if that
+      // contract is violated by a future change — the photo is already
+      // saved successfully at this point regardless.
+      logger.error("AI", "Referans ağaç fotoğrafı için anlık analiz denemesi başarısız oldu.", error);
     }
-  } catch (error) {
-    // analyzePhotoOnce already fails safe internally and never throws,
-    // but this route must never fail the upload itself even if that
-    // contract is violated by a future change — the photo is already
-    // saved successfully at this point regardless.
-    logger.error("AI", "Referans ağaç fotoğrafı için anlık analiz denemesi başarısız oldu.", error);
   }
 
   logger.info("AI", `Image metadata extracted successfully. Simulated GPS registered: [${simulatedLatitude}, ${simulatedLongitude}]`);
