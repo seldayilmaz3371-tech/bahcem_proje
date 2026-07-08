@@ -214,7 +214,7 @@ class DatabaseManager {
         id: "role-worker",
         name: UserRole.WORKER,
         description: "Sahada tarımsal uygulamaları yapan, gözlem giren personel.",
-        permissions: ["parcels:read", "trees:read", "observations:write", "applications:write", "inventory:read"]
+        permissions: ["parcels:read", "trees:read", "observations:read", "observations:write", "applications:write", "inventory:read"]
       },
       {
         id: "role-guest",
@@ -336,6 +336,20 @@ class DatabaseManager {
         "DATABASE",
         `Migration: ${backfilledObservationCount} eski saha gözlemi kaydına varsayılan faaliyet türü ("Genel Gözlem") atandı.`
       );
+      mutated = true;
+    }
+
+    // Backfill: the "Çalışan" (Worker) role was originally seeded with
+    // observations:write but not observations:read — meaning a Worker
+    // could add field observations but the observation history screen
+    // itself (which reads the list on load) would 403 for them, breaking
+    // their core workflow. This corrects any already-existing database
+    // whose role record predates the fix; new installs get the corrected
+    // permission list directly from seedSampleData/initial schema.
+    const workerRole = this.data.roles.find((r) => r.name === "Çalışan");
+    if (workerRole && !workerRole.permissions.includes("observations:read")) {
+      workerRole.permissions.push("observations:read");
+      logger.warn("DATABASE", "Migration: 'Çalışan' rolüne eksik olan 'observations:read' izni eklendi.");
       mutated = true;
     }
 

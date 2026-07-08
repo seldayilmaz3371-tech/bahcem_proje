@@ -118,6 +118,34 @@ async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextF
 }
 
 /**
+ * Authorization middleware factory: rejects the request with 403 unless
+ * the authenticated session's permissions satisfy `requiredPermission`
+ * (exact match, "alan:*", or "*:aksiyon" wildcard — see
+ * AuthService.hasPermission). Must run AFTER requireAuth, since it reads
+ * req.permissions, which requireAuth is what populates.
+ *
+ * This is deliberately a thin wrapper around the already-implemented
+ * AuthService.hasPermission — that method existed and was fully correct
+ * before tonight but was never actually invoked by any route (see
+ * denetim bulgusu: KRİTİK-001, Katman 2). This middleware is what wires
+ * it in, rather than reimplementing the permission-matching logic here.
+ * @param requiredPermission e.g. "parcels:delete", "equipment:read"
+ */
+function requirePermission(requiredPermission: string) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const permissions = req.permissions || [];
+    if (!authService.hasPermission(permissions, requiredPermission)) {
+      logger.warn(
+        "AUTH",
+        `Yetkisiz erişim denemesi engellendi: kullanıcı '${req.user?.username || "bilinmiyor"}', gerekli izin '${requiredPermission}', mevcut izinler: [${permissions.join(", ")}]`
+      );
+      return res.status(403).json({ error: "Bu işlemi gerçekleştirmek için yetkiniz bulunmuyor." });
+    }
+    next();
+  };
+}
+
+/**
  * Async wrapper to capture and delegate controller errors cleanly
  */
 const asyncHandler = (fn: (req: any, res: Response, next: NextFunction) => Promise<any>) => {
@@ -279,11 +307,7 @@ app.post("/api/auth/change-password", requireAuth, asyncHandler(async (req: Auth
   res.json({ success: true, message: "Şifreniz başarıyla güncellendi." });
 }));
 
-app.post("/api/auth/register", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  if (req.user.role !== UserRole.ADMIN) {
-    return res.status(403).json({ error: "Yeni kullanıcı kaydetmek için Yönetici yetkiniz bulunmalıdır." });
-  }
-
+app.post("/api/auth/register", requireAuth, requirePermission("users:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { username, password, fullName, role, email, phoneNumber } = req.body;
   if (!username || !password || !fullName || !role) {
     return res.status(400).json({ error: "Tüm alanlar (kullanıcı adı, şifre, ad soyad, rol) zorunludur." });
@@ -316,14 +340,14 @@ app.post("/api/auth/register", requireAuth, asyncHandler(async (req: Authenticat
 // 2. PARCEL & TREE TRACKING ENDPOINTS
 // ==========================================
 
-app.get("/api/parcels", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/parcels", requireAuth, requirePermission("parcels:read"), asyncHandler(async (req, res) => {
   const list = await parcelRepository.getAll();
   res.json(list);
 }));
 
 const VALID_CROP_TYPES: readonly string[] = ["Zeytin", "Sebze", "Meyve"];
 
-app.post("/api/parcels", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/parcels", requireAuth, requirePermission("parcels:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { name, areaDekar, soilType, irrigationType, cropType, treeCount } = req.body;
   if (!name || !areaDekar || !soilType || !irrigationType) {
     return res.status(400).json({ error: "Parsel adı, büyüklük (dekar), toprak yapısı ve sulama yöntemi zorunludur." });
@@ -367,7 +391,7 @@ app.post("/api/parcels", requireAuth, asyncHandler(async (req: AuthenticatedRequ
   res.status(201).json(newParcel);
 }));
 
-app.put("/api/parcels/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.put("/api/parcels/:id", requireAuth, requirePermission("parcels:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { name, areaDekar, soilType, irrigationType, notes } = req.body;
   const exists = await parcelRepository.getById(req.params.id);
   if (!exists) {
@@ -392,7 +416,7 @@ app.put("/api/parcels/:id", requireAuth, asyncHandler(async (req: AuthenticatedR
   res.json(updated);
 }));
 
-app.delete("/api/parcels/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.delete("/api/parcels/:id", requireAuth, requirePermission("parcels:delete"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const exists = await parcelRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Silinmek istenen parsel bulunamadı." });
@@ -419,13 +443,13 @@ app.delete("/api/parcels/:id", requireAuth, asyncHandler(async (req: Authenticat
 // EQUIPMENT (Ekipman / Demirbaş) API
 // ==========================================================================
 
-app.get("/api/equipment", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/equipment", requireAuth, requirePermission("equipment:read"), asyncHandler(async (req, res) => {
   const list = await equipmentRepository.getAll();
   list.sort((a, b) => a.name.localeCompare(b.name, "tr"));
   res.json(list);
 }));
 
-app.post("/api/equipment", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/equipment", requireAuth, requirePermission("equipment:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { name, category, brand, model, parcelId, purchaseDate, purchasePrice, status, notes } = req.body;
   if (!name || !category) {
     return res.status(400).json({ error: "Ekipman adı ve kategorisi zorunludur." });
@@ -455,7 +479,7 @@ app.post("/api/equipment", requireAuth, asyncHandler(async (req: AuthenticatedRe
   res.status(201).json(newEquipment);
 }));
 
-app.put("/api/equipment/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.put("/api/equipment/:id", requireAuth, requirePermission("equipment:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const exists = await equipmentRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
@@ -484,7 +508,7 @@ app.put("/api/equipment/:id", requireAuth, asyncHandler(async (req: Authenticate
   res.json(updated);
 }));
 
-app.delete("/api/equipment/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.delete("/api/equipment/:id", requireAuth, requirePermission("equipment:delete"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const exists = await equipmentRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Silinmek istenen ekipman kaydı bulunamadı." });
@@ -516,7 +540,7 @@ app.delete("/api/equipment/:id", requireAuth, asyncHandler(async (req: Authentic
 // Expenses (maintenance, fuel, repair) recorded against this equipment —
 // reuses the existing Cost model's referenceId field, no separate
 // equipment-expense table needed.
-app.get("/api/equipment/:id/costs", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/equipment/:id/costs", requireAuth, requirePermission("equipment:read"), asyncHandler(async (req, res) => {
   const exists = await equipmentRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
@@ -528,7 +552,7 @@ app.get("/api/equipment/:id/costs", requireAuth, asyncHandler(async (req, res) =
 }));
 
 // Lists the manuals uploaded for one piece of equipment.
-app.get("/api/equipment/:id/documents", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/equipment/:id/documents", requireAuth, requirePermission("equipment:read"), asyncHandler(async (req, res) => {
   const exists = await equipmentRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
@@ -543,7 +567,7 @@ app.get("/api/equipment/:id/documents", requireAuth, asyncHandler(async (req, re
 // knowledge base upload, but tags the resulting document so it can be
 // searched in isolation (see AIService.processDocument's linkedEntityType
 // parameter and queryChatAssistant's documentIds scoping).
-app.post("/api/equipment/:id/documents", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/equipment/:id/documents", requireAuth, requirePermission("equipment:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const exists = await equipmentRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
@@ -581,7 +605,7 @@ app.post("/api/equipment/:id/documents", requireAuth, asyncHandler(async (req: A
 // Removes one manual belonging to this equipment. Verifies the document
 // actually belongs to this equipment before deleting (data-integrity
 // guard against deleting an unrelated document via a mismatched ID).
-app.delete("/api/equipment/:id/documents/:docId", requireAuth, asyncHandler(async (req, res) => {
+app.delete("/api/equipment/:id/documents/:docId", requireAuth, requirePermission("equipment:delete"), asyncHandler(async (req, res) => {
   const doc = await uploadedDocumentRepository.getById(req.params.docId);
   if (!doc || doc.linkedEntityType !== "equipment" || doc.linkedEntityId !== req.params.id) {
     return res.status(404).json({ error: "Bu ekipmana ait belirtilen kılavuz kaydı bulunamadı." });
@@ -600,7 +624,7 @@ app.delete("/api/equipment/:id/documents/:docId", requireAuth, asyncHandler(asyn
 // with the general farming knowledge base — per the explicit design
 // decision to prioritize accuracy over breadth for equipment
 // troubleshooting (see AIChatAssistantService.queryChatAssistant).
-app.post("/api/equipment/:id/ai-support", requireAuth, asyncHandler(async (req, res) => {
+app.post("/api/equipment/:id/ai-support", requireAuth, requirePermission("equipment:read"), asyncHandler(async (req, res) => {
   const exists = await equipmentRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Ekipman kaydı bulunamadı." });
@@ -617,7 +641,8 @@ app.post("/api/equipment/:id/ai-support", requireAuth, asyncHandler(async (req, 
   const manuals = await uploadedDocumentRepository.getByLinkedEntity("equipment", req.params.id);
   const documentIds = manuals.map((m) => m.id);
 
-  const result = await aiService.queryChatAssistant(query, documentIds);
+  const scopeLabel = `${exists.name} (${exists.category})`;
+  const result = await aiService.queryChatAssistant(query, documentIds, scopeLabel);
   res.json({
     response: result.text,
     text: result.text,
@@ -626,12 +651,12 @@ app.post("/api/equipment/:id/ai-support", requireAuth, asyncHandler(async (req, 
 }));
 
 // Tree-by-tree Tracking
-app.get("/api/parcels/:id/trees", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/parcels/:id/trees", requireAuth, requirePermission("trees:read"), asyncHandler(async (req, res) => {
   const trees = await treeRepository.getByParcelId(req.params.id);
   res.json(trees);
 }));
 
-app.post("/api/parcels/:id/trees", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/parcels/:id/trees", requireAuth, requirePermission("trees:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { treeNumber, variety, plantingYear, notes } = req.body;
   if (!treeNumber) {
     return res.status(400).json({ error: "Ağaç numarası (örn. T-12) zorunludur." });
@@ -658,7 +683,7 @@ app.post("/api/parcels/:id/trees", requireAuth, asyncHandler(async (req: Authent
   res.status(201).json(newTree);
 }));
 
-app.put("/api/trees/:id", requireAuth, asyncHandler(async (req, res) => {
+app.put("/api/trees/:id", requireAuth, requirePermission("trees:write"), asyncHandler(async (req, res) => {
   const { variety, plantingYear, notes, isReferenceTree } = req.body;
   const exists = await treeRepository.getById(req.params.id);
   if (!exists) {
@@ -676,7 +701,7 @@ app.put("/api/trees/:id", requireAuth, asyncHandler(async (req, res) => {
   res.json(updated);
 }));
 
-app.delete("/api/trees/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.delete("/api/trees/:id", requireAuth, requirePermission("trees:delete"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const exists = await treeRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Ağaç kaydı bulunamadı." });
@@ -708,7 +733,7 @@ const VALID_TREE_COUNT_CHANGE_REASONS: readonly string[] = [
   "Diğer"
 ];
 
-app.get("/api/parcels/:id/tree-count-changes", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/parcels/:id/tree-count-changes", requireAuth, requirePermission("trees:read"), asyncHandler(async (req, res) => {
   const parcel = await parcelRepository.getById(req.params.id);
   if (!parcel) {
     return res.status(404).json({ error: "Parsel bulunamadı." });
@@ -718,7 +743,7 @@ app.get("/api/parcels/:id/tree-count-changes", requireAuth, asyncHandler(async (
   res.json(logs);
 }));
 
-app.post("/api/parcels/:id/tree-count-changes", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/parcels/:id/tree-count-changes", requireAuth, requirePermission("trees:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { newCount, reason, notes, changeDate } = req.body;
 
   const parcel = await parcelRepository.getById(req.params.id);
@@ -776,7 +801,7 @@ app.post("/api/parcels/:id/tree-count-changes", requireAuth, asyncHandler(async 
 // Deterministic, AI-free health summary for a parcel, computed from its
 // "Referans Ağaç" (reference tree) records' latest structured analyses.
 // This never calls Gemini — see summarizeParcelHealthFromReferenceTrees.
-app.get("/api/parcels/:id/reference-tree-health", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/parcels/:id/reference-tree-health", requireAuth, requirePermission("trees:read"), asyncHandler(async (req, res) => {
   const parcel = await parcelRepository.getById(req.params.id);
   if (!parcel) {
     return res.status(404).json({ error: "Parsel bulunamadı." });
@@ -803,7 +828,7 @@ app.get("/api/parcels/:id/reference-tree-health", requireAuth, asyncHandler(asyn
 // reference trees exist across all parcels, and how many have never been
 // photographed. Pure aggregation over existing repository data; no
 // Gemini call involved.
-app.get("/api/reference-trees/summary", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/reference-trees/summary", requireAuth, requirePermission("trees:read"), asyncHandler(async (req, res) => {
   const summary = await treeRepository.getReferenceTreesSummary();
   res.json(summary);
 }));
@@ -840,7 +865,7 @@ function isValidNonFutureDate(dateInput: unknown): boolean {
   return inputDateOnly <= todayDateOnly;
 }
 
-app.get("/api/observations", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/observations", requireAuth, requirePermission("observations:read"), asyncHandler(async (req, res) => {
   const { activityType } = req.query;
 
   let list = await observationRepository.getAll();
@@ -855,7 +880,7 @@ app.get("/api/observations", requireAuth, asyncHandler(async (req, res) => {
   res.json(list);
 }));
 
-app.post("/api/observations", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/observations", requireAuth, requirePermission("observations:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { parcelId, treeId, activityType, notes, audioNotePath, observationDate } = req.body;
   if (!parcelId || !notes) {
     return res.status(400).json({ error: "Parsel seçimi ve gözlem notları zorunludur." });
@@ -905,7 +930,7 @@ app.post("/api/observations", requireAuth, asyncHandler(async (req: Authenticate
  * main JSON database, keeping database reads/writes fast regardless of
  * how many photos have been collected.
  */
-app.post("/api/observations/upload-photo", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/observations/upload-photo", requireAuth, requirePermission("observations:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { observationId, base64Data, label, takenAt } = req.body;
   if (!observationId || !base64Data) {
     return res.status(400).json({ error: "Gözlem referansı ve görsel verisi zorunludur." });
@@ -979,7 +1004,7 @@ app.post("/api/observations/upload-photo", requireAuth, asyncHandler(async (req:
   res.status(201).json(newPhoto);
 }));
 
-app.get("/api/observations/photos", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/observations/photos", requireAuth, requirePermission("observations:read"), asyncHandler(async (req, res) => {
   const list = await photoRepository.getAll();
   res.json(list);
 }));
@@ -989,7 +1014,7 @@ app.get("/api/observations/photos", requireAuth, asyncHandler(async (req, res) =
 // removed; the parent Observation record (and its notes) is left
 // intact, since a mistakenly attached photo is a separate concern from
 // the observation entry it was attached to.
-app.delete("/api/observations/photos/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.delete("/api/observations/photos/:id", requireAuth, requirePermission("observations:delete"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const photo = await photoRepository.getById(req.params.id);
   if (!photo) {
     return res.status(404).json({ error: "Silinmek istenen fotoğraf kaydı bulunamadı." });
@@ -1011,17 +1036,17 @@ app.delete("/api/observations/photos/:id", requireAuth, asyncHandler(async (req:
 // 4. INVENTORY & STOCK ALERT ENDPOINTS
 // ==========================================
 
-app.get("/api/inventory", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/inventory", requireAuth, requirePermission("inventory:read"), asyncHandler(async (req, res) => {
   const list = await inventoryItemRepository.getAll();
   res.json(list);
 }));
 
-app.get("/api/inventory/categories", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/inventory/categories", requireAuth, requirePermission("inventory:read"), asyncHandler(async (req, res) => {
   const categories = await inventoryCategoryRepository.getAll();
   res.json(categories);
 }));
 
-app.post("/api/inventory", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/inventory", requireAuth, requirePermission("inventory:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { name, categoryId, stockQuantity, unit, minStockAlert, brand, sku, unitPrice, type, specificDetails } = req.body;
   if (!name || !categoryId || stockQuantity === undefined || !unit || minStockAlert === undefined) {
     return res.status(400).json({ error: "Ürün adı, kategori, stok miktarı, birim ve minimum stok uyarısı zorunludur." });
@@ -1066,7 +1091,7 @@ app.post("/api/inventory", requireAuth, asyncHandler(async (req: AuthenticatedRe
   res.status(201).json(newItem);
 }));
 
-app.post("/api/inventory/adjust", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/inventory/adjust", requireAuth, requirePermission("inventory:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { id, delta, notes } = req.body;
   if (!id || delta === undefined) {
     return res.status(400).json({ error: "Ürün kimliği ve değişim miktarı zorunludur." });
@@ -1101,13 +1126,13 @@ app.post("/api/inventory/adjust", requireAuth, asyncHandler(async (req: Authenti
 // ==========================================
 
 // Costs API
-app.get("/api/finance/costs", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/finance/costs", requireAuth, requirePermission("finance:read"), asyncHandler(async (req, res) => {
   const list = await costRepository.getAll();
   list.sort((a, b) => new Date(b.costDate).getTime() - new Date(a.costDate).getTime());
   res.json(list);
 }));
 
-app.post("/api/finance/costs", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/finance/costs", requireAuth, requirePermission("finance:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { parcelId, amount, category, costDate, description, referenceId } = req.body;
   if (!amount || !category || !costDate) {
     return res.status(400).json({ error: "Tutar, gider kategorisi ve gider tarihi zorunludur." });
@@ -1134,7 +1159,7 @@ app.post("/api/finance/costs", requireAuth, asyncHandler(async (req: Authenticat
 
 // Removes a single expense/cost record. Used when a wrong amount or
 // incorrect information was entered by mistake.
-app.delete("/api/finance/costs/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.delete("/api/finance/costs/:id", requireAuth, requirePermission("finance:delete"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const exists = await costRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Silinmek istenen gider kaydı bulunamadı." });
@@ -1152,13 +1177,13 @@ app.delete("/api/finance/costs/:id", requireAuth, asyncHandler(async (req: Authe
 }));
 
 // Sales API
-app.get("/api/finance/sales", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/finance/sales", requireAuth, requirePermission("finance:read"), asyncHandler(async (req, res) => {
   const list = await saleRepository.getAll();
   list.sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime());
   res.json(list);
 }));
 
-app.post("/api/finance/sales", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/finance/sales", requireAuth, requirePermission("finance:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { buyerName, productType, quantityKg, unitPrice, isOrganikSaglikBrand, saleDate } = req.body;
   if (!productType || !quantityKg || !unitPrice || !saleDate) {
     return res.status(400).json({ error: "Ürün türü, miktar (kg), birim fiyat ve satış tarihi zorunludur." });
@@ -1190,7 +1215,7 @@ app.post("/api/finance/sales", requireAuth, asyncHandler(async (req: Authenticat
 
 // Removes a single sale/revenue record. Used when a wrong amount or
 // incorrect information was entered by mistake.
-app.delete("/api/finance/sales/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.delete("/api/finance/sales/:id", requireAuth, requirePermission("finance:delete"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const exists = await saleRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Silinmek istenen satış kaydı bulunamadı." });
@@ -1208,13 +1233,13 @@ app.delete("/api/finance/sales/:id", requireAuth, asyncHandler(async (req: Authe
 }));
 
 // Harvest Logs API
-app.get("/api/finance/harvests", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/finance/harvests", requireAuth, requirePermission("finance:read"), asyncHandler(async (req, res) => {
   const list = await harvestRepository.getAll();
   list.sort((a, b) => new Date(b.harvestDate).getTime() - new Date(a.harvestDate).getTime());
   res.json(list);
 }));
 
-app.post("/api/finance/harvests", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/finance/harvests", requireAuth, requirePermission("finance:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { parcelId, quantityKg, qualityGrade, notes, harvestDate, personnelCount, laborCost, transportCost, otherCosts } = req.body;
   if (!parcelId || !quantityKg || !qualityGrade || !harvestDate) {
     return res.status(400).json({ error: "Parsel seçimi, miktar (kg), kalite sınıfı ve hasat tarihi zorunludur." });
@@ -1251,7 +1276,7 @@ app.post("/api/finance/harvests", requireAuth, asyncHandler(async (req: Authenti
 
 // Removes a single harvest record. Used when a wrong amount or incorrect
 // information was entered by mistake.
-app.delete("/api/finance/harvests/:id", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.delete("/api/finance/harvests/:id", requireAuth, requirePermission("finance:delete"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const exists = await harvestRepository.getById(req.params.id);
   if (!exists) {
     return res.status(404).json({ error: "Silinmek istenen hasat kaydı bulunamadı." });
@@ -1272,12 +1297,12 @@ app.delete("/api/finance/harvests/:id", requireAuth, asyncHandler(async (req: Au
 // 6. SYSTEM SETTINGS & GENERAL UTILITIES
 // ==========================================
 
-app.get("/api/settings", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/settings", requireAuth, requirePermission("settings:read"), asyncHandler(async (req, res) => {
   const dict = await settingService.getSettingsDict();
   res.json(dict);
 }));
 
-app.post("/api/settings", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/settings", requireAuth, requirePermission("settings:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { key, value } = req.body;
   if (!key || value === undefined) {
     return res.status(400).json({ error: "Ayar anahtarı ve değeri zorunludur." });
@@ -1288,13 +1313,13 @@ app.post("/api/settings", requireAuth, asyncHandler(async (req: AuthenticatedReq
 }));
 
 // Weather Records API
-app.get("/api/weather", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/weather", requireAuth, requirePermission("weather:read"), asyncHandler(async (req, res) => {
   const history = await weatherRepository.getAll();
   history.sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
   res.json(history);
 }));
 
-app.post("/api/weather/record", requireAuth, asyncHandler(async (req, res) => {
+app.post("/api/weather/record", requireAuth, requirePermission("weather:write"), asyncHandler(async (req, res) => {
   const { recordDate, tempMax, tempMin, humidity, windSpeed, hasFrostRisk, precipitationMm, condition } = req.body;
   if (!recordDate || tempMax === undefined || tempMin === undefined) {
     return res.status(400).json({ error: "Tarih, en yüksek ve en düşük sıcaklıklar zorunludur." });
@@ -1319,7 +1344,7 @@ app.post("/api/weather/record", requireAuth, asyncHandler(async (req, res) => {
 // Never returns fabricated data: if the external API is unreachable, this
 // endpoint responds with 503 and a clear error rather than synthetic values.
 // Pass ?refresh=true to bypass the service's short-lived in-memory cache.
-app.get("/api/weather/live-forecast", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/weather/live-forecast", requireAuth, requirePermission("weather:read"), asyncHandler(async (req, res) => {
   const forceRefresh = req.query.refresh === "true";
   try {
     const forecast = await weatherService.getLiveForecast(forceRefresh);
@@ -1333,7 +1358,7 @@ app.get("/api/weather/live-forecast", requireAuth, asyncHandler(async (req, res)
 }));
 
 // System activity log tracking logs
-app.get("/api/activities", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/activities", requireAuth, requirePermission("activities:read"), asyncHandler(async (req, res) => {
   const list = await activityLogRepository.getAll();
   list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   res.json(list.slice(0, 50)); // Return 50 most recent logs
@@ -1364,14 +1389,14 @@ app.post("/api/notifications/mark-read", requireAuth, asyncHandler(async (req: A
 // Havuzu. This is purely a display-scope filter; it does not affect
 // retrieval isolation, which is already enforced independently by
 // searchSimilarChunks'/queryChatAssistant's documentIds parameter.
-app.get("/api/ai/documents", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/ai/documents", requireAuth, requirePermission("documents:read"), asyncHandler(async (req, res) => {
   const docs = await uploadedDocumentRepository.getAll();
   const generalDocs = docs.filter((doc) => !doc.linkedEntityType);
   res.json(generalDocs);
 }));
 
 // Parse a PDF or DOCX file and extract its text content
-app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/ai/documents/parse", requireAuth, requirePermission("documents:write"), upload.single("file"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "Lütfen bir dosya yükleyin." });
   }
@@ -1421,7 +1446,7 @@ app.post("/api/ai/documents/parse", requireAuth, upload.single("file"), asyncHan
 }));
 
 // Index a new text document into the vector RAG engine
-app.post("/api/ai/documents/upload", requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/ai/documents/upload", requireAuth, requirePermission("documents:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { fileName, fileType, textContent } = req.body;
   if (!fileName || !textContent) {
     return res.status(400).json({ error: "Doküman adı ve doküman içeriği (metin) zorunludur." });
@@ -1445,7 +1470,7 @@ app.post("/api/ai/documents/upload", requireAuth, asyncHandler(async (req: Authe
 }));
 
 // Remove a document and clear its vector spaces
-app.delete("/api/ai/documents/:id", requireAuth, asyncHandler(async (req, res) => {
+app.delete("/api/ai/documents/:id", requireAuth, requirePermission("documents:delete"), asyncHandler(async (req, res) => {
   const success = await aiService.removeDocument(req.params.id);
   if (!success) {
     return res.status(404).json({ error: "Doküman kaydı bulunamadı." });
@@ -1460,7 +1485,7 @@ app.delete("/api/ai/documents/:id", requireAuth, asyncHandler(async (req, res) =
 // recommendation is grounded in a multimodal (text + vision) analysis
 // that prioritizes the RAG document pool before falling back to the
 // model's general knowledge — see AIService.generateParcelRecommendation.
-app.post("/api/ai/recommend/:parcelId", requireAuth, upload.array("photos", 3), asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/ai/recommend/:parcelId", requireAuth, requirePermission("parcels:read"), upload.array("photos", 3), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { userQuery } = req.body;
   const uploadedFiles = (req.files as Express.Multer.File[]) || [];
 
@@ -1489,7 +1514,7 @@ app.post("/api/ai/recommend/:parcelId", requireAuth, upload.array("photos", 3), 
 }));
 
 // Get historical recommendation for a single parcel
-app.get("/api/ai/recommendations/:parcelId", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/ai/recommendations/:parcelId", requireAuth, requirePermission("parcels:read"), asyncHandler(async (req, res) => {
   const list = await aiRecommendationRepository.getAll();
   const parcelHistory = list.filter((r) => r.parcelId === req.params.parcelId);
   parcelHistory.sort((a, b) => new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime());
@@ -1500,12 +1525,12 @@ app.get("/api/ai/recommendations/:parcelId", requireAuth, asyncHandler(async (re
 // limits (see AiUsageTrackerService). This is a self-reported estimate,
 // not a live, guaranteed-accurate figure from Google — the frontend
 // must present it accordingly.
-app.get("/api/ai/usage", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/ai/usage", requireAuth, requirePermission("ai:read"), asyncHandler(async (req, res) => {
   res.json(aiUsageTrackerService.getUsageSnapshot());
 }));
 
 // Ask general question to the RAG chat-bot assistant
-app.post("/api/ai/chat", requireAuth, asyncHandler(async (req, res) => {
+app.post("/api/ai/chat", requireAuth, requirePermission("documents:read"), asyncHandler(async (req, res) => {
   const { query } = req.body;
   if (!query) {
     return res.status(400).json({ error: "Soru alanı boş bırakılamaz." });
@@ -1524,7 +1549,7 @@ app.post("/api/ai/chat", requireAuth, asyncHandler(async (req, res) => {
 
 
 // Get photos for a parcel within a date range (live preview before running AI analysis)
-app.get("/api/parcels/:parcelId/photos-in-range", requireAuth, asyncHandler(async (req, res) => {
+app.get("/api/parcels/:parcelId/photos-in-range", requireAuth, requirePermission("observations:read"), asyncHandler(async (req, res) => {
   // startDate/endDate are OPTIONAL: when the caller (e.g. the AI Karar
   // Destek gallery picker) omits them, every photo for the parcel is
   // returned. When provided, both must be present together and filter
@@ -1571,7 +1596,7 @@ app.get("/api/parcels/:parcelId/photos-in-range", requireAuth, asyncHandler(asyn
 }));
 
 // Generate an AI-powered visual growth/development analysis from parcel photos over a date range
-app.post("/api/ai/growth-analysis/:parcelId", requireAuth, asyncHandler(async (req, res) => {
+app.post("/api/ai/growth-analysis/:parcelId", requireAuth, requirePermission("parcels:read"), asyncHandler(async (req, res) => {
   const { startDate, endDate, userQuery, treeId } = req.body;
   if (!startDate || !endDate) {
     return res.status(400).json({ error: "Başlangıç ve bitiş tarihi zorunludur." });
