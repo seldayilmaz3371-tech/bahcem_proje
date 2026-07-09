@@ -59,7 +59,20 @@ const app = express();
 const PORT = 3000;
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB per file
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB per file — used for AI diagnosis photos (up to 3 per request, see /api/ai/recommend/:parcelId)
+});
+
+// RAG knowledge-base documents (PDFs, official guides) are routinely
+// much larger than a phone photo — a real olive-farming reference PDF
+// can easily exceed 8 MB, especially if scanned/image-heavy. This gets
+// its own, higher-limit multer instance rather than raising the shared
+// `upload` limit above, which would also raise the limit for the
+// 3-photo diagnosis upload and increase that endpoint's peak memory
+// usage (multer.memoryStorage() holds the entire file in RAM) for no
+// real benefit — diagnosis photos never need to be this large.
+const uploadDocument = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB per document
 });
 
 // Enable JSON parsing with large limits to support photo/document payloads
@@ -1432,7 +1445,7 @@ app.get("/api/ai/documents", requireAuth, requirePermission("documents:read"), a
 }));
 
 // Parse a PDF or DOCX file and extract its text content
-app.post("/api/ai/documents/parse", requireAuth, requirePermission("documents:write"), upload.single("file"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+app.post("/api/ai/documents/parse", requireAuth, requirePermission("documents:write"), uploadDocument.single("file"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "Lütfen bir dosya yükleyin." });
   }
@@ -1659,7 +1672,13 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
       return res.status(400).json({ error: "İzin verilenden fazla dosya yüklemeye çalıştınız." });
     }
     if (err.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({ error: "Yüklenen dosyalardan biri izin verilen boyut sınırını (8 MB) aşıyor." });
+      // Document uploads (field "file", via uploadDocument) and AI
+      // diagnosis photo uploads (field "photos", via upload) have
+      // different size limits — report the one that actually applies
+      // rather than a single hardcoded figure that would be wrong for
+      // whichever route didn't trigger it.
+      const limitText = err.field === "file" ? "30 MB" : "8 MB";
+      return res.status(400).json({ error: `Yüklenen dosyalardan biri izin verilen boyut sınırını (${limitText}) aşıyor.` });
     }
     return res.status(400).json({ error: "Dosya yükleme sırasında bir hata oluştu." });
   }
