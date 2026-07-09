@@ -797,7 +797,7 @@ export default function ObservationLog() {
                     onClick={() => handleDeleteObservation(obs)}
                     title="Gözlem kaydını sil"
                     aria-label="Gözlem kaydını sil"
-                    className="absolute top-3 right-3 p-1.5 rounded-lg text-[#a8b5a2] hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                    className="absolute top-3 right-3 p-1.5 rounded-lg bg-white/80 text-[#a8b5a2] hover:text-red-600 hover:bg-red-50 transition-all"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

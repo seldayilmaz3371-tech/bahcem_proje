@@ -167,6 +167,19 @@ export default function EquipmentManager() {
     }
   };
 
+  // NOTE on navigation pattern: unlike ParcelManager (which shows list +
+  // detail side-by-side on desktop via `lg:` breakpoints, collapsing to a
+  // single mobile-friendly pane below that), this screen always fully
+  // replaces the list with the detail view, on every screen size. This
+  // is a deliberate exception, not an inconsistency that was missed: the
+  // equipment detail view (3 tabs — manuals, AI support chat, costs) is
+  // meaningfully richer than a parcel's tree grid, and would feel
+  // cramped in a `lg:col-span-2` side panel even on a desktop-width
+  // screen — the AI chat interface in particular benefits from full
+  // width for message bubbles. Mobile usability was the deciding
+  // factor across this whole app (see ParcelManager's fix), and on
+  // mobile this full-page pattern is exactly what ParcelManager was
+  // changed to match, not diverge from.
   if (selectedEquipment) {
     return (
       <EquipmentDetailPanel
@@ -326,7 +339,7 @@ export default function EquipmentManager() {
             >
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteEquipment(eq); }}
-                className="absolute top-4 right-4 p-1.5 rounded-lg text-[#a8b5a2] hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                className="absolute top-4 right-4 p-1.5 rounded-lg bg-white/80 text-[#a8b5a2] hover:text-red-600 hover:bg-red-50 transition-all"
                 title="Ekipmanı Sil"
               >
                 <Trash2 className="h-4 w-4" />
