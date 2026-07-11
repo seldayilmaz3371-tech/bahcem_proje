@@ -123,7 +123,7 @@ export default function Dashboard({ setActiveTab }: DashboardProps) {
           activityType: "Genel Gözlem",
           notes: quickNotes,
         },
-        quickPhoto || undefined
+        quickPhoto ? [quickPhoto] : undefined
       );
 
       setQuickSuccessMessage(

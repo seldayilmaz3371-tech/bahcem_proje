@@ -94,7 +94,7 @@ export default function ObservationLog() {
   const [activeFilter, setActiveFilter] = useState<ObservationActivityType | null>(null);
   
   // Photo Simulation
-  const [base64Photo, setBase64Photo] = useState<string | null>(null);
+  const [selectedPhotoBase64s, setSelectedPhotoBase64s] = useState<string[]>([]);
   
   // Audio Note Simulation
   const [isRecording, setIsRecording] = useState(false);
@@ -230,14 +230,31 @@ export default function ObservationLog() {
 
   // Handle Photo Import / simulation
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Each file is read independently and appended as it finishes —
+    // FileReader is async, so results are pushed via the functional
+    // setState form rather than collected into a local array first,
+    // which would risk a stale closure overwriting an earlier photo's
+    // result if two files finish reading in a different order.
+    Array.from(files).forEach((file) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setBase64Photo(reader.result as string);
+        setSelectedPhotoBase64s((prev) => [...prev, reader.result as string]);
       };
       reader.readAsDataURL(file);
-    }
+    });
+
+    // Allows re-selecting the same file(s) again later in the same
+    // session (e.g. remove then re-add) — without this, the browser
+    // treats an identical selection as "no change" and onChange never
+    // fires a second time.
+    e.target.value = "";
+  };
+
+  const handleRemoveSelectedPhoto = (index: number) => {
+    setSelectedPhotoBase64s((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Simulated Voice Note
@@ -336,7 +353,7 @@ export default function ObservationLog() {
     setActivityType("Genel Gözlem");
     setObservationDate(new Date().toISOString().split("T")[0]);
     setNotes("");
-    setBase64Photo(null);
+    setSelectedPhotoBase64s([]);
     stopRecording();
     setBulkMode(false);
     setShowForm(false);
@@ -394,7 +411,7 @@ export default function ObservationLog() {
 
       const result = await createObservation(
         observationPayload,
-        base64Photo || undefined,
+        selectedPhotoBase64s.length > 0 ? selectedPhotoBase64s : undefined,
         { takenAt: observationDate, label: "Saha Gözlemi Görseli" }
       );
 
@@ -447,7 +464,7 @@ export default function ObservationLog() {
             observationDate,
             notes,
           },
-          base64Photo || undefined,
+          selectedPhotoBase64s.length > 0 ? selectedPhotoBase64s : undefined,
           { takenAt: observationDate, label: "Saha Gözlemi Görseli (Toplu Giriş)" }
         );
 
@@ -656,6 +673,7 @@ export default function ObservationLog() {
                     type="file"
                     accept="image/*"
                     capture="environment"
+                    multiple
                     onChange={handlePhotoSelect}
                     className="hidden"
                   />
@@ -667,29 +685,31 @@ export default function ObservationLog() {
                   <input
                     type="file"
                     accept="image/*"
+                    multiple
                     onChange={handlePhotoSelect}
                     className="hidden"
                   />
                 </label>
 
-                {base64Photo && (
-                  <div className="relative h-12 w-12 rounded-lg overflow-hidden border border-[#cdd4ca]">
-                    <img src={base64Photo} alt="Preview" className="h-full w-full object-cover" />
+                {selectedPhotoBase64s.map((photoBase64, index) => (
+                  <div key={index} className="relative h-12 w-12 rounded-lg overflow-hidden border border-[#cdd4ca]">
+                    <img src={photoBase64} alt={`Önizleme ${index + 1}`} className="h-full w-full object-cover" />
                     <button
                       type="button"
-                      onClick={() => setBase64Photo(null)}
+                      onClick={() => handleRemoveSelectedPhoto(index)}
                       className="absolute top-0 right-0 p-0.5 bg-black/60 text-white rounded-bl"
                     >
                       <X className="h-3 w-3" />
                     </button>
                   </div>
-                )}
+                ))}
               </div>
               <p className="text-[10px] text-[#80907a] italic">
-                Fotoğraf yüklendiğinde Mersin Değirmençay koordinatları (EXIF GPS verisi) otomatik eklenir.
+                Fotoğraf yüklendiğinde Mersin Değirmençay koordinatları (EXIF GPS verisi) otomatik eklenir. Birden fazla fotoğraf seçebilirsiniz.
               </p>
 
             </div>
+
 
             {/* Live Speech-to-Text (Web Speech API) */}
             <div className="space-y-2">

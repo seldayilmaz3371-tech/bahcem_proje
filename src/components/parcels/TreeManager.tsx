@@ -143,7 +143,7 @@ export default function TreeManager({ parcel, trees, healthSummary, plantLabel, 
           notes: `${tree.treeNumber} için hızlı ağaç fotoğrafı.`
         };
 
-        const result = await createObservation(observationPayload, reader.result as string, { analyzeNow: analyzeOnUpload });
+        const result = await createObservation(observationPayload, [reader.result as string], { analyzeNow: analyzeOnUpload });
 
         if (!result.queued) {
           // Refresh the reference-tree health summary, since a

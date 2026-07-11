@@ -24,8 +24,8 @@ export interface QueuedObservation {
   queueId: string;
   queuedAt: string;
   payload: QueuedObservationPayload;
-  /** Full base64 data URL of an attached photo, if any. */
-  photoBase64?: string;
+  /** Full base64 data URLs of every attached photo, if any (an observation may have zero, one, or several). */
+  photoBase64s?: string[];
 }
 
 /** Result of attempting to flush the queue against the real API. */
@@ -41,10 +41,11 @@ const STORE_NAME = "pending_observations";
 /**
  * Maximum number of observations that may be queued while offline. This
  * is a deliberate, honest limit: unbounded queuing risks the browser's
- * storage quota being exceeded (photos are the dominant size), which
- * would surface as an unpredictable IndexedDB failure rather than a
- * clear, anticipated message to the farmer. 30 was chosen as generous
- * for a single day's fieldwork while keeping worst-case storage bounded.
+ * storage quota being exceeded (photos are the dominant size — and each
+ * queued observation may now hold several, not just one), which would
+ * surface as an unpredictable IndexedDB failure rather than a clear,
+ * anticipated message to the farmer. 30 was chosen as generous for a
+ * single day's fieldwork while keeping worst-case storage bounded.
  */
 export const MAX_QUEUED_OBSERVATIONS = 30;
 
@@ -163,16 +164,18 @@ export async function syncQueuedObservations(authToken: string): Promise<SyncRes
         throw new Error(obsData.error || "Gözlem kaydedilemedi.");
       }
 
-      if (item.photoBase64) {
-        await fetch("/api/observations/upload-photo", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            observationId: obsData.id,
-            base64Data: item.photoBase64,
-            takenAt: item.payload.observationDate,
-          }),
-        });
+      if (item.photoBase64s && item.photoBase64s.length > 0) {
+        for (const photoBase64 of item.photoBase64s) {
+          await fetch("/api/observations/upload-photo", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              observationId: obsData.id,
+              base64Data: photoBase64,
+              takenAt: item.payload.observationDate,
+            }),
+          });
+        }
       }
 
       await removeQueuedObservation(item.queueId);

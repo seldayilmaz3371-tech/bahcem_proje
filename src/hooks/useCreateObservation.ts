@@ -34,12 +34,12 @@ export function useCreateObservation() {
 
   /**
    * @param payload Observation fields (matches POST /api/observations' body shape)
-   * @param photoBase64 Optional full base64 data URL of an attached photo
-   * @param photoOptions Optional overrides for the photo upload call — `takenAt` backdates the photo (e.g. to match a retroactively logged observation's date), `label` tags its origin for display purposes, and `analyzeNow` opts into immediate AI analysis for a reference-tree photo (defaults to false — see server.ts's upload-photo route for why this must be explicit rather than automatic)
+   * @param photoBase64s Optional full base64 data URLs of every attached photo (zero, one, or several)
+   * @param photoOptions Optional overrides applied to EVERY photo in this call — `takenAt` backdates the photos (e.g. to match a retroactively logged observation's date), `label` tags their origin for display purposes, and `analyzeNow` opts into immediate AI analysis for a reference-tree photo (defaults to false — see server.ts's upload-photo route for why this must be explicit rather than automatic)
    */
   const createObservation = async (
     payload: QueuedObservationPayload,
-    photoBase64?: string,
+    photoBase64s?: string[],
     photoOptions?: { takenAt?: string; label?: string; analyzeNow?: boolean }
   ): Promise<CreateObservationResult> => {
     setSaving(true);
@@ -65,7 +65,7 @@ export function useCreateObservation() {
           queueId: crypto.randomUUID(),
           queuedAt: new Date().toISOString(),
           payload,
-          photoBase64,
+          photoBase64s,
         });
         return { queued: true };
       }
@@ -75,21 +75,29 @@ export function useCreateObservation() {
         throw new Error(obsData.error || "Gözlem kaydedilemedi.");
       }
 
-      if (photoBase64) {
-        const photoRes = await fetch("/api/observations/upload-photo", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            observationId: obsData.id,
-            base64Data: photoBase64,
-            takenAt: photoOptions?.takenAt,
-            label: photoOptions?.label,
-            analyzeNow: photoOptions?.analyzeNow || false,
-          })
-        });
-        if (!photoRes.ok) {
-          const photoData = await photoRes.json();
-          throw new Error(photoData.error || "Fotoğraf yüklenemedi.");
+      // Uploaded sequentially (not in parallel) so a slow field
+      // connection doesn't fire several large base64 uploads at once —
+      // each photo is a fully independent call to the existing
+      // single-photo endpoint, matching how this observation's photos
+      // are stored (see Photo.observationId, a one-to-many relation
+      // already supported by the data layer with no schema change).
+      if (photoBase64s && photoBase64s.length > 0) {
+        for (const photoBase64 of photoBase64s) {
+          const photoRes = await fetch("/api/observations/upload-photo", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              observationId: obsData.id,
+              base64Data: photoBase64,
+              takenAt: photoOptions?.takenAt,
+              label: photoOptions?.label,
+              analyzeNow: photoOptions?.analyzeNow || false,
+            })
+          });
+          if (!photoRes.ok) {
+            const photoData = await photoRes.json();
+            throw new Error(photoData.error || "Fotoğraf yüklenemedi.");
+          }
         }
       }
 
