@@ -127,6 +127,7 @@ export default function App() {
         activeTab={activeTab} 
         setActiveTab={handleActiveTabChange} 
         user={user} 
+        permissions={permissions}
         onLogout={handleLogout}
         isMobileOpen={isMobileSidebarOpen}
         onMobileClose={() => setIsMobileSidebarOpen(false)}

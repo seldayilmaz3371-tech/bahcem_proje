@@ -274,8 +274,13 @@ export default function ParcelManager() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Side: Parcel List */}
-        <div className="lg:col-span-1 space-y-4">
+        {/* Left Side: Parcel List — on mobile, hidden once a parcel is
+            selected (the detail panel takes over the full screen instead
+            of stacking below a potentially long list, which previously
+            required scrolling past the whole list to see what you just
+            tapped). Always visible on lg+ screens, matching the original
+            split-view behavior exactly. */}
+        <div className={`lg:col-span-1 space-y-4 ${selectedParcel ? "hidden lg:block" : ""}`}>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-[#5a6a55] uppercase tracking-wider">Parselleriniz ({parcels.length})</h2>
           </div>
@@ -336,11 +341,20 @@ export default function ParcelManager() {
           </div>
         </div>
 
-        {/* Right Side: Selected Parcel Detail */}
-        <div className="lg:col-span-2 space-y-4">
+        {/* Right Side: Selected Parcel Detail — on mobile, only rendered
+            once a parcel is actually selected (see the list column above);
+            the empty-state placeholder below is only relevant on lg+
+            screens, where the list is always visible alongside it. */}
+        <div className={`lg:col-span-2 space-y-4 ${!selectedParcel ? "hidden lg:block" : ""}`}>
           {selectedParcel ? (
             <div className="bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-6 shadow-sm space-y-6">
-              <div className="border-b border-[#f0f4ee] pb-4">
+              <div className="border-b border-[#f0f4ee] pb-4 space-y-2">
+                <button
+                  onClick={() => setSelectedParcel(null)}
+                  className="lg:hidden text-xs font-semibold text-[#556b2f] hover:underline flex items-center gap-1"
+                >
+                  ← Parsel Listesine Dön
+                </button>
                 <h2 className="text-xl font-bold font-display text-[#1a2416]">{selectedParcel.name} - Detaylı {plantLabel} Listesi</h2>
                 <p className="text-xs text-[#5a6a55] mt-0.5">
                   Ürün: <span className="font-semibold text-[#1a2416]">{selectedParcel.cropType}</span> | Toprak: <span className="font-semibold text-[#1a2416]">{selectedParcel.soilType}</span> | Sulama: <span className="font-semibold text-[#1a2416]">{selectedParcel.irrigationType}</span>

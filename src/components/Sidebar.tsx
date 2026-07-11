@@ -30,6 +30,8 @@ interface SidebarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   user: User;
+  /** Session's granted permission strings (from login/session response) — see hasPermission below. */
+  permissions: string[];
   onLogout: () => void;
   /** Whether the mobile drawer is currently open. Ignored on desktop, where the sidebar is always visible (see the md: breakpoint classes below). */
   isMobileOpen: boolean;
@@ -37,7 +39,27 @@ interface SidebarProps {
   onMobileClose: () => void;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, user, onLogout, isMobileOpen, onMobileClose }: SidebarProps) {
+/**
+ * Client-side mirror of AuthService.hasPermission (server/services/auth.service.ts).
+ * Deliberately duplicated rather than shared: the frontend and backend are
+ * separate build targets in this project (see src/types.ts already
+ * mirroring server/models.ts), and this is a small, stable, pure
+ * function — not worth introducing a shared-code build step for.
+ *
+ * Supports the same three match forms the backend does: exact match,
+ * "alan:*" domain wildcard, and "*:aksiyon" action wildcard (plus "*"
+ * for Admin). This only controls which menu items are OFFERED — it is
+ * not a security boundary by itself; the backend's own requirePermission
+ * checks (already wired in server.ts) are what actually enforce access
+ * even if this menu were somehow bypassed.
+ */
+function hasPermission(permissions: string[], required: string): boolean {
+  if (permissions.includes("*") || permissions.includes(required)) return true;
+  const [domain, action] = required.split(":");
+  return permissions.includes(`${domain}:*`) || permissions.includes(`*:${action}`);
+}
+
+export default function Sidebar({ activeTab, setActiveTab, user, permissions, onLogout, isMobileOpen, onMobileClose }: SidebarProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -84,18 +106,51 @@ export default function Sidebar({ activeTab, setActiveTab, user, onLogout, isMob
     return <Info className="h-4 w-4 text-[#556b2f]" />;
   };
 
-  const menuItems = [
-    { id: "dashboard", label: "Tarla Paneli", icon: LayoutDashboard },
-    { id: "parcels", label: "Parseller & Ağaçlar", icon: Map },
-    { id: "observations", label: "Saha Gözlemleri", icon: Eye },
-    { id: "inventory", label: "Stok & Depo", icon: Package },
-    { id: "equipment", label: "Ekipman & Demirbaş", icon: Wrench },
-    { id: "finance", label: "Mali Defter & Gelir", icon: CircleDollarSign },
-    { id: "ai-advisor", label: "Yapay Zeka Karar Destek", icon: BrainCircuit },
-    { id: "photo-growth", label: "Fotoğraflı Gelişim Analizi", icon: TrendingUp },
-    { id: "document-hub", label: "RAG Doküman Havuzu", icon: FolderOpen },
-    { id: "activities", label: "Sistem Logları", icon: ShieldAlert },
+  const menuGroups: { title: string; items: { id: string; label: string; icon: typeof LayoutDashboard; requiredPermission: string | null }[] }[] = [
+    {
+      title: "Saha Yönetimi",
+      items: [
+        { id: "dashboard", label: "Tarla Paneli", icon: LayoutDashboard, requiredPermission: null },
+        { id: "parcels", label: "Parseller & Ağaçlar", icon: Map, requiredPermission: "parcels:read" },
+        { id: "observations", label: "Saha Gözlemleri", icon: Eye, requiredPermission: "observations:read" },
+      ],
+    },
+    {
+      title: "Kaynaklar",
+      items: [
+        { id: "inventory", label: "Stok & Depo", icon: Package, requiredPermission: "inventory:read" },
+        { id: "equipment", label: "Ekipman & Demirbaş", icon: Wrench, requiredPermission: "equipment:read" },
+        { id: "finance", label: "Mali Defter & Gelir", icon: CircleDollarSign, requiredPermission: "finance:read" },
+      ],
+    },
+    {
+      title: "Yapay Zeka",
+      items: [
+        { id: "ai-advisor", label: "Karar Destek", icon: BrainCircuit, requiredPermission: "ai:read" },
+        { id: "photo-growth", label: "Gelişim Analizi", icon: TrendingUp, requiredPermission: "ai:read" },
+        { id: "document-hub", label: "Doküman Havuzu", icon: FolderOpen, requiredPermission: "documents:read" },
+      ],
+    },
+    {
+      title: "Sistem",
+      items: [
+        { id: "activities", label: "Sistem Logları", icon: ShieldAlert, requiredPermission: "activities:read" },
+      ],
+    },
   ];
+
+  // Only offer menu items (and their group headers) the current session
+  // can actually use — a Worker/Guest whose role lacks e.g. equipment:read
+  // would otherwise see "Ekipman & Demirbaş" in the menu and only
+  // discover it's blocked after tapping it and getting a 403 from the
+  // server. A group with zero visible items after filtering is dropped
+  // entirely, rather than showing an empty section header.
+  const visibleMenuGroups = menuGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.requiredPermission === null || hasPermission(permissions, item.requiredPermission)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <>
@@ -197,29 +252,36 @@ export default function Sidebar({ activeTab, setActiveTab, user, onLogout, isMob
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              id={`sidebar-nav-${item.id}`}
-              key={item.id}
-              onClick={() => {
-                setActiveTab(item.id as ActiveTab);
-                onMobileClose();
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${
-                isActive 
-                  ? "bg-[#556b2f] text-white shadow-sm shadow-black/10" 
-                  : "text-[#abbfad] hover:bg-[#2d3f28] hover:text-white"
-              }`}
-            >
-              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-[#879d8a]"}`} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+      <nav className="flex-1 px-3 py-6 space-y-5 overflow-y-auto">
+        {visibleMenuGroups.map((group) => (
+          <div key={group.title} className="space-y-1">
+            <h3 className="px-4 mb-1.5 text-[10px] font-bold text-[#6f8571] uppercase tracking-widest">
+              {group.title}
+            </h3>
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  id={`sidebar-nav-${item.id}`}
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id as ActiveTab);
+                    onMobileClose();
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${
+                    isActive 
+                      ? "bg-[#556b2f] text-white shadow-sm shadow-black/10" 
+                      : "text-[#abbfad] hover:bg-[#2d3f28] hover:text-white"
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-[#879d8a]"}`} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* Logout Area */}

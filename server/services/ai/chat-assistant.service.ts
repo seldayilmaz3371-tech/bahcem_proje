@@ -29,6 +29,16 @@ const GREETING_PATTERNS = ["merhaba", "selam", "günaydın", "iyi günler", "te�
 const MAX_GREETING_MESSAGE_LENGTH = 30;
 
 /**
+ * Minimum cosine similarity score for a RAG chunk to be considered a
+ * genuine match for the user's question. Below this, the retrieved
+ * chunk is likely unrelated "closest available" noise rather than an
+ * actual answer — in that case the knowledge base is treated as having
+ * no relevant information, triggering the web-search fallback (see
+ * queryChatAssistant) rather than answering from a barely-related chunk.
+ */
+const MIN_RELEVANT_SIMILARITY_SCORE = 0.55;
+
+/**
  * Detects whether a chat message is a trivial greeting/thanks with no
  * agricultural question content, based on a short, conservative keyword
  * list. Intentionally narrow: a false negative (treating a greeting as a
@@ -68,8 +78,13 @@ export class ChatAssistantService {
    *   guessing about equipment troubleshooting without its manual would
    *   violate the "never present uncertain information as certain"
    *   principle.
+   * @param scopeLabel When set, names the specific equipment this call
+   *   is scoped to (e.g. "Honda GX35 Çapa Motoru"), triggering the
+   *   stricter equipment-troubleshooting prompt variant (see
+   *   buildChatAssistantPrompt). Only meaningful together with
+   *   documentIds; omit for the general chat assistant.
    */
-  public async queryChatAssistant(userQuery: string, documentIds?: string[]): Promise<{ text: string; usedChunks: string[] }> {
+  public async queryChatAssistant(userQuery: string, documentIds?: string[], scopeLabel?: string): Promise<{ text: string; usedChunks: string[] }> {
     const safeQuery = capUserQueryLength(userQuery);
 
     if (isTrivialGreeting(safeQuery)) {
@@ -88,11 +103,19 @@ export class ChatAssistantService {
 
     try {
       const matches = await searchSimilarChunks(safeQuery, 3, documentIds);
+
+      // A knowledge base "match" whose top score falls below the
+      // relevance threshold is really just the least-dissimilar chunk
+      // available, not a genuine answer — treated the same as no match
+      // at all, which is what triggers the web-search fallback below.
+      const hasRelevantMatch = matches.length > 0 && matches[0].score >= MIN_RELEVANT_SIMILARITY_SCORE;
+      const webFallbackEnabled = !hasRelevantMatch;
+
       const ragContext = matches.length > 0
         ? matches.map((m, idx) => `[Referans ${idx + 1}]: ${m.chunk.content}`).join("\n\n")
         : "Eşleşen spesifik bir döküman bulunamadı.";
 
-      const prompt = buildChatAssistantPrompt(ragContext, safeQuery);
+      const prompt = buildChatAssistantPrompt(ragContext, safeQuery, scopeLabel, webFallbackEnabled);
 
       const client = getGeminiClient();
       const response = await callGeminiWithRetry(() => {
@@ -100,12 +123,18 @@ export class ChatAssistantService {
         return client.models.generateContent({
           model: config.ai.generationModel,
           contents: prompt,
+          // Only requests live Google Search grounding — and its
+          // associated latency/cost — when the document knowledge base
+          // genuinely had nothing relevant to offer. A good RAG match
+          // never triggers a web call (see PERFORMANS: gereksiz API
+          // çağrısı yapma).
+          config: webFallbackEnabled ? { tools: [{ googleSearch: {} }] } : undefined,
         });
       });
 
       return {
         text: response.text ? response.text.trim() : "Yapay zeka asistanından bir yanıt alınamadı.",
-        usedChunks: matches.map((m) => m.chunk.content),
+        usedChunks: webFallbackEnabled ? [] : matches.map((m) => m.chunk.content),
       };
     } catch (error) {
       logger.error("AI", "Error inside general chat assistant query", error);
