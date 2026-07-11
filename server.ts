@@ -1535,7 +1535,7 @@ app.delete("/api/ai/documents/:id", requireAuth, requirePermission("documents:de
 // that prioritizes the RAG document pool before falling back to the
 // model's general knowledge — see AIService.generateParcelRecommendation.
 app.post("/api/ai/recommend/:parcelId", requireAuth, requirePermission("ai:read"), upload.array("photos", 3), asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { userQuery } = req.body;
+  const { userQuery, existingPhotoIds: existingPhotoIdsRaw } = req.body;
   const uploadedFiles = (req.files as Express.Multer.File[]) || [];
 
   if (userQuery !== undefined && typeof userQuery === "string" && userQuery.length > MAX_USER_QUERY_LENGTH) {
@@ -1550,11 +1550,34 @@ app.post("/api/ai/recommend/:parcelId", requireAuth, requirePermission("ai:read"
 
   const photoFiles = uploadedFiles.map((file) => ({ buffer: file.buffer, mimeType: file.mimetype }));
 
+  // "Bu Parselin Fotoğraflarından Seç" (existing gallery photos, as
+  // opposed to a freshly-captured/uploaded one) arrives as a JSON-encoded
+  // array of Photo IDs inside the multipart form body — multer parses
+  // non-file fields as plain strings, so this must be decoded before
+  // use. This connects a request field the frontend has sent since the
+  // multi-photo feature shipped to a service parameter
+  // (generateParcelRecommendation's existingPhotoIds) that already fully
+  // implemented reading and validating those photos — the two were never
+  // actually wired together, which is why previously-selected gallery
+  // photos never reached Gemini despite appearing selected in the UI.
+  let existingPhotoIds: string[] | undefined;
+  if (typeof existingPhotoIdsRaw === "string" && existingPhotoIdsRaw.trim()) {
+    try {
+      const parsed = JSON.parse(existingPhotoIdsRaw);
+      if (Array.isArray(parsed)) {
+        existingPhotoIds = parsed.filter((id) => typeof id === "string");
+      }
+    } catch {
+      return res.status(400).json({ error: "Seçilen mevcut fotoğraf listesi geçersiz formatta." });
+    }
+  }
+
   const result = await aiService.generateParcelRecommendation(
     req.params.parcelId,
     userQuery,
     photoFiles.length > 0 ? photoFiles : undefined,
-    req.user.id
+    req.user.id,
+    existingPhotoIds
   );
   if (!result) {
     return res.status(500).json({ error: "Yapay zeka tavsiye raporu oluşturulamadı. Lütfen API anahtarınızı veya internet bağlantınızı kontrol edin." });
