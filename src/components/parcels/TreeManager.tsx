@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
-import { Plus, X, Trees, Trash2, Info, Star, ShieldCheck, AlertTriangle, Camera, RefreshCw } from "lucide-react";
-import { Parcel, Tree, ParcelHealthSummary } from "../../types";
+import React, { useState, useEffect } from "react";
+import { Plus, X, Trees, Trash2, Info, Star, ShieldCheck, AlertTriangle, Camera, RefreshCw, Image as ImageIcon } from "lucide-react";
+import { Parcel, Tree, ParcelHealthSummary, Photo } from "../../types";
 import { useCreateObservation } from "../../hooks/useCreateObservation";
 
 interface TreeManagerProps {
@@ -38,6 +38,43 @@ export default function TreeManager({ parcel, trees, healthSummary, plantLabel, 
   // server.ts's upload-photo route for the corresponding backend change).
   const [analyzeOnUpload, setAnalyzeOnUpload] = useState(false);
   const { createObservation } = useCreateObservation();
+
+  const [parcelPhotos, setParcelPhotos] = useState<Photo[]>([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [lightboxPhoto, setLightboxPhoto] = useState<Photo | null>(null);
+
+  /**
+   * Loads this parcel's full photo history (every photo from every field
+   * observation tied to it, regardless of whether it has any individually
+   * tracked trees — see server.ts's photos-in-range route, whose date
+   * range parameters are optional and are simply omitted here to fetch
+   * everything). Shown consistently on every parcel's detail view per
+   * explicit design decision, rather than only when the tree grid above
+   * is otherwise empty — one predictable layout instead of two.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const fetchParcelPhotos = async () => {
+      setLoadingPhotos(true);
+      try {
+        const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+        const res = await fetch(`/api/parcels/${parcel.id}/photos-in-range?sort=desc`, { headers });
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setParcelPhotos(data);
+        }
+      } catch {
+        // A failed gallery fetch is a soft failure — the rest of the
+        // parcel detail view (trees, health summary) remains fully
+        // usable regardless, so this deliberately doesn't surface an
+        // error banner for what is a secondary, supplementary view.
+      } finally {
+        if (!cancelled) setLoadingPhotos(false);
+      }
+    };
+    fetchParcelPhotos();
+    return () => { cancelled = true; };
+  }, [parcel.id]);
 
   const handleAddTree = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -387,6 +424,61 @@ export default function TreeManager({ parcel, trees, healthSummary, plantLabel, 
           </div>
         )}
       </div>
+
+      {/* Parcel-wide photo history — shown consistently regardless of
+          whether this parcel has any individually tracked trees, so a
+          farmer can review this parcel's visual history from the same
+          screen without navigating to Saha Gözlemleri. Read-only: photo
+          deletion remains a Saha Gözlemleri action, avoiding a second
+          place in the app that can delete the same record. */}
+      <div className="space-y-3 pt-4 border-t border-[#f0f4ee]">
+        <h3 className="text-xs font-bold text-[#80907a] uppercase tracking-wider flex items-center gap-1.5">
+          <ImageIcon className="h-3.5 w-3.5" />
+          Parsel Fotoğraf Geçmişi {parcelPhotos.length > 0 && `(${parcelPhotos.length})`}
+        </h3>
+
+        {loadingPhotos ? (
+          <p className="text-xs text-[#80907a] italic">Fotoğraflar yükleniyor...</p>
+        ) : parcelPhotos.length > 0 ? (
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+            {parcelPhotos.map((photo) => (
+              <button
+                key={photo.id}
+                type="button"
+                onClick={() => setLightboxPhoto(photo)}
+                className="aspect-square rounded-lg overflow-hidden border border-[#e2e8df] hover:border-[#556b2f] transition-all"
+              >
+                <img src={photo.thumbnailUrl || photo.originalUrl} alt="Parsel fotoğrafı" className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-[#80907a] italic">Bu parsele henüz fotoğraf eklenmemiş. Saha Gözlemleri bölümünden ekleyebilirsiniz.</p>
+        )}
+      </div>
+
+      {lightboxPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxPhoto(null)}
+            title="Kapat"
+            aria-label="Fotoğraf görüntüleyiciyi kapat"
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <div className="max-w-3xl max-h-[85vh] flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <img src={lightboxPhoto.originalUrl} alt="Parsel fotoğrafı" className="max-w-full max-h-[75vh] object-contain rounded-xl" />
+            <p className="text-white/70 text-xs">
+              {new Date(lightboxPhoto.takenAt || lightboxPhoto.createdAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
