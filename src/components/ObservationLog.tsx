@@ -27,7 +27,8 @@ import {
   Layers,
   CheckCircle2,
   XCircle,
-  Trash2
+  Trash2,
+  Pencil
 } from "lucide-react";
 import { Observation, Parcel, Tree, Photo, ObservationActivityType } from "../types";
 import { useCreateObservation } from "../hooks/useCreateObservation";
@@ -94,7 +95,21 @@ export default function ObservationLog() {
   const [activeFilter, setActiveFilter] = useState<ObservationActivityType | null>(null);
   
   // Photo Simulation
-  const [selectedPhotoBase64s, setSelectedPhotoBase64s] = useState<string[]>([]);
+  // Each selected photo carries a stable `id`, generated once at
+  // selection time — used as the React key so removing a photo from the
+  // middle of the list (not just the last one) can't cause React to
+  // misattribute a remaining thumbnail/remove-button to the wrong photo
+  // (see denetim bulgusu: Bulgu-1, key={index} anti-pattern).
+  const [selectedPhotos, setSelectedPhotos] = useState<{ id: string; base64: string }[]>([]);
+
+  // Inline edit state for an existing observation's notes/date — only
+  // one card is ever in edit mode at a time, identified by id. Draft
+  // values are held separately from the observation itself so an
+  // in-progress edit can be cancelled without touching the displayed
+  // (saved) data until "Kaydet" is actually pressed.
+  const [editingObservationId, setEditingObservationId] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [editDate, setEditDate] = useState("");
   
   // Audio Note Simulation
   const [isRecording, setIsRecording] = useState(false);
@@ -182,6 +197,94 @@ export default function ObservationLog() {
     }
   };
 
+  const handleStartEditObservation = (obs: Observation) => {
+    setEditingObservationId(obs.id);
+    setEditNotes(obs.notes);
+    setEditDate(obs.observationDate.split("T")[0]);
+  };
+
+  const handleCancelEditObservation = () => {
+    setEditingObservationId(null);
+  };
+
+  const handleSaveEditObservation = async (obsId: string) => {
+    if (!editNotes.trim()) {
+      setError("Gözlem notu boş bırakılamaz.");
+      return;
+    }
+    try {
+      const headers = {
+        "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
+        "Content-Type": "application/json"
+      };
+      const res = await fetch(`/api/observations/${obsId}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ notes: editNotes, observationDate: editDate }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gözlem güncellenemedi.");
+      }
+      const updated = await res.json();
+      setObservations((prev) => prev.map((o) => (o.id === obsId ? updated : o)));
+      setEditingObservationId(null);
+    } catch (err: any) {
+      setError(err.message || "Gözlem güncellenirken bir hata oluştu.");
+    }
+  };
+
+  /**
+   * Adds one or more new photos to an ALREADY-EXISTING observation, from
+   * the history feed — as opposed to the "Kamerayla Çek/Galeriden Seç"
+   * pickers in the creation form above, which only attach photos at the
+   * moment a NEW observation is created. This deliberately does not
+   * limit itself to observations created recently: adding a photo is
+   * purely additive (it can never overwrite or corrupt the existing
+   * note/date/activity type), so unlike editing those fields, there is
+   * no real risk in allowing it on any observation regardless of age.
+   * Reuses the same upload-photo endpoint the creation form already
+   * calls — that endpoint only ever needed an observationId, and never
+   * actually cared whether the observation was just created or is old.
+   */
+  const handleAddPhotoToObservation = (obs: Observation) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const headers = {
+      "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
+      "Content-Type": "application/json"
+    };
+
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const res = await fetch("/api/observations/upload-photo", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              observationId: obs.id,
+              base64Data: reader.result as string,
+              label: "Sonradan Eklenen Fotoğraf",
+            }),
+          });
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || "Fotoğraf eklenemedi.");
+          }
+          const newPhoto = await res.json();
+          setPhotos((prev) => [...prev, newPhoto]);
+        } catch (err: any) {
+          setError(err.message || "Fotoğraf eklenirken bir hata oluştu.");
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    e.target.value = "";
+  };
+
   /**
    * Permanently deletes a photo that was added by mistake (wrong parcel,
    * wrong reference tree, or simply the wrong photo). Only the photo
@@ -237,11 +340,14 @@ export default function ObservationLog() {
     // FileReader is async, so results are pushed via the functional
     // setState form rather than collected into a local array first,
     // which would risk a stale closure overwriting an earlier photo's
-    // result if two files finish reading in a different order.
+    // result if two files finish reading in a different order. Each
+    // gets its own stable id (crypto.randomUUID()) at this point, used
+    // as the React key so later removal is unambiguous.
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
+      const id = crypto.randomUUID();
       reader.onloadend = () => {
-        setSelectedPhotoBase64s((prev) => [...prev, reader.result as string]);
+        setSelectedPhotos((prev) => [...prev, { id, base64: reader.result as string }]);
       };
       reader.readAsDataURL(file);
     });
@@ -253,8 +359,8 @@ export default function ObservationLog() {
     e.target.value = "";
   };
 
-  const handleRemoveSelectedPhoto = (index: number) => {
-    setSelectedPhotoBase64s((prev) => prev.filter((_, i) => i !== index));
+  const handleRemoveSelectedPhoto = (id: string) => {
+    setSelectedPhotos((prev) => prev.filter((p) => p.id !== id));
   };
 
   // Simulated Voice Note
@@ -353,7 +459,7 @@ export default function ObservationLog() {
     setActivityType("Genel Gözlem");
     setObservationDate(new Date().toISOString().split("T")[0]);
     setNotes("");
-    setSelectedPhotoBase64s([]);
+    setSelectedPhotos([]);
     stopRecording();
     setBulkMode(false);
     setShowForm(false);
@@ -411,7 +517,7 @@ export default function ObservationLog() {
 
       const result = await createObservation(
         observationPayload,
-        selectedPhotoBase64s.length > 0 ? selectedPhotoBase64s : undefined,
+        selectedPhotos.length > 0 ? selectedPhotos.map((p) => p.base64) : undefined,
         { takenAt: observationDate, label: "Saha Gözlemi Görseli" }
       );
 
@@ -464,7 +570,7 @@ export default function ObservationLog() {
             observationDate,
             notes,
           },
-          selectedPhotoBase64s.length > 0 ? selectedPhotoBase64s : undefined,
+          selectedPhotos.length > 0 ? selectedPhotos.map((p) => p.base64) : undefined,
           { takenAt: observationDate, label: "Saha Gözlemi Görseli (Toplu Giriş)" }
         );
 
@@ -691,12 +797,12 @@ export default function ObservationLog() {
                   />
                 </label>
 
-                {selectedPhotoBase64s.map((photoBase64, index) => (
-                  <div key={index} className="relative h-12 w-12 rounded-lg overflow-hidden border border-[#cdd4ca]">
-                    <img src={photoBase64} alt={`Önizleme ${index + 1}`} className="h-full w-full object-cover" />
+                {selectedPhotos.map((photo) => (
+                  <div key={photo.id} className="relative h-12 w-12 rounded-lg overflow-hidden border border-[#cdd4ca]">
+                    <img src={photo.base64} alt="Önizleme" className="h-full w-full object-cover" />
                     <button
                       type="button"
-                      onClick={() => handleRemoveSelectedPhoto(index)}
+                      onClick={() => handleRemoveSelectedPhoto(photo.id)}
                       className="absolute top-0 right-0 p-0.5 bg-black/60 text-white rounded-bl"
                     >
                       <X className="h-3 w-3" />
@@ -806,70 +912,155 @@ export default function ObservationLog() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredObservations.length > 0 ? (
             filteredObservations.map((obs) => {
-              // Find matching photo
-              const obsPhoto = photos.find(p => p.observationId === obs.id);
+              // Find ALL photos tied to this observation — not just the
+              // first — so a photo added later (via "Fotoğraf Ekle"
+              // below) is actually visible, not silently hidden behind
+              // whichever photo happened to be first.
+              const obsPhotos = photos.filter(p => p.observationId === obs.id);
+              const primaryPhoto = obsPhotos[0];
               const typeConfig = ACTIVITY_TYPE_CONFIG[obs.activityType] || ACTIVITY_TYPE_CONFIG["Genel Gözlem"];
               const TypeIcon = typeConfig.icon;
               return (
                 <div id={`obs-card-${obs.id}`} key={obs.id} className="bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-5 shadow-sm space-y-4 flex flex-col justify-between relative group">
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteObservation(obs)}
-                    title="Gözlem kaydını sil"
-                    aria-label="Gözlem kaydını sil"
-                    className="absolute top-3 right-3 p-1.5 rounded-lg bg-white/80 text-[#a8b5a2] hover:text-red-600 hover:bg-red-50 transition-all"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="absolute top-3 right-3 flex items-center gap-1">
+                    {editingObservationId !== obs.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditObservation(obs)}
+                        title="Not ve tarihi düzenle"
+                        aria-label="Not ve tarihi düzenle"
+                        className="p-1.5 rounded-lg bg-white/80 text-[#a8b5a2] hover:text-[#556b2f] hover:bg-[#f0f4ee] transition-all"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteObservation(obs)}
+                      title="Gözlem kaydını sil"
+                      aria-label="Gözlem kaydını sil"
+                      className="p-1.5 rounded-lg bg-white/80 text-[#a8b5a2] hover:text-red-600 hover:bg-red-50 transition-all"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
 
                   <div className="space-y-3">
-                    <div className="flex justify-between items-start gap-2">
-                      <span className="text-xs bg-[#f0f4ee] text-[#556b2f] px-2.5 py-1 rounded-full font-bold">
-                        {getParcelName(obs.parcelId)}
-                      </span>
-                      <span className="text-[10px] font-mono text-[#80907a] flex items-center gap-0.5 shrink-0 mr-6">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(obs.observationDate).toLocaleDateString("tr-TR")}
-                      </span>
-                    </div>
-
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${typeConfig.badgeClass}`}>
-                      <TypeIcon className="h-3 w-3" />
-                      {obs.activityType}
-                    </span>
-
-                    <p className="text-xs text-[#1a2416] leading-relaxed font-medium">
-                      {obs.notes}
-                    </p>
-
-                    {obs.treeId && (
-                      <div className="text-[11px] font-mono bg-stone-100 text-[#556b2f] px-2 py-0.5 rounded inline-block">
-                        Ağaç Referans: <span className="font-bold">{getTreeNumber(obs.treeId)}</span>
+                    {editingObservationId === obs.id ? (
+                      <div className="space-y-2 pr-16">
+                        <input
+                          type="date"
+                          value={editDate}
+                          onChange={(e) => setEditDate(e.target.value)}
+                          max={new Date().toISOString().split("T")[0]}
+                          className="w-full text-xs border border-[#cdd4ca] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#556b2f]"
+                        />
+                        <textarea
+                          value={editNotes}
+                          onChange={(e) => setEditNotes(e.target.value)}
+                          rows={3}
+                          className="w-full text-xs border border-[#cdd4ca] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#556b2f] resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEditObservation(obs.id)}
+                            className="flex-1 text-[11px] font-bold bg-[#556b2f] text-white py-1.5 rounded-lg hover:bg-[#465a26] transition-all"
+                          >
+                            Kaydet
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditObservation}
+                            className="flex-1 text-[11px] font-bold bg-[#f0f4ee] text-[#5a6a55] py-1.5 rounded-lg hover:bg-[#e4ebdf] transition-all"
+                          >
+                            Vazgeç
+                          </button>
+                        </div>
                       </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between items-start gap-2">
+                          <span className="text-xs bg-[#f0f4ee] text-[#556b2f] px-2.5 py-1 rounded-full font-bold">
+                            {getParcelName(obs.parcelId)}
+                          </span>
+                          <span className="text-[10px] font-mono text-[#80907a] flex items-center gap-0.5 shrink-0 mr-14">
+                            <Calendar className="h-3 w-3" />
+                            {new Date(obs.observationDate).toLocaleDateString("tr-TR")}
+                          </span>
+                        </div>
+
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${typeConfig.badgeClass}`}>
+                          <TypeIcon className="h-3 w-3" />
+                          {obs.activityType}
+                        </span>
+
+                        <p className="text-xs text-[#1a2416] leading-relaxed font-medium">
+                          {obs.notes}
+                        </p>
+
+                        {obs.treeId && (
+                          <div className="text-[11px] font-mono bg-stone-100 text-[#556b2f] px-2 py-0.5 rounded inline-block">
+                            Ağaç Referans: <span className="font-bold">{getTreeNumber(obs.treeId)}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
                   {/* Display simulated Photo & EXIF coordinates */}
-                  {obsPhoto && (
+                  {primaryPhoto && (
                     <button
                       type="button"
                       id={`obs-photo-${obs.id}`}
-                      onClick={() => setLightboxPhoto(obsPhoto)}
+                      onClick={() => setLightboxPhoto(primaryPhoto)}
                       title="Fotoğrafı büyüt"
                       aria-label="Fotoğrafı büyüt"
                       className="rounded-2xl overflow-hidden border border-[#e2e8df] relative group cursor-zoom-in text-left w-full"
                     >
                       <img
-                        src={obsPhoto.originalUrl}
+                        src={primaryPhoto.originalUrl}
                         alt="Field observation"
                         className="w-full h-40 object-cover transition-transform duration-200 group-hover:scale-105"
                       />
                       <div className="absolute bottom-0 inset-x-0 bg-black/60 p-2 text-[10px] font-mono text-[#f1f5f0] flex justify-between">
-                        <span className="flex items-center gap-0.5"><MapPin className="h-3 w-3 text-red-400" /> {obsPhoto.latitude}, {obsPhoto.longitude}</span>
+                        <span className="flex items-center gap-0.5"><MapPin className="h-3 w-3 text-red-400" /> {primaryPhoto.latitude}, {primaryPhoto.longitude}</span>
                         <span>Mersin, Toroslar</span>
                       </div>
                     </button>
                   )}
+
+                  {/* Additional photos beyond the primary one, if any —
+                      shown as a small thumbnail row so a photo added
+                      later (see "Fotoğraf Ekle" below) is visible
+                      without redesigning the card layout. */}
+                  {obsPhotos.length > 1 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {obsPhotos.slice(1).map((photo) => (
+                        <button
+                          key={photo.id}
+                          type="button"
+                          onClick={() => setLightboxPhoto(photo)}
+                          title="Fotoğrafı büyüt"
+                          className="h-10 w-10 rounded-lg overflow-hidden border border-[#e2e8df]"
+                        >
+                          <img src={photo.originalUrl} alt="Ek fotoğraf" className="h-full w-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <label className="flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-[#cdd4ca] text-[#556b2f] text-[11px] font-bold cursor-pointer hover:bg-[#f0f4ee] transition-all">
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    Fotoğraf Ekle
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleAddPhotoToObservation(obs)}
+                      className="hidden"
+                    />
+                  </label>
 
                   {/* Audio memo display */}
                   {obs.audioNotePath && (

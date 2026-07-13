@@ -860,6 +860,21 @@ const VALID_OBSERVATION_ACTIVITY_TYPES: readonly string[] = [
 ];
 
 /**
+ * Defensive upper bound on how many records GET /api/observations and
+ * GET /api/observations/photos will ever return in a single response.
+ * Neither endpoint previously had any limit at all — every observation
+ * or photo ever created was returned on every single call (see denetim
+ * bulgusu: Bulgu-5, "Büyük veri ile çalışırken oluşabilecek problemler").
+ * This is a safety net, not a pagination feature: at current and
+ * realistically near-term farm data volumes neither endpoint will ever
+ * approach this figure, so no existing behavior changes. If a caller
+ * ever DOES hit this ceiling, it's logged (see below) so it's a known,
+ * deliberate signal that real pagination is now needed — not a silent,
+ * ever-growing payload discovered only as a performance complaint.
+ */
+const MAX_UNPAGINATED_LIST_SIZE = 2000;
+
+/**
  * Validates that a given date value (either a plain "YYYY-MM-DD" string or
  * a full ISO 8601 timestamp) represents a real calendar date that is not
  * later than today. Used to allow retroactive (backdated) observation and
@@ -890,6 +905,12 @@ app.get("/api/observations", requireAuth, requirePermission("observations:read")
   }
 
   list.sort((a, b) => new Date(b.observationDate).getTime() - new Date(a.observationDate).getTime());
+
+  if (list.length > MAX_UNPAGINATED_LIST_SIZE) {
+    logger.warn("SYSTEM", `GET /api/observations returned ${list.length} kayıt, ${MAX_UNPAGINATED_LIST_SIZE} sınırına ulaşıldı — gerçek sayfalama artık gerekli olabilir.`);
+    list = list.slice(0, MAX_UNPAGINATED_LIST_SIZE);
+  }
+
   res.json(list);
 }));
 
@@ -933,6 +954,54 @@ app.post("/api/observations", requireAuth, requirePermission("observations:write
   );
 
   res.status(201).json(newObs);
+}));
+
+// Edits an existing observation's notes and/or date — deliberately
+// scoped to just these two fields (not parcelId/treeId/activityType,
+// and not photos, which are managed separately via upload-photo and
+// DELETE /api/observations/photos/:id). Reuses the exact same
+// isValidNonFutureDate check and permission (observations:write) as
+// creation, so an edited date is held to the same standard as a new
+// one. No age restriction on which observations may be edited: unlike
+// adding a photo (purely additive), correcting a typo in an old note
+// is exactly the kind of legitimate correction a farmer should be able
+// to make regardless of how long ago it was logged.
+app.put("/api/observations/:id", requireAuth, requirePermission("observations:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const existing = await observationRepository.getById(req.params.id);
+  if (!existing) {
+    return res.status(404).json({ error: "Düzenlenmek istenen gözlem kaydı bulunamadı." });
+  }
+
+  const { notes, observationDate } = req.body;
+  const updates: { notes?: string; observationDate?: string } = {};
+
+  if (notes !== undefined) {
+    if (typeof notes !== "string" || !notes.trim()) {
+      return res.status(400).json({ error: "Gözlem notu boş bırakılamaz." });
+    }
+    updates.notes = notes;
+  }
+
+  if (observationDate !== undefined) {
+    if (!isValidNonFutureDate(observationDate)) {
+      return res.status(400).json({ error: "Gözlem tarihi geçersiz veya gelecekte bir tarih olamaz." });
+    }
+    updates.observationDate = observationDate;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "Güncellenecek en az bir alan (not veya tarih) gönderilmelidir." });
+  }
+
+  const updated = await observationRepository.update(req.params.id, updates);
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "OBSERVATION_UPDATE",
+    `Bir saha gözlem kaydı düzenlendi. Değiştirilen alanlar: ${Object.keys(updates).join(", ")}.`
+  );
+
+  res.json(updated);
 }));
 
 /**
@@ -1022,7 +1091,15 @@ app.post("/api/observations/upload-photo", requireAuth, requirePermission("obser
 }));
 
 app.get("/api/observations/photos", requireAuth, requirePermission("observations:read"), asyncHandler(async (req, res) => {
-  const list = await photoRepository.getAll();
+  let list = await photoRepository.getAll();
+
+  list.sort((a, b) => new Date(b.takenAt || b.createdAt).getTime() - new Date(a.takenAt || a.createdAt).getTime());
+
+  if (list.length > MAX_UNPAGINATED_LIST_SIZE) {
+    logger.warn("SYSTEM", `GET /api/observations/photos returned ${list.length} kayıt, ${MAX_UNPAGINATED_LIST_SIZE} sınırına ulaşıldı — gerçek sayfalama artık gerekli olabilir.`);
+    list = list.slice(0, MAX_UNPAGINATED_LIST_SIZE);
+  }
+
   res.json(list);
 }));
 
