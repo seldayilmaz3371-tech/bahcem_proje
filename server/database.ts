@@ -265,6 +265,7 @@ class DatabaseManager {
       inventoryCategories: defaultCategories,
       fertilizers: [],
       chemicals: [],
+      productApplications: [],
       applications: [],
       irrigation: [],
       harvest: [],
@@ -296,7 +297,7 @@ class DatabaseManager {
     const tables: Array<keyof DatabaseSchema> = [
       "users", "roles", "parcels", "trees", "treeCountChangeLogs", "observations", "photos", "inventory",
       "equipment",
-      "inventoryCategories", "fertilizers", "chemicals", "applications", "irrigation",
+      "inventoryCategories", "fertilizers", "chemicals", "productApplications", "applications", "irrigation",
       "harvest", "costs", "sales", "weatherHistory",
       "aiRecommendations", "uploadedDocuments", "vectorChunks", "notifications",
       "activityLogs", "settings"

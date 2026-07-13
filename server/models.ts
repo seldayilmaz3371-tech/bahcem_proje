@@ -304,6 +304,31 @@ export interface Chemical {
 }
 
 /**
+ * 11b. ProductApplications Table Schema — simple record-keeping of which
+ * parcels/reference trees a fertilizer/chemical/biological product was
+ * applied to, and when.
+ *
+ * Deliberately NOT the same as the older `Application` interface below
+ * (see denetim/audit notes): that model assumes automatic stock
+ * deduction (`totalAmountUsed`) and a single parcel per record. This one
+ * is a plain history log per explicit design decision — no stock math,
+ * multiple parcels/trees per single application (e.g. "aynı gübreyi 3
+ * parsele birden uyguladım"). The older `Application`/`Irrigation`
+ * interfaces are left untouched, in case a future, more structured
+ * (stock-linked) workflow is decided on separately.
+ */
+export interface ProductApplication {
+  id: string;
+  inventoryItemId: string; // Foreign Key to InventoryItem — which product was used
+  applicationDate: string;
+  parcelIds: string[]; // one or more parcels this was applied to
+  treeIds: string[]; // zero or more specific (reference) trees within those parcels
+  amountNote?: string; // free-text quantity note (e.g. "2 litre") — not tied to stock deduction
+  notes?: string;
+  createdAt: string;
+}
+
+/**
  * 11. Applications Table Schema (İlaçlama/Gübreleme Uygulama Geçmişi)
  */
 export interface Application {
@@ -510,6 +535,7 @@ export interface DatabaseSchema {
   inventoryCategories: InventoryCategory[];
   fertilizers: Fertilizer[];
   chemicals: Chemical[];
+  productApplications: ProductApplication[];
   applications: Application[];
   irrigation: Irrigation[];
   harvest: Harvest[];

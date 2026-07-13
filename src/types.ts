@@ -179,6 +179,17 @@ export interface InventoryCategory {
   description?: string;
 }
 
+export interface ProductApplication {
+  id: string;
+  inventoryItemId: string;
+  applicationDate: string;
+  parcelIds: string[];
+  treeIds: string[];
+  amountNote?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Cost {
   id: string;
   parcelId?: string;

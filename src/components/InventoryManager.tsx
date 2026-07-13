@@ -15,9 +15,15 @@ import {
   Calendar,
   Layers,
   CircleDollarSign,
-  Search
+  Search,
+  Image as ImageIcon,
+  ChevronDown,
+  ChevronUp,
+  History,
+  Trash2,
+  MapPin
 } from "lucide-react";
-import { InventoryItem, InventoryCategory } from "../types";
+import { InventoryItem, InventoryCategory, Parcel, Tree, ProductApplication } from "../types";
 
 export default function InventoryManager() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -55,21 +61,61 @@ export default function InventoryManager() {
   const [adjustDelta, setAdjustDelta] = useState("");
   const [adjustNotes, setAdjustNotes] = useState("");
 
+  // Details expansion (photos + application history), lazy-loaded per item
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [parcels, setParcels] = useState<Parcel[]>([]);
+  const [trees, setTrees] = useState<Tree[]>([]);
+  const [applicationsByItem, setApplicationsByItem] = useState<Record<string, ProductApplication[]>>({});
+  const [loadingApplications, setLoadingApplications] = useState(false);
+  const [uploadingPhotoFor, setUploadingPhotoFor] = useState<string | null>(null);
+
+  // New application record form
+  const [showApplyFormFor, setShowApplyFormFor] = useState<string | null>(null);
+  const [applyDate, setApplyDate] = useState(new Date().toISOString().split("T")[0]);
+  const [applyParcelIds, setApplyParcelIds] = useState<string[]>([]);
+  const [applyTreeIds, setApplyTreeIds] = useState<string[]>([]);
+  const [applyAmountNote, setApplyAmountNote] = useState("");
+  const [applyNotes, setApplyNotes] = useState("");
+  const [applySaving, setApplySaving] = useState(false);
+
   const fetchData = async () => {
     setLoading(true);
     try {
       const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
-      const [itemsRes, catRes] = await Promise.all([
+      const [itemsRes, catRes, parcelsRes] = await Promise.all([
         fetch("/api/inventory", { headers }),
-        fetch("/api/inventory/categories", { headers })
+        fetch("/api/inventory/categories", { headers }),
+        fetch("/api/parcels", { headers })
       ]);
 
       if (itemsRes.ok) setItems(await itemsRes.json());
       if (catRes.ok) setCategories(await catRes.json());
+      if (parcelsRes.ok) setParcels(await parcelsRes.json());
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Trees are only ever exposed per-parcel in this codebase
+   * (GET /api/parcels/:id/trees) — there is no farm-wide "all trees"
+   * endpoint. Rather than looping through every parcel up front to
+   * build one, reference trees are fetched lazily, only for parcels the
+   * user has actually selected in the application form below.
+   */
+  const fetchTreesForParcel = async (parcelId: string) => {
+    if (trees.some((t) => t.parcelId === parcelId)) return; // already have them
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/parcels/${parcelId}/trees`, { headers });
+      if (res.ok) {
+        const parcelTrees: Tree[] = await res.json();
+        setTrees((prev) => [...prev, ...parcelTrees]);
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -175,6 +221,151 @@ export default function InventoryManager() {
     } catch (err: any) {
       alert(err.message);
     }
+  };
+
+  /**
+   * Uploads (or replaces) an inventory item's invoice/label photo.
+   * Reuses the `invoicePhotoUrl`/`labelPhotoUrl` fields already present
+   * on InventoryItem — they existed in the data model but had no route
+   * or UI wired to them until now.
+   */
+  const handleUploadPhoto = (itemId: string, photoType: "invoice" | "label") => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      setUploadingPhotoFor(itemId);
+      try {
+        const headers = {
+          "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
+          "Content-Type": "application/json"
+        };
+        const res = await fetch(`/api/inventory/${itemId}/photo`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ base64Data: reader.result, photoType })
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || "Fotoğraf yüklenemedi.");
+        }
+        const updated = await res.json();
+        setItems((prev) => prev.map((it) => (it.id === itemId ? updated : it)));
+      } catch (err: any) {
+        alert(err.message);
+      } finally {
+        setUploadingPhotoFor(null);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleToggleExpand = async (itemId: string) => {
+    if (expandedItemId === itemId) {
+      setExpandedItemId(null);
+      return;
+    }
+    setExpandedItemId(itemId);
+    if (!applicationsByItem[itemId]) {
+      setLoadingApplications(true);
+      try {
+        const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+        const res = await fetch(`/api/inventory/${itemId}/applications`, { headers });
+        if (res.ok) {
+          const list: ProductApplication[] = await res.json();
+          setApplicationsByItem((prev) => ({ ...prev, [itemId]: list }));
+        }
+      } finally {
+        setLoadingApplications(false);
+      }
+    }
+  };
+
+  const toggleApplyParcel = (parcelId: string) => {
+    setApplyParcelIds((prev) =>
+      prev.includes(parcelId) ? prev.filter((id) => id !== parcelId) : [...prev, parcelId]
+    );
+    fetchTreesForParcel(parcelId);
+  };
+
+  const toggleApplyTree = (treeId: string) => {
+    setApplyTreeIds((prev) =>
+      prev.includes(treeId) ? prev.filter((id) => id !== treeId) : [...prev, treeId]
+    );
+  };
+
+  const resetApplyForm = () => {
+    setShowApplyFormFor(null);
+    setApplyDate(new Date().toISOString().split("T")[0]);
+    setApplyParcelIds([]);
+    setApplyTreeIds([]);
+    setApplyAmountNote("");
+    setApplyNotes("");
+  };
+
+  const handleSubmitApplication = async (itemId: string) => {
+    if (applyParcelIds.length === 0) {
+      alert("En az bir parsel seçmelisiniz.");
+      return;
+    }
+    setApplySaving(true);
+    try {
+      const headers = {
+        "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}`,
+        "Content-Type": "application/json"
+      };
+      const res = await fetch(`/api/inventory/${itemId}/applications`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          applicationDate: applyDate,
+          parcelIds: applyParcelIds,
+          treeIds: applyTreeIds,
+          amountNote: applyAmountNote,
+          notes: applyNotes
+        })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Uygulama kaydedilemedi.");
+      }
+      const newRecord = await res.json();
+      setApplicationsByItem((prev) => ({
+        ...prev,
+        [itemId]: [newRecord, ...(prev[itemId] || [])]
+      }));
+      resetApplyForm();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setApplySaving(false);
+    }
+  };
+
+  const handleDeleteApplication = async (itemId: string, applicationId: string) => {
+    if (!confirm("Bu uygulama kaydını silmek istediğinize emin misiniz?")) return;
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch(`/api/inventory/applications/${applicationId}`, { method: "DELETE", headers });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Kayıt silinemedi.");
+      }
+      setApplicationsByItem((prev) => ({
+        ...prev,
+        [itemId]: (prev[itemId] || []).filter((a) => a.id !== applicationId)
+      }));
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const getParcelName = (id: string) => parcels.find((p) => p.id === id)?.name || "Bilinmeyen Parsel";
+  const getTreeLabel = (id: string) => {
+    const tree = trees.find((t) => t.id === id);
+    return tree ? `${tree.treeNumber} (${getParcelName(tree.parcelId)})` : "Bilinmeyen Ağaç";
   };
 
   // Helper mappings
@@ -512,6 +703,193 @@ export default function InventoryManager() {
                     </>
                   )}
                 </div>
+
+                {/* Expand toggle for photos + application history */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleExpand(item.id)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold text-[#556b2f] hover:bg-[#f0f4ee] rounded-xl transition-all border-t border-[#f0f4ee]"
+                >
+                  {expandedItemId === item.id ? (
+                    <>Detayları Gizle <ChevronUp className="h-3.5 w-3.5" /></>
+                  ) : (
+                    <>Fotoğraf & Uygulama Geçmişi <ChevronDown className="h-3.5 w-3.5" /></>
+                  )}
+                </button>
+
+                {expandedItemId === item.id && (
+                  <div className="space-y-4 pt-3 border-t border-[#f0f4ee] animate-fade-in">
+                    {/* Invoice / Label Photos */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-bold text-[#80907a] uppercase tracking-wider flex items-center gap-1">
+                        <ImageIcon className="h-3 w-3" /> Fotoğraflar
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          {item.invoicePhotoUrl ? (
+                            <a href={item.invoicePhotoUrl} target="_blank" rel="noopener noreferrer">
+                              <img src={item.invoicePhotoUrl} alt="Fatura" className="h-16 w-full object-cover rounded-lg border border-[#e2e8df]" />
+                            </a>
+                          ) : (
+                            <label className="h-16 flex flex-col items-center justify-center gap-0.5 border border-dashed border-[#cdd4ca] rounded-lg cursor-pointer hover:bg-[#f0f4ee] text-[9px] text-[#80907a] font-bold">
+                              {uploadingPhotoFor === item.id ? "Yükleniyor..." : "Fatura Ekle"}
+                              <input type="file" accept="image/*" onChange={handleUploadPhoto(item.id, "invoice")} className="hidden" />
+                            </label>
+                          )}
+                        </div>
+                        <div>
+                          {item.labelPhotoUrl ? (
+                            <a href={item.labelPhotoUrl} target="_blank" rel="noopener noreferrer">
+                              <img src={item.labelPhotoUrl} alt="Etiket" className="h-16 w-full object-cover rounded-lg border border-[#e2e8df]" />
+                            </a>
+                          ) : (
+                            <label className="h-16 flex flex-col items-center justify-center gap-0.5 border border-dashed border-[#cdd4ca] rounded-lg cursor-pointer hover:bg-[#f0f4ee] text-[9px] text-[#80907a] font-bold">
+                              {uploadingPhotoFor === item.id ? "Yükleniyor..." : "Etiket Ekle"}
+                              <input type="file" accept="image/*" onChange={handleUploadPhoto(item.id, "label")} className="hidden" />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Application History */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-[#80907a] uppercase tracking-wider flex items-center gap-1">
+                          <History className="h-3 w-3" /> Uygulama Geçmişi
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowApplyFormFor(showApplyFormFor === item.id ? null : item.id)}
+                          className="text-[10px] font-bold text-[#556b2f] hover:underline"
+                        >
+                          + Yeni Kayıt
+                        </button>
+                      </div>
+
+                      {showApplyFormFor === item.id && (
+                        <div className="bg-[#f7f9f6] p-3 rounded-xl border border-[#dee5db] space-y-2 animate-slide-up">
+                          <input
+                            type="date"
+                            value={applyDate}
+                            max={new Date().toISOString().split("T")[0]}
+                            onChange={(e) => setApplyDate(e.target.value)}
+                            className="w-full text-xs border border-[#cdd4ca] rounded-lg px-2 py-1.5"
+                          />
+                          <div>
+                            <span className="text-[9px] font-bold text-[#80907a] uppercase block mb-1">Parseller (birden fazla seçilebilir)</span>
+                            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                              {parcels.map((p) => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => toggleApplyParcel(p.id)}
+                                  className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                                    applyParcelIds.includes(p.id)
+                                      ? "bg-[#556b2f] text-white border-[#556b2f]"
+                                      : "bg-white text-[#5a6a55] border-[#cdd4ca] hover:bg-[#f0f4ee]"
+                                  }`}
+                                >
+                                  {p.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          {applyParcelIds.length > 0 && (
+                            <div>
+                              <span className="text-[9px] font-bold text-[#80907a] uppercase block mb-1">Referans Ağaçlar (isteğe bağlı)</span>
+                              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                                {trees.filter((t) => applyParcelIds.includes(t.parcelId) && t.isReferenceTree).map((t) => (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => toggleApplyTree(t.id)}
+                                    className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                                      applyTreeIds.includes(t.id)
+                                        ? "bg-[#556b2f] text-white border-[#556b2f]"
+                                        : "bg-white text-[#5a6a55] border-[#cdd4ca] hover:bg-[#f0f4ee]"
+                                    }`}
+                                  >
+                                    {t.treeNumber}
+                                  </button>
+                                ))}
+                                {trees.filter((t) => applyParcelIds.includes(t.parcelId) && t.isReferenceTree).length === 0 && (
+                                  <span className="text-[10px] text-[#80907a] italic">Seçili parsellerde referans ağaç yok.</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          <input
+                            type="text"
+                            value={applyAmountNote}
+                            onChange={(e) => setApplyAmountNote(e.target.value)}
+                            placeholder="Miktar (örn: 2 litre) — isteğe bağlı"
+                            className="w-full text-xs border border-[#cdd4ca] rounded-lg px-2 py-1.5"
+                          />
+                          <textarea
+                            value={applyNotes}
+                            onChange={(e) => setApplyNotes(e.target.value)}
+                            placeholder="Not (isteğe bağlı)"
+                            rows={2}
+                            className="w-full text-xs border border-[#cdd4ca] rounded-lg px-2 py-1.5 resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={applySaving}
+                              onClick={() => handleSubmitApplication(item.id)}
+                              className="flex-1 text-[11px] font-bold bg-[#556b2f] text-white py-1.5 rounded-lg hover:bg-[#415324] disabled:opacity-50"
+                            >
+                              {applySaving ? "Kaydediliyor..." : "Kaydet"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={resetApplyForm}
+                              className="flex-1 text-[11px] font-bold bg-white text-[#5a6a55] py-1.5 rounded-lg border border-[#cdd4ca]"
+                            >
+                              Vazgeç
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {loadingApplications && !applicationsByItem[item.id] ? (
+                        <p className="text-[10px] text-[#80907a] italic">Yükleniyor...</p>
+                      ) : (applicationsByItem[item.id] || []).length > 0 ? (
+                        <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                          {(applicationsByItem[item.id] || []).map((app) => (
+                            <div key={app.id} className="bg-white border border-[#e2e8df] rounded-lg p-2 text-[10px] flex justify-between items-start gap-2">
+                              <div>
+                                <span className="font-bold text-[#1a2416] flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" /> {new Date(app.applicationDate).toLocaleDateString("tr-TR")}
+                                </span>
+                                <span className="text-[#5a6a55] flex items-center gap-1 mt-0.5">
+                                  <MapPin className="h-3 w-3" /> {app.parcelIds.map(getParcelName).join(", ")}
+                                </span>
+                                {app.treeIds.length > 0 && (
+                                  <span className="text-[#80907a] block mt-0.5">
+                                    Ağaçlar: {app.treeIds.map(getTreeLabel).join(", ")}
+                                  </span>
+                                )}
+                                {app.amountNote && <span className="text-[#80907a] block mt-0.5">Miktar: {app.amountNote}</span>}
+                                {app.notes && <span className="text-[#80907a] block mt-0.5 italic">{app.notes}</span>}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteApplication(item.id, app.id)}
+                                className="text-[#a8b5a2] hover:text-red-600 shrink-0"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-[#80907a] italic">Henüz uygulama kaydı yok.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })

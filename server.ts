@@ -20,7 +20,8 @@ import {
   inventoryItemRepository, 
   inventoryCategoryRepository,
   fertilizerRepository,
-  chemicalRepository 
+  chemicalRepository,
+  productApplicationRepository
 } from "./server/repositories/inventory.repository";
 import { activityLogRepository, weatherRepository, notificationRepository } from "./server/repositories/activity.repository";
 import { 
@@ -1245,6 +1246,90 @@ app.post("/api/inventory/adjust", requireAuth, requirePermission("inventory:writ
   }
 
   res.json({ success: true, item: updatedItem });
+}));
+
+// Uploads a photo (invoice or product label) for an inventory item.
+// Photos are stored as real files (via photoStorageService, the same
+// service the observation/equipment photo features already use), and
+// the InventoryItem record only stores the resulting URL — matching
+// the exact `invoicePhotoUrl`/`labelPhotoUrl` fields that already
+// existed in the data model but were never wired to any route until
+// now. Uploading again for the same slot replaces the previous photo
+// file rather than accumulating orphaned ones.
+app.post("/api/inventory/:id/photo", requireAuth, requirePermission("inventory:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const item = await inventoryItemRepository.getById(req.params.id);
+  if (!item) {
+    return res.status(404).json({ error: "Ürün bulunamadı." });
+  }
+
+  const { base64Data, photoType } = req.body;
+  if (!base64Data || (photoType !== "invoice" && photoType !== "label")) {
+    return res.status(400).json({ error: "Fotoğraf verisi ve geçerli bir photoType ('invoice' veya 'label') zorunludur." });
+  }
+
+  const existingUrl = photoType === "invoice" ? item.invoicePhotoUrl : item.labelPhotoUrl;
+  if (existingUrl) {
+    photoStorageService.deletePhotoFile(existingUrl);
+  }
+
+  const saved = photoStorageService.saveNewPhoto(base64Data);
+  const updates = photoType === "invoice"
+    ? { invoicePhotoUrl: saved.relativeUrl }
+    : { labelPhotoUrl: saved.relativeUrl };
+  const updated = await inventoryItemRepository.update(req.params.id, updates);
+
+  res.json(updated);
+}));
+
+// Simple application-history record: which parcels/reference trees a
+// product was applied to, and when — no automatic stock deduction (see
+// ProductApplication in models.ts for the explicit design decision
+// behind this).
+app.post("/api/inventory/:id/applications", requireAuth, requirePermission("inventory:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const item = await inventoryItemRepository.getById(req.params.id);
+  if (!item) {
+    return res.status(404).json({ error: "Ürün bulunamadı." });
+  }
+
+  const { applicationDate, parcelIds, treeIds, amountNote, notes } = req.body;
+  if (!applicationDate || !isValidNonFutureDate(applicationDate)) {
+    return res.status(400).json({ error: "Uygulama tarihi geçersiz veya gelecekte bir tarih olamaz." });
+  }
+  if (!Array.isArray(parcelIds) || parcelIds.length === 0) {
+    return res.status(400).json({ error: "En az bir parsel seçilmelidir." });
+  }
+
+  const newRecord = await productApplicationRepository.create({
+    inventoryItemId: req.params.id,
+    applicationDate,
+    parcelIds,
+    treeIds: Array.isArray(treeIds) ? treeIds : [],
+    amountNote: amountNote || undefined,
+    notes: notes || undefined,
+    createdAt: new Date().toISOString(),
+  });
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "PRODUCT_APPLICATION",
+    `'${item.name}' ürünü ${parcelIds.length} parsele uygulandı olarak kaydedildi.`
+  );
+
+  res.status(201).json(newRecord);
+}));
+
+app.get("/api/inventory/:id/applications", requireAuth, requirePermission("inventory:read"), asyncHandler(async (req, res) => {
+  const list = await productApplicationRepository.getByInventoryItemId(req.params.id);
+  res.json(list);
+}));
+
+app.delete("/api/inventory/applications/:id", requireAuth, requirePermission("inventory:write"), asyncHandler(async (req, res) => {
+  const existing = await productApplicationRepository.getById(req.params.id);
+  if (!existing) {
+    return res.status(404).json({ error: "Silinmek istenen uygulama kaydı bulunamadı." });
+  }
+  await productApplicationRepository.delete(req.params.id);
+  res.json({ success: true });
 }));
 
 // ==========================================

@@ -8,7 +8,8 @@ import {
   InventoryItem, 
   InventoryCategory, 
   Fertilizer, 
-  Chemical 
+  Chemical,
+  ProductApplication
 } from "../models";
 import { db } from "../database";
 
@@ -97,7 +98,29 @@ export class ChemicalRepository extends BaseRepository<Chemical> {
   }
 }
 
+/**
+ * Repository to manage the simple application history log (which
+ * parcels/reference trees a product was applied to, and when) — see
+ * ProductApplication in models.ts for why this is deliberately separate
+ * from the older, stock-linked Application interface.
+ */
+export class ProductApplicationRepository extends BaseRepository<ProductApplication> {
+  constructor() {
+    super("productApplications");
+  }
+
+  /**
+   * Retrieves every application record for a single inventory item,
+   * most recent first.
+   */
+  public async getByInventoryItemId(inventoryItemId: string): Promise<ProductApplication[]> {
+    const records = await this.find((a) => a.inventoryItemId === inventoryItemId);
+    return records.sort((a, b) => new Date(b.applicationDate).getTime() - new Date(a.applicationDate).getTime());
+  }
+}
+
 export const inventoryCategoryRepository = new InventoryCategoryRepository();
 export const inventoryItemRepository = new InventoryItemRepository();
 export const fertilizerRepository = new FertilizerRepository();
 export const chemicalRepository = new ChemicalRepository();
+export const productApplicationRepository = new ProductApplicationRepository();
