@@ -29,6 +29,8 @@ import { growthAnalysisService } from "./ai/growth-analysis.service";
 export const aiService = {
   processDocument: documentService.processDocument.bind(documentService),
   removeDocument: documentService.removeDocument.bind(documentService),
+  computeDocumentContentHash: documentService.computeContentHash.bind(documentService),
+  findDuplicateDocumentByContentHash: documentService.findDuplicateByContentHash.bind(documentService),
   generateParcelRecommendation: parcelRecommendationService.generateParcelRecommendation.bind(parcelRecommendationService),
   queryChatAssistant: chatAssistantService.queryChatAssistant.bind(chatAssistantService),
   analyzePhotoOnce: photoAnalysisService.analyzePhotoOnce.bind(photoAnalysisService),

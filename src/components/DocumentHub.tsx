@@ -91,7 +91,7 @@ export default function DocumentHub() {
   // Chatbot Assistant State
   const [chatQuery, setChatQuery] = useState("");
   const [chatMessages, setChatMessages] = useState<any[]>([
-    { sender: "bot", text: "Merhaba, ben Mersin AgriTech RAG asistanınız. Tarım rehberleriniz ve zeytinlik verileriniz doğrultusunda sorularınızı cevaplayabilirim. Ne sormak istersiniz?" }
+    { id: "welcome", sender: "bot", text: "Merhaba, ben Mersin AgriTech RAG asistanınız. Tarım rehberleriniz ve zeytinlik verileriniz doğrultusunda sorularınızı cevaplayabilirim. Ne sormak istersiniz?" }
   ]);
   const [chatLoading, setChatLoading] = useState(false);
 
@@ -130,15 +130,36 @@ export default function DocumentHub() {
         "Content-Type": "application/json"
       };
 
-      const res = await fetch("/api/ai/documents/upload", {
+      const submit = (forceUpload: boolean) => fetch("/api/ai/documents/upload", {
         method: "POST",
         headers,
         body: JSON.stringify({
           fileName,
           fileType,
-          textContent
+          textContent,
+          forceUpload
         })
       });
+
+      let res = await submit(false);
+
+      // A 409 means the exact same text content is already indexed —
+      // ask the user to confirm before creating a second, duplicate
+      // entry rather than silently proceeding or silently blocking.
+      if (res.status === 409) {
+        const data = await res.json();
+        const existingDate = data.duplicate?.uploadDate
+          ? new Date(data.duplicate.uploadDate).toLocaleDateString("tr-TR")
+          : "bilinmeyen bir tarihte";
+        const proceed = confirm(
+          `Bu içerik daha önce "${data.duplicate?.fileName}" adıyla ${existingDate} tarihinde yüklenmiş. Yine de tekrar eklemek istiyor musunuz?`
+        );
+        if (!proceed) {
+          setSaving(false);
+          return;
+        }
+        res = await submit(true);
+      }
 
       if (!res.ok) {
         const data = await res.json();
@@ -181,7 +202,13 @@ export default function DocumentHub() {
     e.preventDefault();
     if (!chatQuery.trim()) return;
 
-    const userMsg = { sender: "user", text: chatQuery };
+    // Each message gets a stable id at creation time — used as the
+    // React key below instead of array index (see denetim bulgusu:
+    // Bulgu-7). This array only ever appends (no message is removed
+    // mid-conversation), so the practical risk was already low, but a
+    // stable key is the correct pattern regardless of current risk
+    // level, and costs nothing to apply consistently.
+    const userMsg = { id: crypto.randomUUID(), sender: "user", text: chatQuery };
     setChatMessages((prev) => [...prev, userMsg]);
     setChatQuery("");
     setChatLoading(true);
@@ -203,9 +230,9 @@ export default function DocumentHub() {
         throw new Error(data.error || "Yapay zeka yanıt üretemedi.");
       }
 
-      setChatMessages((prev) => [...prev, { sender: "bot", text: data.response || data.text }]);
+      setChatMessages((prev) => [...prev, { id: crypto.randomUUID(), sender: "bot", text: data.response || data.text }]);
     } catch (err: any) {
-      setChatMessages((prev) => [...prev, { sender: "bot", text: `Yanıt alınırken hata oluştu: ${err.message}` }]);
+      setChatMessages((prev) => [...prev, { id: crypto.randomUUID(), sender: "bot", text: `Yanıt alınırken hata oluştu: ${err.message}` }]);
     } finally {
       setChatLoading(false);
     }
@@ -423,7 +450,7 @@ export default function DocumentHub() {
             {chatMessages.map((msg, index) => {
               const isBot = msg.sender === "bot";
               return (
-                <div key={index} className={`flex ${isBot ? "justify-start" : "justify-end"} animate-fade-in`}>
+                <div key={msg.id ?? index} className={`flex ${isBot ? "justify-start" : "justify-end"} animate-fade-in`}>
                   <div className={`max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed space-y-2 shadow-sm ${
                     isBot 
                       ? "bg-white text-[#2d3a2a] rounded-bl-none border border-[#dee5db]" 

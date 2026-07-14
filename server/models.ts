@@ -463,6 +463,14 @@ export interface UploadedDocument {
   // pool", exactly as before this field was introduced.
   linkedEntityType?: "equipment";
   linkedEntityId?: string;
+  /**
+   * SHA-256 hash of the document's raw text content, used to detect
+   * near-instant re-uploads of the exact same text (see denetim
+   * özelliği: yükleme öncesi içerik tekrarı uyarısı). Optional so
+   * documents uploaded before this field existed remain valid —
+   * they simply never match against anything new.
+   */
+  contentHash?: string;
 }
 
 /**

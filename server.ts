@@ -1658,9 +1658,29 @@ app.post("/api/ai/documents/parse", requireAuth, requirePermission("documents:wr
 
 // Index a new text document into the vector RAG engine
 app.post("/api/ai/documents/upload", requireAuth, requirePermission("documents:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { fileName, fileType, textContent } = req.body;
+  const { fileName, fileType, textContent, forceUpload } = req.body;
   if (!fileName || !textContent) {
     return res.status(400).json({ error: "Doküman adı ve doküman içeriği (metin) zorunludur." });
+  }
+
+  // Warns (rather than silently re-indexing) when the exact same text
+  // has already been uploaded before — see denetim özelliği: yükleme
+  // öncesi içerik tekrarı uyarısı. `forceUpload` lets the user
+  // deliberately proceed anyway (e.g. they genuinely want a second,
+  // duplicate entry), so this is a confirmation step, not a hard block.
+  if (!forceUpload) {
+    const contentHash = aiService.computeDocumentContentHash(textContent);
+    const duplicate = await aiService.findDuplicateDocumentByContentHash(contentHash);
+    if (duplicate) {
+      return res.status(409).json({
+        error: "Bu içerik daha önce yüklenmiş.",
+        duplicate: {
+          id: duplicate.id,
+          fileName: duplicate.fileName,
+          uploadDate: duplicate.uploadDate,
+        },
+      });
+    }
   }
 
   const textBytes = Buffer.byteLength(textContent, "utf8");
