@@ -79,7 +79,7 @@
       "name": "Evin altı yamaç ve Ev yolu Zeytinler",
       "cropType": "Zeytin",
       "areaDekar": 0.2,
-      "treeCount": 5,
+      "treeCount": 24,
       "soilType": "Killi-Tınlı",
       "irrigationType": "Damlama",
       "latitude": 36.9123,
@@ -87,7 +87,7 @@
       "notes": "",
       "qrCodeData": "",
       "createdAt": "2026-07-03T07:34:31.701Z",
-      "updatedAt": "2026-07-03T07:34:31.701Z",
+      "updatedAt": "2026-07-11T07:45:07.982Z",
       "id": "968afd30-7a1a-440b-823c-b4b197516c44"
     },
     {
@@ -149,6 +149,21 @@
       "createdAt": "2026-07-07T06:28:09.369Z",
       "updatedAt": "2026-07-07T06:28:09.369Z",
       "id": "1baba878-2d97-4e7e-97bb-6905763f441c"
+    },
+    {
+      "name": "Teras Salatalıklar",
+      "cropType": "Sebze",
+      "areaDekar": 0.0001,
+      "treeCount": 4,
+      "soilType": "Killi-Tınlı",
+      "irrigationType": "Damlama",
+      "latitude": 36.9123,
+      "longitude": 34.4234,
+      "notes": "",
+      "qrCodeData": "",
+      "createdAt": "2026-07-11T08:28:03.786Z",
+      "updatedAt": "2026-07-11T08:28:03.787Z",
+      "id": "77c59a89-0f84-470d-b45e-ec7ecee2cea9"
     }
   ],
   "trees": [
@@ -333,6 +348,61 @@
     }
   ],
   "observations": [
+    {
+      "parcelId": "968afd30-7a1a-440b-823c-b4b197516c44",
+      "treeId": "fb2f9bd2-0c38-441c-a073-edda2f581e06",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-13",
+      "activityType": "İlaçlama",
+      "notes": "Captan 50 monstar ve maestro 5 ev verildi",
+      "createdAt": "2026-07-13T05:49:26.901Z",
+      "id": "8b360a9e-f563-4c5f-aca9-a6980871f6b1"
+    },
+    {
+      "parcelId": "77c59a89-0f84-470d-b45e-ec7ecee2cea9",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-11",
+      "activityType": "İlaçlama",
+      "notes": "İlaç erildi captan monstar",
+      "createdAt": "2026-07-11T08:30:35.219Z",
+      "id": "82a82711-841b-4cb1-9935-4f74dd940306"
+    },
+    {
+      "parcelId": "77c59a89-0f84-470d-b45e-ec7ecee2cea9",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-11",
+      "activityType": "İlaçlama",
+      "notes": "Captan50 monstar karıştırılıp verildi ",
+      "createdAt": "2026-07-11T08:32:13.345Z",
+      "id": "b72bfc03-b58e-4971-8b56-068457a290cc"
+    },
+    {
+      "parcelId": "1de3081e-194c-4888-b1bc-9801ae38b1d2",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-11",
+      "activityType": "Genel Gözlem",
+      "notes": "gözlem",
+      "createdAt": "2026-07-11T11:16:46.199Z",
+      "id": "35cc17ca-b54e-43de-83b8-3952cb80fa91"
+    },
+    {
+      "parcelId": "1de3081e-194c-4888-b1bc-9801ae38b1d2",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-11",
+      "activityType": "Genel Gözlem",
+      "notes": "Gözdem",
+      "createdAt": "2026-07-11T11:18:20.848Z",
+      "id": "6d384db2-f73b-426d-8d87-d13357d246c9"
+    },
+    {
+      "parcelId": "1de3081e-194c-4888-b1bc-9801ae38b1d2",
+      "observerId": "user-admin-default",
+      "observationDate": "2026-07-11",
+      "activityType": "Genel Gözlem",
+      "notes": "gözlem",
+      "createdAt": "2026-07-11T11:19:04.475Z",
+      "id": "6164d8cd-1bf5-4fd1-8505-f3b78fb91993"
+    },
     {
       "parcelId": "1931ce5d-7a84-431a-a041-06ebf144d5ee",
       "observerId": "user-admin-default",
@@ -683,112 +753,88 @@
   ],
   "photos": [
     {
-      "observationId": "9416d328-d692-40c2-a482-d3f1ccb3e1ef",
-      "originalUrl": "/uploads/photos/9e6cb80e-cbec-4263-9b1a-097115bc2fd5.jpg",
-      "thumbnailUrl": "/uploads/photos/9e6cb80e-cbec-4263-9b1a-097115bc2fd5.jpg",
-      "latitude": 36.914851,
-      "longitude": 34.419903,
-      "takenAt": "2026-07-03T10:22:44.806Z",
-      "fileSize": 513119,
-      "createdAt": "2026-07-03T10:22:44.806Z",
-      "id": "9e6cb80e-cbec-4263-9b1a-097115bc2fd5"
+      "id": "260d6ade-c415-42a8-9529-f0c87a742326",
+      "observationId": "8b360a9e-f563-4c5f-aca9-a6980871f6b1",
+      "originalUrl": "/uploads/photos/260d6ade-c415-42a8-9529-f0c87a742326.jpg",
+      "thumbnailUrl": "/uploads/photos/260d6ade-c415-42a8-9529-f0c87a742326.jpg",
+      "latitude": 36.91368,
+      "longitude": 34.422424,
+      "takenAt": "2026-07-13",
+      "fileSize": 209718,
+      "contentHash": "0063fae82b4f1e303eded99a239dfbc1671de14645991ad8d300da9c55c2f00b",
+      "createdAt": "2026-07-13T05:49:27.097Z"
     },
     {
-      "observationId": "4d6960ef-b759-4792-b343-630e1672595a",
-      "originalUrl": "/uploads/photos/db13c1dd-fb01-4211-a898-ac1487f7f8f8.jpg",
-      "thumbnailUrl": "/uploads/photos/db13c1dd-fb01-4211-a898-ac1487f7f8f8.jpg",
-      "latitude": 36.912276,
-      "longitude": 34.426995,
-      "takenAt": "2026-07-03T10:28:23.791Z",
-      "fileSize": 6139711,
-      "createdAt": "2026-07-03T10:28:23.801Z",
-      "id": "db13c1dd-fb01-4211-a898-ac1487f7f8f8",
-      "aiAnalysis": {
-        "growthStage": "Gelişim",
-        "healthScore": 75,
-        "diseaseIndication": "Yapraklarda galeri sineği (yaprak madencisi) tünelleri ve zararı gözlenmektedir.",
-        "confidence": 0.85,
-        "isUncertain": false,
-        "analyzedAt": "2026-07-05T06:41:55.456Z"
-      }
+      "id": "499c3461-851f-4f97-ab6c-f528fa175f89",
+      "observationId": "8b360a9e-f563-4c5f-aca9-a6980871f6b1",
+      "originalUrl": "/uploads/photos/499c3461-851f-4f97-ab6c-f528fa175f89.jpg",
+      "thumbnailUrl": "/uploads/photos/499c3461-851f-4f97-ab6c-f528fa175f89.jpg",
+      "latitude": 36.915005,
+      "longitude": 34.422554,
+      "takenAt": "2026-07-13",
+      "fileSize": 529848,
+      "contentHash": "91ac69b0aa946ddc83620bd085c0fc290fc70bc14bc789b03502da7341fa03a0",
+      "createdAt": "2026-07-13T05:49:27.160Z"
     },
     {
-      "id": "c25697ed-dd91-4674-bac3-e8356a0a5a1b",
-      "observationId": "3500ae7f-e87a-4855-bfcd-33d104c0806c",
-      "originalUrl": "/uploads/photos/c25697ed-dd91-4674-bac3-e8356a0a5a1b.jpg",
-      "thumbnailUrl": "/uploads/photos/c25697ed-dd91-4674-bac3-e8356a0a5a1b.jpg",
-      "takenAt": "2026-07-03T14:51:10.004Z",
-      "fileSize": 460307,
-      "createdAt": "2026-07-03T14:51:10.004Z"
+      "id": "19a0ce08-a3b7-4562-a9ae-04c750f15438",
+      "observationId": "82a82711-841b-4cb1-9935-4f74dd940306",
+      "originalUrl": "/uploads/photos/19a0ce08-a3b7-4562-a9ae-04c750f15438.jpg",
+      "thumbnailUrl": "/uploads/photos/19a0ce08-a3b7-4562-a9ae-04c750f15438.jpg",
+      "latitude": 36.9123,
+      "longitude": 34.426991,
+      "takenAt": "2026-07-11",
+      "fileSize": 5301154,
+      "contentHash": "5cd0d9e884e5a44cf159ead32adedbad870fda15ebfd255d16e19973aed56d2a",
+      "createdAt": "2026-07-11T08:30:36.954Z"
     },
     {
-      "id": "089237bd-2610-4c76-9d5e-f492365d0e93",
-      "observationId": "c6ceb37f-591c-44c8-870b-248414d94384",
-      "originalUrl": "/uploads/photos/089237bd-2610-4c76-9d5e-f492365d0e93.jpg",
-      "thumbnailUrl": "/uploads/photos/089237bd-2610-4c76-9d5e-f492365d0e93.jpg",
-      "takenAt": "2026-07-03T17:04:55.713Z",
-      "fileSize": 35259,
-      "createdAt": "2026-07-03T17:04:55.713Z"
+      "id": "4b3bcd5d-5a99-4498-8592-e7b9bdee88c6",
+      "observationId": "b72bfc03-b58e-4971-8b56-068457a290cc",
+      "originalUrl": "/uploads/photos/4b3bcd5d-5a99-4498-8592-e7b9bdee88c6.jpg",
+      "thumbnailUrl": "/uploads/photos/4b3bcd5d-5a99-4498-8592-e7b9bdee88c6.jpg",
+      "latitude": 36.916549,
+      "longitude": 34.419432,
+      "takenAt": "2026-07-11",
+      "fileSize": 5955822,
+      "contentHash": "18b713271f54ba0b8f8b8704b08e629cdb116c6603db2bc82a7b3fc0042e238e",
+      "createdAt": "2026-07-11T08:32:18.238Z"
     },
     {
-      "id": "dc054f35-c08b-4829-acc6-da697a932872",
-      "observationId": "4a22c3bc-4b0e-407a-840f-dd9f99867ba3",
-      "originalUrl": "/uploads/photos/dc054f35-c08b-4829-acc6-da697a932872.jpg",
-      "thumbnailUrl": "/uploads/photos/dc054f35-c08b-4829-acc6-da697a932872.jpg",
-      "takenAt": "2026-07-04T11:01:17.213Z",
-      "fileSize": 384821,
-      "contentHash": "f1f8f46e372cb2bf02b70599fee465016ba037ea1abc401773bedbf331feffe2",
-      "createdAt": "2026-07-04T11:01:17.213Z"
+      "id": "a3c09df1-f42b-4f27-8b84-c32c53347720",
+      "observationId": "35cc17ca-b54e-43de-83b8-3952cb80fa91",
+      "originalUrl": "/uploads/photos/a3c09df1-f42b-4f27-8b84-c32c53347720.jpg",
+      "thumbnailUrl": "/uploads/photos/a3c09df1-f42b-4f27-8b84-c32c53347720.jpg",
+      "latitude": 36.909398,
+      "longitude": 34.420811,
+      "takenAt": "2026-07-11",
+      "fileSize": 6199823,
+      "contentHash": "3a6daa160a5e0b2ec5306dfa7c3e02d263f83b3e783b9f3a63b452058f232595",
+      "createdAt": "2026-07-11T11:16:56.149Z"
     },
     {
-      "id": "53195f6a-04cb-4ee4-a538-1cbcf79af027",
-      "observationId": "7b102f1b-ac47-4f5d-b143-9e242017df8e",
-      "originalUrl": "/uploads/photos/53195f6a-04cb-4ee4-a538-1cbcf79af027.jpg",
-      "thumbnailUrl": "/uploads/photos/53195f6a-04cb-4ee4-a538-1cbcf79af027.jpg",
-      "latitude": 36.915289,
-      "longitude": 34.423591,
-      "takenAt": "2026-07-05T04:42:06.994Z",
-      "fileSize": 384821,
-      "contentHash": "f1f8f46e372cb2bf02b70599fee465016ba037ea1abc401773bedbf331feffe2",
-      "createdAt": "2026-07-05T04:42:07.013Z",
-      "aiAnalysis": {
-        "growthStage": "Belirsiz",
-        "healthScore": null,
-        "diseaseIndication": null,
-        "confidence": 0.3,
-        "isUncertain": true,
-        "analyzedAt": "2026-07-05T04:42:17.792Z"
-      }
+      "id": "c2fab56b-84a3-4408-bf73-a86ebd815ca1",
+      "observationId": "6d384db2-f73b-426d-8d87-d13357d246c9",
+      "originalUrl": "/uploads/photos/c2fab56b-84a3-4408-bf73-a86ebd815ca1.jpg",
+      "thumbnailUrl": "/uploads/photos/c2fab56b-84a3-4408-bf73-a86ebd815ca1.jpg",
+      "latitude": 36.914673,
+      "longitude": 34.421223,
+      "takenAt": "2026-07-11",
+      "fileSize": 6746117,
+      "contentHash": "cdf927a660fcab7e60726107a0006319f9278569197a4e06e22950a5a7d9ef7d",
+      "createdAt": "2026-07-11T11:18:30.594Z"
     },
     {
-      "id": "ebebcd2e-c33d-448c-9176-9bb7e8a0b648",
-      "observationId": "830cb058-279a-47e9-a99b-779f6f748fe5",
-      "originalUrl": "/uploads/photos/ebebcd2e-c33d-448c-9176-9bb7e8a0b648.jpg",
-      "thumbnailUrl": "/uploads/photos/ebebcd2e-c33d-448c-9176-9bb7e8a0b648.jpg",
-      "latitude": 36.912234,
-      "longitude": 34.423674,
-      "takenAt": "2026-07-05",
-      "fileSize": 499714,
-      "contentHash": "9219ba1dbd3369d9ec3e6ac1d5a989393a412c387fac14df31af2d38ab6199cb",
-      "createdAt": "2026-07-05T06:40:25.401Z",
-      "aiAnalysis": {
-        "growthStage": "Gelişim",
-        "healthScore": 75,
-        "diseaseIndication": "Görselin merkezindeki yapraklarda belirgin galeri sineği (yaprak madencisi) zararı ve tünelleri mevcuttur.",
-        "confidence": 0.9,
-        "isUncertain": false,
-        "analyzedAt": "2026-07-05T06:42:19.328Z"
-      }
-    },
-    {
-      "id": "97632f27-e862-4d5d-8783-bedd178de346",
-      "observationId": "327bd41b-44f1-48a7-8b02-028b03c9c01e",
-      "originalUrl": "/uploads/photos/97632f27-e862-4d5d-8783-bedd178de346.jpg",
-      "thumbnailUrl": "/uploads/photos/97632f27-e862-4d5d-8783-bedd178de346.jpg",
-      "takenAt": "2026-07-05T09:12:19.847Z",
-      "fileSize": 499714,
-      "contentHash": "9219ba1dbd3369d9ec3e6ac1d5a989393a412c387fac14df31af2d38ab6199cb",
-      "createdAt": "2026-07-05T09:12:19.847Z"
+      "id": "d0491fed-bcf9-4e65-b916-2209f598b8f9",
+      "observationId": "6164d8cd-1bf5-4fd1-8505-f3b78fb91993",
+      "originalUrl": "/uploads/photos/d0491fed-bcf9-4e65-b916-2209f598b8f9.jpg",
+      "thumbnailUrl": "/uploads/photos/d0491fed-bcf9-4e65-b916-2209f598b8f9.jpg",
+      "latitude": 36.912778,
+      "longitude": 34.419748,
+      "takenAt": "2026-07-11",
+      "fileSize": 7488267,
+      "contentHash": "44a43b093e7cc7017fc563e3fbcb229951ca53e01472958eaf0dffd62aebe612",
+      "createdAt": "2026-07-11T11:19:14.194Z"
     },
     {
       "id": "6f90d5cc-a7ef-4fb5-8472-bd7d5c1367c2",
@@ -1029,9 +1075,131 @@
         "isUncertain": false,
         "analyzedAt": "2026-07-07T07:36:56.038Z"
       }
+    },
+    {
+      "id": "97632f27-e862-4d5d-8783-bedd178de346",
+      "observationId": "327bd41b-44f1-48a7-8b02-028b03c9c01e",
+      "originalUrl": "/uploads/photos/97632f27-e862-4d5d-8783-bedd178de346.jpg",
+      "thumbnailUrl": "/uploads/photos/97632f27-e862-4d5d-8783-bedd178de346.jpg",
+      "takenAt": "2026-07-05T09:12:19.847Z",
+      "fileSize": 499714,
+      "contentHash": "9219ba1dbd3369d9ec3e6ac1d5a989393a412c387fac14df31af2d38ab6199cb",
+      "createdAt": "2026-07-05T09:12:19.847Z"
+    },
+    {
+      "id": "53195f6a-04cb-4ee4-a538-1cbcf79af027",
+      "observationId": "7b102f1b-ac47-4f5d-b143-9e242017df8e",
+      "originalUrl": "/uploads/photos/53195f6a-04cb-4ee4-a538-1cbcf79af027.jpg",
+      "thumbnailUrl": "/uploads/photos/53195f6a-04cb-4ee4-a538-1cbcf79af027.jpg",
+      "latitude": 36.915289,
+      "longitude": 34.423591,
+      "takenAt": "2026-07-05T04:42:06.994Z",
+      "fileSize": 384821,
+      "contentHash": "f1f8f46e372cb2bf02b70599fee465016ba037ea1abc401773bedbf331feffe2",
+      "createdAt": "2026-07-05T04:42:07.013Z",
+      "aiAnalysis": {
+        "growthStage": "Belirsiz",
+        "healthScore": null,
+        "diseaseIndication": null,
+        "confidence": 0.3,
+        "isUncertain": true,
+        "analyzedAt": "2026-07-05T04:42:17.792Z"
+      }
+    },
+    {
+      "id": "ebebcd2e-c33d-448c-9176-9bb7e8a0b648",
+      "observationId": "830cb058-279a-47e9-a99b-779f6f748fe5",
+      "originalUrl": "/uploads/photos/ebebcd2e-c33d-448c-9176-9bb7e8a0b648.jpg",
+      "thumbnailUrl": "/uploads/photos/ebebcd2e-c33d-448c-9176-9bb7e8a0b648.jpg",
+      "latitude": 36.912234,
+      "longitude": 34.423674,
+      "takenAt": "2026-07-05",
+      "fileSize": 499714,
+      "contentHash": "9219ba1dbd3369d9ec3e6ac1d5a989393a412c387fac14df31af2d38ab6199cb",
+      "createdAt": "2026-07-05T06:40:25.401Z",
+      "aiAnalysis": {
+        "growthStage": "Gelişim",
+        "healthScore": 75,
+        "diseaseIndication": "Görselin merkezindeki yapraklarda belirgin galeri sineği (yaprak madencisi) zararı ve tünelleri mevcuttur.",
+        "confidence": 0.9,
+        "isUncertain": false,
+        "analyzedAt": "2026-07-05T06:42:19.328Z"
+      }
+    },
+    {
+      "id": "dc054f35-c08b-4829-acc6-da697a932872",
+      "observationId": "4a22c3bc-4b0e-407a-840f-dd9f99867ba3",
+      "originalUrl": "/uploads/photos/dc054f35-c08b-4829-acc6-da697a932872.jpg",
+      "thumbnailUrl": "/uploads/photos/dc054f35-c08b-4829-acc6-da697a932872.jpg",
+      "takenAt": "2026-07-04T11:01:17.213Z",
+      "fileSize": 384821,
+      "contentHash": "f1f8f46e372cb2bf02b70599fee465016ba037ea1abc401773bedbf331feffe2",
+      "createdAt": "2026-07-04T11:01:17.213Z"
+    },
+    {
+      "id": "089237bd-2610-4c76-9d5e-f492365d0e93",
+      "observationId": "c6ceb37f-591c-44c8-870b-248414d94384",
+      "originalUrl": "/uploads/photos/089237bd-2610-4c76-9d5e-f492365d0e93.jpg",
+      "thumbnailUrl": "/uploads/photos/089237bd-2610-4c76-9d5e-f492365d0e93.jpg",
+      "takenAt": "2026-07-03T17:04:55.713Z",
+      "fileSize": 35259,
+      "createdAt": "2026-07-03T17:04:55.713Z"
+    },
+    {
+      "id": "c25697ed-dd91-4674-bac3-e8356a0a5a1b",
+      "observationId": "3500ae7f-e87a-4855-bfcd-33d104c0806c",
+      "originalUrl": "/uploads/photos/c25697ed-dd91-4674-bac3-e8356a0a5a1b.jpg",
+      "thumbnailUrl": "/uploads/photos/c25697ed-dd91-4674-bac3-e8356a0a5a1b.jpg",
+      "takenAt": "2026-07-03T14:51:10.004Z",
+      "fileSize": 460307,
+      "createdAt": "2026-07-03T14:51:10.004Z"
+    },
+    {
+      "observationId": "4d6960ef-b759-4792-b343-630e1672595a",
+      "originalUrl": "/uploads/photos/db13c1dd-fb01-4211-a898-ac1487f7f8f8.jpg",
+      "thumbnailUrl": "/uploads/photos/db13c1dd-fb01-4211-a898-ac1487f7f8f8.jpg",
+      "latitude": 36.912276,
+      "longitude": 34.426995,
+      "takenAt": "2026-07-03T10:28:23.791Z",
+      "fileSize": 6139711,
+      "createdAt": "2026-07-03T10:28:23.801Z",
+      "id": "db13c1dd-fb01-4211-a898-ac1487f7f8f8",
+      "aiAnalysis": {
+        "growthStage": "Gelişim",
+        "healthScore": 75,
+        "diseaseIndication": "Yapraklarda galeri sineği (yaprak madencisi) tünelleri ve zararı gözlenmektedir.",
+        "confidence": 0.85,
+        "isUncertain": false,
+        "analyzedAt": "2026-07-05T06:41:55.456Z"
+      }
+    },
+    {
+      "observationId": "9416d328-d692-40c2-a482-d3f1ccb3e1ef",
+      "originalUrl": "/uploads/photos/9e6cb80e-cbec-4263-9b1a-097115bc2fd5.jpg",
+      "thumbnailUrl": "/uploads/photos/9e6cb80e-cbec-4263-9b1a-097115bc2fd5.jpg",
+      "latitude": 36.914851,
+      "longitude": 34.419903,
+      "takenAt": "2026-07-03T10:22:44.806Z",
+      "fileSize": 513119,
+      "createdAt": "2026-07-03T10:22:44.806Z",
+      "id": "9e6cb80e-cbec-4263-9b1a-097115bc2fd5"
     }
   ],
-  "inventory": [],
+  "inventory": [
+    {
+      "name": "Maestro 5 ec",
+      "categoryId": "cat-pesticide",
+      "brand": "hektaş",
+      "sku": "",
+      "stockQuantity": 2,
+      "unit": "Litre",
+      "minStockAlert": 1,
+      "unitPrice": 400,
+      "createdAt": "2026-07-13T12:15:04.284Z",
+      "updatedAt": "2026-07-13T12:15:04.285Z",
+      "id": "08c475c2-9519-4a7b-95d9-fe1129eaa955"
+    }
+  ],
   "inventoryCategories": [
     {
       "id": "cat-pesticide",
@@ -1055,7 +1223,15 @@
     }
   ],
   "fertilizers": [],
-  "chemicals": [],
+  "chemicals": [
+    {
+      "inventoryItemId": "08c475c2-9519-4a7b-95d9-fe1129eaa955",
+      "activeIngredient": "",
+      "targetPests": [],
+      "preHarvestIntervalDays": 15,
+      "id": "34b4ff85-93ea-403b-bc10-7a1606fe6bfb"
+    }
+  ],
   "applications": [],
   "irrigation": [],
   "harvest": [],
@@ -1258,6 +1434,78 @@
       "usedInventoryCount": 0,
       "createdDate": "2026-07-07T07:37:13.557Z",
       "id": "5fea9500-447c-4719-a2b7-20ad14790706"
+    },
+    {
+      "parcelId": "77c59a89-0f84-470d-b45e-ec7ecee2cea9",
+      "recommendationType": "Genel",
+      "content": "Merhaba Değerli Üreticimiz,\n\nMersin Toroslar’ın eşsiz mikro-klimasına sahip Değirmençay bölgesindeki zeytinliğiniz için hazırladığım özel tarım analizini aşağıda bulabilirsiniz. Bahçenizdeki 4 adet zeytin ağacınızın sağlığını korumak ve verimini artırmak için bilimsel ve bölgesel veriler ışığında bir değerlendirme hazırladım.\n\n---\n\n### 1. Analiz ve Teşhis\n\nSaha gözlem raporlarına göre **11 Temmuz 2026** tarihinde ağaçlarınıza **Captan 50** ve **Monstar** ilaç karışımını uygulamışsınız. \n\n*   **İlaçların Amacı:** \n    *   **Captan 50 WP:** Geniş spektrumlu, koruyucu bir fungisittir (mantar ilacı). Zeytinlerde özellikle *Halkalı Leke* (*Spilocaea oleagina*) ve çeşitli yaprak lekelerine karşı kullanılır.\n    *   **Monstar:** Genellikle toprak kökenli veya sistemik mantari hastalıklarla (kök çürüklükleri vb.) mücadelede tercih edilen sistemik bir fungisittir.\n*   **Mevcut Durum ve Teşhis:** \n    *   Önümüzdeki günlerde (12-14 Temmuz) hava durumunda **sisli** ve **%73 ila %81** gibi oldukça **yüksek nem** oranları öngörülmektedir. Bu yüksek nem ve 28-31°C arası sıcaklıklar, mantari hastalıkların (özellikle halkalı leke ve antraknoz gibi yaprak/meyve hastalıklarının) yayılması için çok elverişli bir ortam yaratır. Muhtemelen bu riskleri öngörerek ya da ağaçlarda sararma/lekelenme görerek bu ilaçlamayı yaptınız.\n    *   **Zeytin Sineği (*Bactrocera oleae*) Riski:** Mevcut nemli ve 30°C civarındaki hava, zeytin sineğinin aktif olması için uygundur. Henüz zeytin sineği ilaçlaması yapmadıysanız, meyveleri kontrol etmeniz gerekir.\n\n---\n\n### 2. Eylem Planı\n\nHava tahminleri ve bölgenizin killi-tınlı toprak yapısına uygun olarak şu adımları izlemenizi öneririm:\n\n*   **Don Riski Değerlendirmesi:** Önümüzdeki 4 gün boyunca bölgenizde **DON RİSKİ YOKTUR** (En düşük sıcaklık 22°C). Yaz döneminde olduğumuz için don önleme tedbirine gerek yoktur.\n*   **Sulama Yönetimi (Kritik):** Toprağınız **Killi-Tınlı** yapıdadır. Killi topraklar suyu uzun süre tutar. Önümüzdeki günlerde havanın sisli ve aşırı nemli olması nedeniyle buharlaşma az olacaktır. Damlama sulama sisteminizi aşırı çalıştırmaktan kaçının; çünkü aşırı su + killi toprak kök çürüklüğünü (Phytophthora) tetikler. Toprak nemini elinizle kontrol ederek sulama yapın.\n*   **İlaçlama Sonrası Bakım:** İlaçlamayı yeni (bugün) yapmışsınız. İlacın yıkanmaması için sonraki 24 saat boyunca yapraktan sulama yapmayın veya yağış olasılığını takip edin (şu an için yağış görünmüyor, sadece sis var).\n*   **Uygulama Zamanı:** Sıcaklıklar gün içinde 31°C'ye ulaşmaktadır. İlaçların fitotoksite (yakma) yapmaması için uygulamaları günün en sıcak saatlerinde değil, **sabah erken (06:00-08:00) veya akşamüzeri (18:00'den sonra)** yapmalısınız.\n\n---\n\n### 3. Uygulama Dozajı\n\nBahçeniz **0.0001 Dekar** (çok küçük bir alan) ve sadece **4 adet zeytin ağacından** oluşmaktadır. Bu ölçekteki bir bahçe için büyük tanklar yerine **10 litrelik bir sırt pompası (el pompası)** yeterli olacaktır.\n\n*   **Sırt Pompası (10 Litre Su İçin) Yaklaşık Hesaplama:**\n    *   **Captan 50 WP:** Normalde 100 litre suya 150-250 gr önerilir. Sizin 10 litrelik pompanız için **15 - 20 gram** Captan 50 yeterlidir.\n    *   **Monstar:** Ürünün formülasyonuna göre değişmekle birlikte, 100 litre suya ortalama 100-150 ml/g önerilir. Sizin 10 litrelik pompanız için **10 - 15 ml/g** yeterli olacaktır.\n*   **Önemli Uyarı:** Bu dozajlar genel bir hesaplamadır ve kesin bir reçete değildir. Uygulama yapmadan önce her iki ürünün de **kutu arkasındaki etiket bilgilerini ve birbiriyle karışabilirlik durumlarını** mutlaka kontrol ediniz. Karışım yaparken önce küçük bir kapta ilaçları karıştırıp çökme/kesilme yapıp yapmadığını gözlemleyin (Kavanoz testi).\n\n---\n\n### 4. Hasat Öngörüsü\n\nMersin Değirmençay bölgesinde zeytin hasadı genellikle sonbahar aylarında (Ekim - Aralık) gerçekleşir. Şu an Temmuz ayındayız ve hasat dönemine uzun bir süre vardır. \n\n*   Bu dönemde yaptığınız Captan ve Monstar uygulamalarının hasat ile ilaçlama arasındaki bekleme süresi (PH - Pre-Harvest Interval) açısından bir risk oluşturması beklenmez. Ancak ilerleyen dönemde, Eylül-Ekim aylarında yapacağınız ilaçlamalarda son ilaçlama ile hasat arasındaki gün sınırına mutlaka dikkat etmelisiniz.\n\n---\n\n### 5. Güven Seviyesi\n\n*   **Güven Seviyesi: BELİRSİZ**\n*   **Neden?** Gözlem kayıtlarında sadece uygulanan ilaçlar belirtilmiş olup, ağaçlardaki somut hastalık belirtileri (yaprak dökülmesi, lekeler, dallarda kuruma veya meyve hasarı) tanımlanmamıştır. Ayrıca zeytinlerinizin çeşidi ve yaşı bilinmemektedir.\n*   **Çiftçiden İstek:** Teşhisi kesinleştirebilmem için lütfen ağaçlarınızın yapraklarında leke olup olmadığını, sararma veya dökülme yaşanıp yaşanmadığını bana yazın. Mümkünse yaprakların ve gövdenin net fotoğraflarını sisteme yükleyin.\n\n---\n\n### 6. Kullanılan Kaynaklar\n\n*   **Yerel Proje Verisi:** Parsel büyüklüğü (0.0001 dekar), ağaç sayısı (4 adet zeytin), toprak yapısı (killi-tınlı), sulama yöntemi (damlama) ve 11 Temmuz tarihli Captan/Monstar ilaçlama kayıtları bu kaynaktan alınmıştır.\n*   **Harici Web Verisi (Open-Meteo API):** 11-14 Temmuz 2026 tarihlerine ait sıcaklık, %73-%81 arası yüksek nem, rüzgar ve sis durumu ile don riski bulunmadığı bilgisi bu canlı kaynaktan alınmıştır.\n*   **RAG (Bilgi Deposu):** Bilgi deposunda bu sorguyla eşleşen spesifik bir zeytin tarımı makalesi bulunamamıştır; değerlendirmeler genel zeytin koruma ve fitopatoloji ilkelerine dayanarak yapılmıştır.\n\n*Bereketli ve sağlıklı bir hasat sezonu dilerim!*",
+      "confidenceScore": 0.85,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 2,
+      "usedWeatherCount": 4,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-11T08:33:43.970Z",
+      "id": "17f1c1f8-24b6-42c7-b8af-51321f1afad2"
+    },
+    {
+      "parcelId": "77c59a89-0f84-470d-b45e-ec7ecee2cea9",
+      "recommendationType": "Genel",
+      "content": "Merhaba! Ben Mersin Toroslar ve Değirmençay bölgesinin kendine has mikro-klimasına ve toprak yapısına hakim yapay zeka destekli tarım danışmanınızım. \n\n\"Teras Salatalıklar\" parseliniz için ilettiğiniz soruyu, bölgenizin güncel hava durumunu ve yaptığınız son ilaçlama gözlemlerini harmanlayarak hazırladığım bilimsel ve pratik değerlendirme raporunu aşağıda bilgilerinize sunarım.\n\n---\n\n### 1. Analiz ve Teşhis\n\n*   **Veri Çelişkisi ve Durum Tespiti:** Parsel adınız \"Teras Salatalıklar\" olmasına ve salatalık hastalığı sormanıza rağmen, kayıtlarımızda bu parselde \"4 adet zeytin ağacı\" kayıtlı görünmektedir. Ancak yaptığınız son ilaçlama gözlemlerinde (**Captan 50** ve **Monstar** karışımı) salatalık ve sebze hastalıklarına yönelik bir mücadele yürüttüğünüz anlaşılmaktadır.\n*   **Hastalık Teşhisi:** 11 Temmuz 2026 tarihinde yaptığınız Captan 50 (Koruyucu Fungisit) ve Monstar (Flutolanil - genellikle kök ve kök boğazı çürüklüğü, Rhizoctonia solani gibi mantari hastalıklar için kullanılır) uygulaması, bitkilerinizde **Kök Boğazı Çürüklüğü (Çökerten)**, **Mildiyö (Yalancı Mildiyö)** veya **Külleme** riskine karşı önlem aldığınızı göstermektedir.\n*   **Mikro-Klima Risk Değerlendirmesi:** Değirmençay bölgesinde önümüzdeki günlerde (12-14 Temmuz) tahmin edilen **sisli hava** ve **%75 - %81 civarındaki yüksek nem oranı**, salatalıklarda yaprak hastalıklarını (özellikle mildiyö ve külleme) ve kök çürüklüğünü tetikleyecek mükemmel bir ortam yaratmaktadır. \n\n---\n\n### 2. Eylem Planı (Sulama, İlaçlama ve Don Değerlendirmesi)\n\n*   **Sulama Yönetimi:** Toprağınız **Killi-Tınlı** yapıdadır. Bu toprak tipi suyu güçlü tutar. Önümüzdeki 3 gün boyunca havanın sisli ve nemin çok yüksek olması nedeniyle evaporasyon (buharlaşma) düşük olacaktır. **Damlama sulama sürelerinizi kısa tutun.** Aşırı sulama, Monstar ile önlemeye çalıştığınız kök çürüklüğünü daha da azdırır. Sulamayı mutlaka sabahın çok erken saatlerinde yapın.\n*   **Don Riski Değerlendirmesi:** **METEOROLOJİ KAYNAK 2** (Open-Meteo) canlı verilerine göre önümüzdeki 4 gün boyunca Değirmençay bölgesinde **DON RİSKİ YOKTUR** (En düşük sıcaklıklar 22°C - 24°C civarındadır). Bu nedenle don önleyici herhangi bir fiziksel tedbire gerek yoktur; odak noktamız tamamen yüksek nem ve mantari hastalık yönetimi olmalıdır.\n*   **Kültürel Önlemler:** Teras ortamında saksıların/bitkilerin birbirine çok yakın olmamasına dikkat edin. Yaprakların birbirine değmesi, esintiyi azaltır ve sisli havalarda nemin yaprak üzerinde kalma süresini uzatarak hastalığı yayar.\n\n---\n\n### 3. Uygulama Dozajı\n\nParsel alanınız yerel veride **0.0001 Dekar (yaklaşık 0.1 m² - saksı veya çok küçük teras alanı)** olarak belirtilmiştir. Bu kadar küçük bir alan için dozajı \"1 Litre suya\" göre ayarlamak en pratik çözümdür:\n\n*   **Captan 50 WP:** Standart sebze dozajı genellikle 100 litre suya 250 gramdır. Bu durumda **1 litre suya yaklaşık 2.5 gram** (yaklaşık yarım tatlı kaşığı) Captan karıştırmalısınız.\n*   **Monstar (Flutolanil):** Ürün etiketindeki sebze dozajına sadık kalmak koşuluyla, genellikle **1 litre suya 1 - 1.5 ml** dozunda uygulanır.\n*   **Önemli Uyarı:** 11 Temmuz'da bu karışımı zaten uygulamış durumdasınız. İlaçların bitkiyi yakmaması ve direnç gelişmesini önlemek için üst üste çok sık uygulama yapmaktan kaçının. \n*   *Bu dozajlar genel bilgi amaçlı birer hesaplamadır; kesin bir reçete değildir. Uygulama yapmadan önce elinizdeki ticari ürünün arkasındaki güncel etiketi ve dozaj tablosunu mutlaka kontrol ediniz.*\n\n---\n\n### 4. Hasat Öngörüsü ve Bekleme Süresi (PH)\n\nSalatalık yaz döneminde çok hızlı büyüyen ve neredeyse gün aşırı hasat edilen bir sebzedir.\n*   **İlaç Kalıntı Riski (PH - Bekleme Süresi):** 11 Temmuz'da uyguladığınız **Captan 50** ilacının salatalıktaki son ilaçlama ile hasat arasındaki bekleme süresi (PH) genellikle **7 ila 14 gün** arasındadır (Lütfen kullandığınız markanın etiketinden bu süreyi kesinleştirin).\n*   **Tavsiye:** İlacın son uygulama tarihinden itibaren bekleme süresi dolmadan **kesinlikle hasat yapıp salatalıkları tüketmeyiniz.** Tüketim güvenliği açısından bu süreye uymak hayati önem taşır.\n\n---\n\n### 5. Güven Seviyesi\n\n*   **Güven Seviyesi: BELİRSİZ (DÜŞÜK)**\n    *   *Nedeni:* Yazılı sorunuzda \"resimler hastalık değerlendirmesi yap\" ifadesi geçmesine rağmen, sistemimize yüklenmiş aktif bir görsel/fotoğraf bulunmamaktadır. Bitkinin mevcut yaprak lekelerini, sararmalarını veya kök durumunu göremediğim için kesin bir teşhis koymak imkansızdır. \n    *   *Sizden ricam:* Eğer mümkünse bitkinin yaprak üst yüzeyini, yaprak altını ve kök boğazının net birer fotoğrafını çekerek sisteme yükleyin veya belirtileri (Örn: \"Yapraklarda un serpilmiş gibi beyaz lekeler var\" veya \"Alt yapraklarda köşeli sarı lekeler var\") bana yazılı olarak tarif edin.\n\n---\n\n### Kullanılan Kaynaklar\n*   **Yerel Proje Verisi:** Parsel adı (Teras Salatalıklar), toprak yapısı (Killi-Tınlı) ve 11.07.2026 tarihli \"Captan + Monstar\" ilaçlama gözlem kayıtları.\n*   **Harici Web Verisi (Open-Meteo API):** Değirmençay bölgesi 11-14 Temmuz 2026 tarihli canlı hava tahmini (sis, nem ve don riski kontrolü).\n*   **RAG Kaynakları (Bilgi Deposu):** Veritabanında zeytin/salatalık özelinde eşleşen bir doküman bulunamadığı için genel akademik agronomi ve entegre mücadele literatüründen faydalanılmıştır.",
+      "confidenceScore": 0.85,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 2,
+      "usedWeatherCount": 4,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-11T08:35:19.846Z",
+      "id": "53a15a35-304e-47db-8e83-ce1a1d46ed01"
+    },
+    {
+      "parcelId": "1de3081e-194c-4888-b1bc-9801ae38b1d2",
+      "recommendationType": "Genel",
+      "content": "Merhaba Değerli Değirmençaylı Üreticimiz,\n\nMersin Toroslar’ın o güzel esintili ve özel mikro-klimasına sahip Değirmençay bölgesindeki **\"Evin alt kısmı Zeytinler\"** parseliniz için hazırladığım özel tarım analizine hoş geldiniz. 0.9 dekar alandaki 52 adet zeytin ağacınız için yaptığınız \"yapraklarda sarı olanlar var\" bildirimi üzerine, bölgenizin toprak yapısını ve son hava durumunu analiz ederek size özel bir reçete hazırladım.\n\n---\n\n### 1. Analiz ve Teşhis\n\nYapraklardaki sararmanın tek bir sebebi olmayabilir. Parselinizin **killi-tınlı** toprak yapısı, son meteorolojik olaylar ve zeytinin fizyolojisi göz önüne alındığında olası nedenler şunlardır:\n\n*   **Aşırı Su ve Kök Boğulması (En Güçlü İhtimal):** Parselinizin toprağı killi-tınlıdır, yani suyu tutma kapasitesi yüksektir. 6 Temmuz'da yarım saat süren kuvvetli yağmur ve 7 Temmuz'daki hafif yağışın ardından, toprağınız suya doymuş olabilir. Eğer damlama sulamaya da aynı düzende devam ettiyseniz, kökler oksijensiz kalmış (kök boğulması) ve bu durum yapraklarda sararmaya yol açmış olabilir.\n*   **Azot (N) Noksanlığı:** Eğer sararma zeytin ağacının alt (yaşlı) yapraklarından başlayıp yukarı doğru homojen bir şekilde yayılıyorsa, bu durum tipik bir azot eksikliğidir. Yağışlarla birlikte besin elementleri yıkanmış olabilir.\n*   **Demir (Fe) veya Magnezyum (Mg) Eksikliği:** Killi ve genellikle kireçli Toroslar toprağında demir alımı zorlaşabilir. Sararma damar aralarında ise magnezyum; genç yapraklarda tamamen sararma şeklinde (damarlar yeşil kalabilir) ise demir eksikliği olabilir.\n*   **Halkalı Leke Hastalığı (*Spilocaea oleagina*):** Havadaki yüksek nem (%73-%83 arası) ve sisli hava zemin hazırlayabilir. Ancak bu hastalıkta sararmadan önce yaprak üzerinde tipik gri-kahverengi halkalar oluşur ve ardından yaprak sararıp dökülür.\n*   **Doğal Yaprak Dökümü:** Zeytin ağaçları 2-3 yaşındaki eski yapraklarını bu dönemde fizyolojik olarak sarartıp dökebilir. Bu durum tamamen doğaldır.\n\n> **Güven Seviyesi: Belirsiz**\n> *Nedeni:* Sadece yazılı beyan olduğu ve yaprakların fotoğraflarını göremediğim için kesin bir teşhis koymak yanıltıcı olabilir. Sararmanın tam sebebini anlamak için; yaprakların üstünde leke olup olmadığını, sararmanın genç yapraklarda mı yoksa yaşlı yapraklarda mı olduğunu gözlemlememiz gerekir. Mümkünse sistem üzerinden zeytin yapraklarının net fotoğraflarını paylaşmanızı rica ederim.\n\n---\n\n### 2. Eylem Planı ve Toroslar Mikro-Klimasına Uygun Tavsiyeler\n\nÖnümüzdeki günlerde Değirmençay'da sisli, yüksek nemli (%83'lere varan) ve sıcak (30-31°C) bir hava dalgası beklenmektedir. Bu koşullar altında şu adımları izlemelisiniz:\n\n1.  **Sulama Yönetimi (Acil):** Killi-tınlı toprak yapınız ve son yağışlar nedeniyle **damlama sulamayı birkaç gün durdurun.** Toprağın tava gelmesini (hafif kuruması ve havalanmasını) bekleyin. Yüksek nem ve sisli hava zaten buharlaşmayı azaltacaktır.\n2.  **Hastalık Takibi:** Nem %83 seviyesindeyken zeytin halkalı lekesi için risk oluşabilir. Ağaçların iç kısımlarını kontrol edin. Eğer yapraklarda halka şeklinde lekeler varsa, ilerleyen günlerde bakırlı bir preparat uygulaması planlanmalıdır.\n3.  **Don Riski Değerlendirmesi:** Önümüzdeki 4 gün boyunca (11 Temmuz - 14 Temmuz) Değirmençay bölgesinde **DON RİSKİ YOKTUR.** Gece en düşük sıcaklıklar 22-24°C civarında seyredecektir. Don önleme faaliyetine gerek yoktur.\n\n---\n\n### 3. Uygulama Dozajı\n\nTeşhise göre kullanabileceğiniz, 0.9 dekar (yaklaşık 1 dekar) alanınızdaki **52 ağaç** için hesaplanmış yaklaşık dozajlar şu şekildedir:\n\n*   **Eğer Sorun Azot Eksikliği ise (Yaprak Gübresi Uygulaması):**\n    *   **Ürün:** Amino Asit + Azot ağırlıklı NPK yaprak gübresi.\n    *   **Dozaj:** 100 litre suya 200-250 ml Amino Asit ve 200-300 gr Azotlu yaprak gübresi karıştırarak sırt pompası veya atomizer ile 52 ağacınıza yapraktan uygulayabilirsiniz (Genellikle 52 ağaç için 100-150 litre su yeterli olacaktır).\n*   **Eğer Sorun Kireç kaynaklı Demir Eksikliği ise (Damlama ile):**\n    *   **Ürün:** Demir Şelatı (Fe-EDDHA - %6'lık).\n    *   **Dozaj:** Ağaç başı 30-40 gram denk gelecek şekilde, toplamda yaklaşık **1.5 - 2 kg Demir Şelatını** damlama sulama sistemiyle toprağın tava geldiği ilk sulamada veriniz.\n\n*Uyarı: Bu dozajlar bölge ortalamalarına göre hesaplanmış tahmini değerlerdir. Kesin reçete niteliği taşımaz. Herhangi bir ticari ürünü uygulamadan önce mutlaka ürün ambalajı üzerindeki etiketi okuyunuz ve bölge ilçe tarım müdürlüğüne danışınız.*\n\n---\n\n### 4. Hasat Öngörüsü\n\nTemmuz ayındayız. Değirmençay bölgesinde sofralık veya yağlık zeytin hasadı zeytinin çeşidine göre genellikle Ekim (yeşil hasat) - Kasım/Aralık aylarında gerçekleşir. Şu an yapılacak besleme ve koruma uygulamalarının hasat dönemine (PHI - son ilaçlama ile hasat arasındaki süre) olumsuz bir etkisi bulunmamaktadır. Ancak ilerleyen dönemlerde yapacağınız ilaçlamalarda bekleme sürelerine mutlaka dikkat etmelisiniz.\n\n---\n\n### 5. Kullanılan Kaynaklar\n\n*   **Yerel Proje Verisi:** Parsel bilgileri (0.9 dekar, 52 ağaç, killi-tınlı toprak, damlama sulama) ve 6-7 Temmuz tarihlerindeki yerel yağış kayıtları bu kaynaktan alınmıştır.\n*   **Harici Web Verisi (Open-Meteo API):** 11-14 Temmuz 2026 tarihlerine ait güncel hava sıcaklığı, yüksek nem (%73-%83), sis durumu ve \"Don Riski Yok\" bilgisi bu kaynaktan anlık çekilmiştir.\n*   **RAG (Bilgi Deposu):** Bu sorgu için eşleşen özel bir zeytin makalesi bulunamamış, genel bilimsel zeytin yetiştiriciliği ve fizyolojisi ilkeleri kullanılmıştır.\n\nAğaçlarınızın yaprak fotoğraflarını göndermeniz halinde teşhisimizi daha da netleştirebiliriz. Bereketli bir sezon dilerim!",
+      "confidenceScore": 0.85,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 5,
+      "usedWeatherCount": 4,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-11T11:20:31.148Z",
+      "id": "38c0db38-e56a-40ff-b37b-88f899b9548b"
+    },
+    {
+      "parcelId": "1de3081e-194c-4888-b1bc-9801ae38b1d2",
+      "recommendationType": "Genel",
+      "content": "Merhaba Değerli Üreticimiz, \n\nMersin Toroslar’ın ve Değirmençay bölgesinin eşsiz mikroklimasında, \"Evin alt kısmı Zeytinler\" parselinizdeki 52 adet zeytin ağacınız için hazırladığım özel tarım analizini aşağıda bilgilerinize sunarım. \n\n---\n\n### 1. Analiz ve Teşhis\n\nZeytin yapraklarındaki sararma şikayetinizi ve bahçenizin güncel durumunu inceledim. Sistemsel sınırlandırmalardan dolayı **gönderdiğiniz fotoğrafları doğrudan görüntüleyemiyorum.** Bu nedenle kesin bir teşhis koymak bu aşamada mümkün olmasa da elimizdeki güçlü saha gözlemleri ve meteorolojik veriler ışığında en olası senaryoları aşağıda sıraladım:\n\n*   **Senaryo A: Kök Boğulması ve Geçici Azot Alınımı Engeli (En Güçlü İhtimal)**\n    *   **Neden:** Parselinizin toprak yapısı **Killi-Tınlıdır**. Bu topraklar su tutma kapasitesi yüksek, ağır bünyeli topraklardır. 6 Temmuz'da yarım saat kuvvetli, 7 Temmuz'da ise 15 dakika hafif yağmur yağmıştır. Killi topraklarda ani yağışlar kök bölgesinde su birikmesine (göllenme olmasa bile mikro düzeyde oksijensizliğe) yol açabilir. Kökler oksijensiz kaldığında zeytin ağacı başta **Azot (N)** olmak üzere besin elementlerini yukarı taşıyamaz ve yapraklarda genel bir sararma (kloroz) başlar.\n*   **Senaryo B: Mantari Hastalıklar (Halkalı Leke - *Spilocaea oleagina*)**\n    *   **Neden:** Değirmençay'ın bu dönemki hava tahmini oldukça kritiktir. Önümüzdeki günlerde havanın **\"Sisli\"** olacağı, nem oranının **%73 ila %83** gibi çok yüksek seviyelerde seyredeceği öngörülmektedir. Temmuz sıcağıyla birleşen bu yüksek nem, Halkalı Leke hastalığının uyanmasına ve yapraklarda sararmalara, ardından dökülmelere yol açabilir. (Eğer sarı yaprakların üzerinde halka şeklinde gri/siyah lekeler görüyorsanız teşhis budur).\n*   **Senaryo C: Fizyolojik Yaşlanma**\n    *   **Neden:** Zeytin ağaçları yaz aylarında eskiyen (2-3 yıllık) iç kısımdaki yapraklarını sarartarak dökerler. Eğer sararma sadece ağacın iç kısımlarında ve yaşlı yapraklardaysa bu doğal bir süreçtir.\n\n---\n\n### 2. Eylem Planı\n\nDeğirmençay mikroklimasını ve önümüzdeki günlerin hava durumunu dikkate alarak şu adımları uygulamalısınız:\n\n*   **Sulama Yönetimi:** Toprağınız killi-tınlı olduğu ve yakın zamanda yağış aldığı için **damlama sulamayı birkaç gün durdurun.** Toprağın havalanmasına izin verin. Nem oranı çok yüksek (%83'lere varan) olacağı için aşırı sulama kök çürüklüğünü tetikler.\n*   **Don Riski Değerlendirmesi:** \"METEOROLOJİ KAYNAK 2\" (Open-Meteo API) verilerine göre önümüzdeki 4 gün boyunca en düşük sıcaklık 22°C civarındadır. **Don riski kesinlikle YOKTUR.**\n*   **Besleme (Gübreleme):** Köklerin geçici olarak tembelleşmesini aşmak amacıyla yapraktan (foliar) besleme yapılmalıdır. \n*   **Hastalık Mücadelesi:** Nem ve sis zeytin hastalıkları için risk oluşturmaktadır. Ancak **hava sıcaklığı 30°C'nin üzerinde (şu an 31°C) olduğu için bu sıcakta Bakırlı preparatlar (Bordo bulamacı vb.) zeytinde fitotoksite (yaprak yakma) riski taşır.** Bu nedenle bakırlı ilaçlama yerine sistemik mantar ilaçları tercih edilmeli veya ilaçlama mutlaka akşam serinliğinde yapılmalıdır.\n\n---\n\n### 3. Uygulama ve Yaklaşık Dozaj Hesaplama\n\nBahçeniz **0.9 dekar** büyüklüğünde ve **52 adet** ağaçtan oluşmaktadır. Bu ölçekteki bir bahçe için 100 litrelik bir ilaçlama tankeri (pülverizatör) genellikle yeterli olmaktadır.\n\n*   **Öneri 1: Yapraktan Besleme Reçetesi (Kloroz ve Stres İçin)**\n    *   **Uygulanacak Ürün:** Sıvı Amino Asit + Çinko ve Manganez katkılı yaprak gübresi.\n    *   **Dozaj:** 100 litre suya ortalama **200-250 ml Amino Asit** ve ürün etiketinde belirtilen dozda Çinko-Manganez ekleyin. \n    *   **Uygulama Zamanı:** Rüzgarın az olduğu (rüzgar tahmini 12-14 km/h, nispeten sakin), güneşin etkisini yitirdiği akşamüstü saatlerinde yaprakların altına ve üstüne iyice püskürtün.\n\n*   **Öneri 2: Mantari Hastalık (Halkalı Leke şüphesi varsa)**\n    *   Eğer yapraklarda halkalı lekeler net ise, yüksek neme karşı koruma amaçlı sistemik bir fungusit (mantar ilacı) tercih edilebilir.\n    *   **Dozaj:** Seçilecek sistemik ilacın etiketine göre 100 litre suya genellikle **30-50 ml/gr** dozunda uygulanır.\n    *   *Önemli Uyarı:* Bu dozajlar genel bilgilendirme amaçlı hesaplanmıştır. **Kesin bir reçete değildir; uygulamadan önce mutlaka satın aldığınız ürünün etiketini okuyunuz ve bölge bayinize danışınız.**\n\n---\n\n### 4. Hasat Öngörüsü\n\nTemmuz ayı itibariyle henüz hasat dönemine (Değirmençay bölgesinde genellikle Ekim-Kasım ayları) zaman vardır. Ancak yine de yapacağınız herhangi bir kimyasal ilaçlamada, ilaç ambalajı üzerinde yazan **\"Son İlaçlama ile Hasat Arasındaki Süreye (PH)\"** dikkat etmeniz, ileride elde edeceğiniz zeytin ve zeytinyağının kalitesi ile kalıntı miktarı açısından kritik önem taşımaktadır.\n\n---\n\n### 5. Güven Seviyesi\n\n*   **Güven Seviyesi: BELİRSİZ (Orta-Düşük)**\n*   **Nedeni:** Fotoğraflarınızı sistem üzerinden göremediğim için yapraklardaki sararmanın tam desenini (damar arası sararma mı, uçtan kuruma mı, yoksa halkalı leke mi) teşhis edemedim. \n*   **Çiftçiden Talep:** Lütfen sarı yaprakların bir fotoğrafını tekrar göndermeye çalışın ya da bana şu detayları yazın: *Sararma yaprağın tamamında homojen mi? Üzerinde kahverengi/siyah noktalar var mı? Sararma sadece ağacın en alt ve iç dallarında mı, yoksa yeni sürgünlerde mi?*\n\n---\n\n### 6. Kullanılan Kaynaklar\n\n*   **Yerel Proje Verisi:** Parsel bilgileri (Evin alt kısmı Zeytinler, 0.9 Dekar, 52 ağaç), toprak yapısı (killi-tınlı) ve 6-7 Temmuz tarihlerindeki yağış gözlemleri bu kaynaktan alınmıştır.\n*   **Harici Web Verisi (Open-Meteo API):** 11-14 Temmuz 2026 tarihlerine ait sıcaklık (30-31°C), yüksek nem (%73-%83), sis durumu ve rüzgâr bilgileri bu canlı kaynaktan çekilmiştir.\n*   **RAG (Bilgi Deposu):** Konuya özel eşleşen makale bulunamadığı için genel bilimsel zeytin yetiştiriciliği ve killi toprak fizyolojisi bilgileri referans alınmıştır.\n\nBereketli ve sağlıklı bir sezon dilerim!",
+      "confidenceScore": 0.85,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 5,
+      "usedWeatherCount": 4,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-11T11:30:54.717Z",
+      "id": "577874af-5e82-4194-8240-6d89d44e5ad3"
+    },
+    {
+      "parcelId": "1de3081e-194c-4888-b1bc-9801ae38b1d2",
+      "recommendationType": "Genel",
+      "content": "Merhaba! Ben yapay zeka destekli tarım danışmanınız, **Mersin Tarım Asistanı**. Toroslar ilçemizin, kendine has mikro-klimasıyla bilinen Değirmençay bölgesindeki zeytinliğiniz için size özel hazırladığım bilimsel ve pratik analiz aşağıdadır. \n\n\"Evin alt kısmı Zeytinler\" parselinizdeki 52 adet zeytin ağacınızda gözlemlediğiniz **sarı yapraklar** ile ilgili analizimi, bölgenin toprak yapısını ve güncel hava durumunu dikkate alarak hazırladım.\n\n---\n\n### 1. Analiz ve Teşhis\n\nZeytin ağaçlarında sarı yapraklar hem hastalıkların hem de besin elementleri eksikliğinin veya çevresel stres faktörlerinin bir belirtisi olabilir. Değirmençay'ın killi-tınlı toprak yapısı ve son meteorolojik olaylar ışığında olası nedenler şunlardır:\n\n*   **Aşırı Nem ve Kök Boğulması (En Olası Çevresel Neden):** Parselinizin toprağı **Killi-Tınlı** yapıdadır. Killi topraklar suyu çok iyi tutar ancak zor sızdırır. 6 Temmuz'da yarım saat süren kuvvetli yağmur ve 7 Temmuz'daki hafif yağışın ardından toprak suya doymuş olabilir. Eğer bu yağışlar üzerine damlama sulamaya devam ettiyseniz, kökler oksijensiz kalmış (kök boğulması) ve bu durum yapraklarda ani sararmaya yol açmış olabilir.\n*   **Halkalı Leke Hastalığı (Fungal Neden):** Önümüzdeki günlerde (11-14 Temmuz) hava tahminlerinde **sisli ve yüksek nemli (%73-%83)** bir periyot görünmektedir. Bu yüksek nem ve sis, zeytinde *Halkalı Leke* (*Spilocaea oleagina*) hastalığını tetikler. Yapraklarda sararmanın yanı sıra üzerinde siyahımsı-gri halkalar görüyorsanız, bu durum fungal bir enfeksiyondur.\n*   **Azot (N) Eksikliği (Besin Noksanlığı):** Eğer sararma öncelikle **yaşlı (alt) yapraklardan** başlıyorsa ve yaprak damarları dahil tüm yaprak homojen bir şekilde sararıyorsa, bu azot eksikliğidir.\n*   **Demir (Fe) veya Magnezyum (Mg) Eksikliği:** Sararma **genç (yeni çıkan üst) yapraklarda** ve damar aralarında yeşil kalacak şekildeyse demir noksanlığı; yaşlı yaprakların uçlarından başlayıp tabanına doğru \"V\" şeklinde ilerliyorsa magnezyum eksikliğidir.\n\n---\n\n### 2. Güven Seviyesi\n\n*   **GÜVEN SEVİYESİ: BELİRSİZ**\n*   *Nedeni:* Yapraklardaki sararmanın tam yerleşimini (genç yaprak mı, yaşlı yaprak mı?), üzerinde leke olup olmadığını göremediğimiz ve elimizde bir yaprak/toprak analizi veya fotoğraf bulunmadığı için kesin bir teşhis koymak yanıltıcı olacaktır. \n*   *Sizden ricam:* Sarı yaprakların detaylı bir fotoğrafını çekmeniz; sararmanın yaprağın neresinden başladığını (uçtan mı, dipten mi) ve ağacın geneline nasıl yayıldığını gözlemleyip bana iletmenizdir.\n\n---\n\n### 3. Bölgesel Eylem Planı ve Tavsiyeler\n\nÖnümüzdeki günlerdeki yüksek nem ve sis durumunu göz önüne alarak yapmanız gerekenler şunlardır:\n\n*   **Sulama Yönetimi (Öncelikli):** 6-7 Temmuz'daki yağışlar ve killi-tınlı toprak yapınız nedeniyle **damlama sulamayı birkaç gün askıya alın**. Toprağın 10-15 cm derinliğini kontrol edin; çamur kıvamındaysa sulama yapmayın, toprağın havalanmasına izin verin.\n*   **Hastalık Önlemi:** Önümüzdeki günlerdeki yoğun sis ve yüksek nem (%83'e varan), fungal hastalık riskini artırır. Eğer yapraklarda halka şeklinde lekeler görüyorsanız, rüzgarın az olduğu sabah erken saatlerde bakırlı bir preparat uygulaması yapılması gerekebilir. Ancak 31°C sıcaklıkta bakır uygulaması fitotoksitite (yakma) riski taşıdığından, uygulama mutlaka serin saatlerde yapılmalıdır.\n*   **Besleme:** Eğer sararma genel bir solgunluk ve azot eksikliği gibi görünüyorsa, yapraktan amino asit içerikli hafif bir azotlu gübreleme ağaçları canlandıracaktır.\n*   **Don Riski Değerlendirmesi:** **METEOROLOJİ KAYNAK 2** verilerine göre önümüzdeki 4 gün boyunca (11-14 Temmuz) **DON RİSKİ YOKTUR**. Yaz döneminde olduğumuz için Değirmençay bölgesinde don önleme tedbiri almanıza gerek yoktur.\n\n---\n\n### 4. Uygulama Dozajı (0.9 Dekar / 52 Ağaç İçin)\n\nBahçeniz 0.9 dekar (yaklaşık 1 dekar) büyüklüğünde ve 52 ağaçtan oluşmaktadır. Bu ölçekteki bir bahçe için pülverizatörle (holding/atık tankı ile) yapraktan uygulama yaparken ortalama **100-150 litre su** yeterli olacaktır.\n\n*   **Olası Fungal Durumda (Bakırlı İlaçlama):** \n    *   *Öneri:* Sıvı Bakır (Sistemik etkili veya bakır hidroksit)\n    *   *Yaklaşık Dozaj:* 100 litre suya 200-250 ml (Ürün etiketine göre dozajı kesinleştiriniz).\n*   **Olası Besin Eksikliğinde (Yaprak Gübresi):**\n    *   *Öneri:* Çinko, Bor ve Azot içerikli mikro besin elementi karışımı + Amino Asit (Stresi azaltmak için).\n    *   *Yaklaşık Dozaj:* 100 litre suya 200 ml Amino Asit + 200 gram/ml mikro element karışımı.\n*   *Önemli Uyarı:* Bu dozajlar genel ortalamalara göre hesaplanmış tahminlerdir. **Asla kesin bir reçete değildir.** Uygulamadan önce alacağınız ürünün etiketini mutlaka okuyunuz ve bölge bayisinden teyit alınız.\n\n---\n\n### 5. Hasat Öngörüsü (İlaçlama ve Hasat Arası Süre - PHI)\n\nTemmuz ayındayız. Değirmençay bölgesinde zeytin hasadı (sofralık yeşil veya yağlık durumuna göre) genellikle Eylül sonu - Kasım ayları arasında gerçekleşir. Şu an yapılacak herhangi bir ilaçlama ile hasat arasında yaklaşık 3-4 ay süre olduğundan, ilaç kalıntısı (PHI) açısından **akut bir risk bulunmamaktadır**. Yine de kullanacağınız her ilacın etiketindeki \"Son İlaçlama ile Hasat Arasındaki Süre\"ye mutlaka dikkat ediniz.\n\n---\n\n### 6. Kullanılan Kaynaklar\n\n*   **Yerel Proje Verisi (Çiftlik Bilgileri ve Gözlemler):** Parsel büyüklüğü (0.9 da), ağaç sayısı (52), toprak yapısı (Killi-Tınlı), sulama yöntemi (Damlama) ve 6-7 Temmuz tarihlerindeki yağış gözlemleri bu kaynaktan alınmıştır.\n*   **Harici Web Verisi (Open-Meteo API):** 11-14 Temmuz tarihleri arasındaki sıcaklık (30-31°C), nem (%73-%83), rüzgar hızı, sisli hava tahmini ve don riski olmaması durumu bu kaynaktan doğrulanmıştır.\n*   **Bilgi Deposu (RAG):** Veritabanında spesifik bir zeytin dokümanı eşleşmediği için, zeytin yetiştiriciliğine dair genel akademik agronomik bilgiler ve killi toprak yönetimi ilkeleri kullanılmıştır.",
+      "confidenceScore": 0.85,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 5,
+      "usedWeatherCount": 4,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-11T11:47:48.380Z",
+      "id": "c8a800d1-a4a9-4edf-9a90-0d55dd9ff1f5"
+    },
+    {
+      "parcelId": "77c59a89-0f84-470d-b45e-ec7ecee2cea9",
+      "recommendationType": "Genel",
+      "content": "Merhaba, Mersin Toroslar'ın eşsiz coğrafyasına sahip Değirmençay bölgesindeki değerli üreticimiz; \n\n\"Teras Salatalıklar\" parselinizdeki 4 adet zeytin ağacınız ve olası teras üretiminiz için yaptığınız ilaçlama gözlemlerini ve güncel hava durumunu inceledim. Yapraklardaki hastalık belirtisini teşhis etmek ve size en doğru bilimsel/pratik yol haritasını sunmak için hazırladığım özel raporu aşağıda bulabilirsiniz.\n\n---\n\n### 1. Analiz ve Teşhis\nSaha raporlarınızda **11 Temmuz 2026** tarihinde **Captan 50** ve **Monstar** ilaçlarını karıştırarak uyguladığınızı görmekteyim. Captan, geniş spektrumlu koruyucu bir fungusit (mantar ilacı); Monstar ise genellikle kök/boğaz çürüklüğü ve bazı yaprak hastalıklarına karşı kullanılan sistemik bir ilaçtır. \n\nŞu anki meteoroloji verilerine göre Değirmençay’da **%74 ile %83 arasında değişen aşırı yüksek bir nem ve sisli bir hava** hakimdir. Bu yüksek nem ve sis, mantari (fungal) hastalıkların yayılması için adeta biçilmiş kaftandır.\n\nParselinizde hem zeytin ağaçları (4 adet) bulunmakta hem de parsel adı \"Teras Salatalıklar\" olarak geçmektedir. Bu nedenle yapraklardaki olası hastalık belirtilerini iki ihtimale göre değerlendiriyorum:\n\n*   **İhtimal A (Zeytin Ağaçları İçin - Zeytin Halkalı Lekesi):** Nemli ve sisli havalarda zeytinde en sık görülen hastalık **Zeytin Halkalı Lekesi** (*Spilocaea oleagina*) hastalığıdır. Belirtisi; yaprakların üst yüzeyinde siyahımsı-gri renkli, etrafı sarı bir halka ile çevrili yuvarlak lekelerdir. Hastalık ilerledikçe yapraklar sararır ve dökülür.\n*   **İhtimal B (Salatalıklar İçin - Yalancı Mildiyö veya Külleme):** Eğer hastalık salatalık yapraklarındaysa; **Yalancı Mildiyö** (*Pseudoperonospora cubensis*) yaprak üstünde köşeli sarı lekeler, yaprak altında ise morumsu-gri küf tabakası yapar. **Külleme** ise yaprak üstünde un serpilmiş gibi beyaz tozlu lekelerle kendini gösterir.\n\n> **Güven Seviyesi: BELİRSİZ (Orta-Düşük)**\n> Elimizde yapraklardaki lekelerin rengi, şekli veya hangi bitkide olduğuna dair görsel/yazılı detaylı bilgi bulunmamaktadır. Teşhisi kesinleştirmek adına, yaprakların hem alt hem de üst yüzeyini gösteren **net fotoğraflar paylaşmanızı** veya lekeleri tarif etmenizi rica ederim.\n\n---\n\n### 2. Eylem Planı (Sulama, Meteoroloji ve Don Değerlendirmesi)\n\n*   **Hava Durumu ve Don Riski Değerlendirmesi:** Önümüzdeki 4 gün boyunca (11-14 Temmuz 2026) Değirmençay’da en yüksek sıcaklıklar 30-31°C, en düşük sıcaklıklar ise 22-24°C civarında olacaktır. **Önümüzdeki günlerde herhangi bir don riski bulunmamaktadır (RİSK YOK).** Ancak yüksek nem (%83'e varan) ve sisli hava nedeniyle mantar sporlarının yayılma hızı çok yüksektir.\n*   **Sulama Yönetimi:** Toprağınız **Killi-Tınlı** yapıda olduğu için suyu iyi tutar. Bu yüksek nemli ve sisli günlerde aşırı sulamadan kesinlikle kaçının. Damlama sulama sisteminizi **sabahın çok erken saatlerinde** çalıştırın. Böylece gün içinde yükselen sıcaklıkla birlikte toprak yüzeyi hızlıca kurur ve nem birikerek mantar gelişimini tetiklemez.\n*   **Kültürel Önlemler:** Zeytin ağaçlarınızın iç kısımlarının hava almasını sağlayın. Sıkışık dallar nemi hapseder. Salatalık yetiştiriyorsanız, toprakla temas eden yaşlı ve hastalıklı alt yaprakları budayarak uzaklaştırın ve imha edin.\n\n---\n\n### 3. Uygulama Dozajı\n\nParseliniz oldukça küçük (0.0001 Dekar) ve ağaç sayınız 4 adettir. Bu büyüklükteki bir alan için ilaçlama genellikle **10 litrelik bir sırt pompası (pülverizatör)** ile yapılır. 11 Temmuz'da yaptığınız Captan 50 + Monstar karışımının 10 litrelik su için yaklaşık güvenli dozajları şu şekildedir:\n\n*   **Captan 50 WP:** Standart dozaj 100 litre suya 150-250 gram arasındadır. Sizin 4 ağacınız/küçük alanınız için **10 Litre suya yaklaşık 15 - 25 gram** Captan eklenmesi yeterlidir.\n*   **Monstar:** İlacın formülasyonuna göre (genellikle 100 litre suya 75-100 ml/g) **10 Litre suya yaklaşık 7.5 - 10 ml veya gram** eklenmelidir.\n\n*Önemli Uyarı: Bu dozajlar parsel ölçeğinize göre yapılmış yaklaşık bir matematiksel hesaplamadır. Kesin reçete niteliği taşımamaktadır. Uygulama yapmadan önce kullandığınız ticari ürünlerin ambalajı üzerindeki güncel etiketi ve dozaj tablosunu mutlaka kontrol ediniz.*\n\n---\n\n### 4. Hasat Öngörüsü ve Bekleme Süresi (PH)\n\n*   **Zeytin Ağaçları İçin:** Değirmençay bölgesinde zeytin hasadı sonbahar/kış döneminde yapıldığından, Temmuz ayında yapılan bu ilaçlamanın hasat zamanı açısından herhangi bir kalıntı (PH - bekleme süresi) riski **bulunmamaktadır**.\n*   **Salatalıklar İçin (Eğer parselde aktif salatalık hasadı varsa):** Captan 50 ve Monstar ilaçlarının son ilaçlama ile hasat arasındaki bekleme sürelerine (PH) çok dikkat edilmelidir. Captan için bu süre genellikle **7 ila 14 gün** arasındadır. Eğer terasınızdaki salatalıklardan hasat yapıyorsanız, ilaçlama tarihinden (11 Temmuz) itibaren bu bekleme süresi dolmadan kesinlikle ürün tüketmemeli ve hasat etmemelisiniz.\n\n---\n\n### Kullanılan Kaynaklar\n*   **Yerel Proje Verisi:** Parsel bilgileri (Teras Salatalıklar, 4 adet zeytin ağacı, killi-tınlı toprak, damlama sulama) ve 11 Temmuz tarihli ilaçlama gözlem kayıtları.\n*   **Harici Web Verisi (Open-Meteo API):** 11-14 Temmuz 2026 tarihlerine ait Değirmençay canlı hava durumu, sıcaklık, nem, rüzgar ve don riski verileri.\n*   **Genel Agronomi Bilgisi:** Bölgesel zeytin (Halkalı Leke) ve sebze (Mildiyö/Külleme) hastalıkları ve ilaç bekleme süreleri genel literatür bilgisi (RAG veritabanında bu aramaya özel spesifik bir doküman eşleşmediği için genel uzmanlık bilgisi kullanılmıştır).",
+      "confidenceScore": 0.85,
+      "usedDocumentsCount": 0,
+      "usedObservationsCount": 2,
+      "usedWeatherCount": 4,
+      "usedInventoryCount": 0,
+      "createdDate": "2026-07-11T12:20:48.229Z",
+      "id": "7f4f6334-8ae2-4f63-a93a-7e4dea58340e"
     }
   ],
   "uploadedDocuments": [
@@ -23990,6 +24238,155 @@
       "userId": "user-admin-default",
       "action": "LOGIN_SUCCESS",
       "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-07-17T06:07:00.242Z",
+      "id": "c72e167c-212f-48cf-8aee-5e16f5bc3083"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-07-15T04:56:12.295Z",
+      "id": "de8cd9da-d86a-4d45-bec1-ddabfdd60c53"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "192.168.10.132",
+      "createdAt": "2026-07-14T12:53:40.126Z",
+      "id": "baa89720-9d0d-4a7f-9f64-61ee349e92c8"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-07-14T10:18:51.773Z",
+      "id": "2dd3652f-6a62-42c8-a4dc-026172073454"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "INVENTORY_CREATE",
+      "details": "Envantere yeni ürün eklendi: 'Maestro 5 ec' (2 Litre)",
+      "createdAt": "2026-07-13T12:15:04.416Z",
+      "id": "91a746ed-a7f6-4bb9-9f62-2fca5e72f58b"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "192.168.10.132",
+      "createdAt": "2026-07-13T06:15:53.854Z",
+      "id": "b7195989-cb7c-4733-92b8-2e0ad56709ca"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (İlaçlama). Ağaç ID: fb2f9bd2-0c38-441c-a073-edda2f581e06",
+      "createdAt": "2026-07-13T05:49:26.995Z",
+      "id": "586ec805-7ebd-4dfd-a782-403ed6197348"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-07-13T05:26:58.717Z",
+      "id": "bee5384e-a231-42b9-91f6-257f5991a0ad"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-07-12T02:57:42.908Z",
+      "id": "e2b1b169-7e23-4b61-bdc6-6c46af284aea"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (Genel Gözlem). Genel parsel gözlemi.",
+      "createdAt": "2026-07-11T11:19:04.590Z",
+      "id": "a009453a-c2e3-44bf-9d17-2eb25343827a"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (Genel Gözlem). Genel parsel gözlemi.",
+      "createdAt": "2026-07-11T11:18:20.979Z",
+      "id": "e9f7e1e0-1b21-449d-918c-1eacbf949601"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "OBSERVATION_DELETE",
+      "details": "Bir saha gözlem kaydı silindi (1 bağlı fotoğraf dahil). Not: 'Gözdem'",
+      "createdAt": "2026-07-11T11:17:56.217Z",
+      "id": "eaefecdd-7458-40ae-95b8-846807c019ae"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (Genel Gözlem). Genel parsel gözlemi.",
+      "createdAt": "2026-07-11T11:17:30.831Z",
+      "id": "d46261aa-fd97-4d2c-95c7-f91f7b14c949"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (Genel Gözlem). Genel parsel gözlemi.",
+      "createdAt": "2026-07-11T11:16:46.414Z",
+      "id": "2ed88803-adde-48f6-be84-7cd453648c6c"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "192.168.10.132",
+      "createdAt": "2026-07-11T10:47:57.584Z",
+      "id": "6ed50cca-4dda-4083-a515-261b56044699"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (İlaçlama). Genel parsel gözlemi.",
+      "createdAt": "2026-07-11T08:32:13.393Z",
+      "id": "aaf57148-428f-493d-93a4-bc21a6e65fe8"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "OBSERVATION_CREATE",
+      "details": "Yeni saha gözlemi kaydedildi (İlaçlama). Genel parsel gözlemi.",
+      "createdAt": "2026-07-11T08:30:35.274Z",
+      "id": "51da472f-a59c-47bb-b69f-6deafddfc89a"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "PARCEL_CREATE",
+      "details": "Yeni sebze parseli eklendi: 'Teras Salatalıklar' (0.0001 Dekar, 4 Ağaç/Bitki)",
+      "createdAt": "2026-07-11T08:28:03.936Z",
+      "id": "bcf93d2a-d7e6-4130-b29e-f15f72f989f5"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "TREE_COUNT_CHANGE",
+      "details": "'Evin altı yamaç ve Ev yolu Zeytinler' parselinde ağaç sayısı 5 → 24 olarak güncellendi (+19). Neden: Sayım Düzeltmesi",
+      "createdAt": "2026-07-11T07:45:08.036Z",
+      "id": "a3b7d063-ee2b-46b1-a86d-d4afc00473b4"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-07-11T06:09:44.197Z",
+      "id": "1ae08376-a8ec-4e03-9dfc-21f01701d7a8"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
       "ipAddress": "192.168.10.56",
       "createdAt": "2026-07-11T06:06:53.938Z",
       "id": "59065a39-1b9f-4dfb-a4a7-708cd606cce8"
@@ -24817,8 +25214,16 @@
       "action": "LOGIN_SUCCESS",
       "details": "Kullanıcı sisteme giriş yaptı.",
       "ipAddress": "127.0.0.1",
-      "createdAt": "2026-07-11T06:09:44.197Z",
-      "id": "1ae08376-a8ec-4e03-9dfc-21f01701d7a8"
+      "createdAt": "2026-07-17T19:57:31.822Z",
+      "id": "7e8309dd-791f-4f89-978c-c60aff1ce2ad"
+    },
+    {
+      "userId": "user-admin-default",
+      "action": "LOGIN_SUCCESS",
+      "details": "Kullanıcı sisteme giriş yaptı.",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-07-24T05:14:07.686Z",
+      "id": "5e661c11-b46a-4174-9024-94475be9a35b"
     }
   ],
   "settings": [
@@ -24937,6 +25342,18 @@
       "changeDate": "2026-07-04",
       "createdAt": "2026-07-04T11:48:48.977Z",
       "id": "8f78e6f4-0e9b-42d1-91e6-bad4b0b80aed"
+    },
+    {
+      "parcelId": "968afd30-7a1a-440b-823c-b4b197516c44",
+      "previousCount": 5,
+      "newCount": 24,
+      "delta": 19,
+      "reason": "Sayım Düzeltmesi",
+      "notes": "",
+      "changedBy": "user-admin-default",
+      "changeDate": "2026-07-11",
+      "createdAt": "2026-07-11T07:45:07.830Z",
+      "id": "2b0d81ad-d812-4f02-9733-647ff2f0a52a"
     }
   ],
   "equipment": [
@@ -24972,5 +25389,6 @@
       "updatedAt": "2026-07-07T02:57:35.101Z",
       "id": "45252296-0d9f-4410-9046-684f4150215b"
     }
-  ]
+  ],
+  "productApplications": []
 }
