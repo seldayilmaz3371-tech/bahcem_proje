@@ -207,24 +207,29 @@ export function semanticChunkText(text: string, targetSize = 800, minChunkSize =
 
   for (const block of blocks) {
     if (looksLikeHeading(block)) {
-      if (currentSize >= minChunkSize) {
-        // Yeterince dolu bir chunk birikmiş — kapat, yeni başlık kendi
-        // (yeni) chunk'ının başında, kendi içeriğiyle birlikte başlasın.
+      // Sprint 2B kök neden analizi (gerçek "Study 1-7" testi):
+      // önceki sürüm, biriken içerik `minChunkSize`'ın altında kaldığı
+      // sürece yeni bir başlığı flush ETMİYORDU — bu, ardışık KISA
+      // bölümlerin (örn. "Study 3: Kısa bir not.") kendi resmi
+      // `heading` etiketini HİÇBİR ZAMAN alamamasına yol açıyordu
+      // (önceki başlığın chunk'ına sessizce gömülüyordu). Gerçek
+      // testte 7 başlıktan 3'ü (Study 3, 4, 6) bu yüzden kayboldu.
+      //
+      // Bu artık KASITLI OLARAK değişti: her başlık, biriken içeriğin
+      // boyutuna BAKMAKSIZIN her zaman kendi chunk'ını başlatır.
+      // "Gereksiz küçük chunk oluşmaması" ilkesi ile "her başlık kendi
+      // resmi etiketini almalı" ilkesi burada gerçek bir çelişki
+      // oluşturuyordu (heading tekil bir alan, birden fazla başlığı
+      // aynı anda temsil edemez) — RAG'ın doğru çalışması için
+      // ARAMA/RETRIEVAL doğruluğu, chunk boyutu tutarlılığından daha
+      // kritik: küçük bir chunk yalnızca hafif bir verimsizlik
+      // yaratır, ama kayıp bir başlık kullanıcının doğrudan sorduğu
+      // bir bölümü SİSTEMİN BULAMAMASINA yol açar (kanıtlanan gerçek
+      // sorun).
+      if (currentParts.length > 0) {
         flush();
-        currentHeading = block;
-      } else if (currentParts.length === 0) {
-        // Chunk tamamen boş (bu, doğru anlamda "gerçek ilk" başlık) —
-        // bu başlığı ata. Bu dal olmadan, bir dokümanın en baştaki
-        // başlığı hiçbir zaman kaydedilmezdi (testlerde tespit edilen
-        // ikinci gerçek hataydı).
-        currentHeading = block;
       }
-      // else: currentParts doluysa AMA minChunkSize'a henüz
-      // ulaşılmamışsa, `currentHeading`i BİLEREK DEĞİŞTİRMİYORUZ —
-      // aksi halde az önce flush edilmemiş içerik yanlış bir başlıkla
-      // eşleşmiş olurdu (testlerde tespit edilen ilk gerçek hataydı).
-      // Yeni başlık metni, bir alt başlık gibi mevcut chunk'ın
-      // içeriğine ekleniyor.
+      currentHeading = block;
       currentParts.push(block);
       currentSize += block.length;
       continue;
@@ -263,5 +268,66 @@ export function semanticChunkText(text: string, targetSize = 800, minChunkSize =
   }
 
   flush();
-  return chunks;
+  return mergeEmptyLabelChunks(chunks);
+}
+
+/**
+ * Post-processing adımı — "içeriksiz mini-chunk" düzeltmesi.
+ *
+ * KAPSAM: Bu fonksiyon `semanticChunkText()`'in ANA döngüsünden (yukarıda,
+ * "her başlık boyutuna bakılmaksızın kendi chunk'ını başlatır" kararı)
+ * SONRA, tamamlanmış chunk listesi üzerinde çalışır — ana döngünün
+ * kendisine HİÇBİR satır eklenmedi/değiştirilmedi. Bu, Study 1-7
+ * senaryosunun dayandığı "her başlık kendi resmi etiketini alır" kararını
+ * bozmaz (bkz. kanıt: Study 1-7'nin hiçbir chunk'ında content === heading
+ * durumu oluşmuyor, çünkü her başlığın hemen ardından gerçek bir paragraf
+ * geliyor — bu fonksiyon o durumlarda hiçbir şeyi değiştirmez).
+ *
+ * NE YAPAR: Bir chunk'ın içeriği kendi başlığından ibaretse (yani
+ * `content.trim() === heading.trim()` — hiçbir paragraf eklenmeden hemen
+ * bir sonraki başlık geldiyse, gerçek testte "Bağ Mildiyö / Yalancı
+ * Mildiyö / Mildiyö (Domates) / Mutifa WG / Efdal" gibi ardışık ürün/
+ * hastalık adı listelerinde kanıtlandı), bu chunk kendi başına
+ * YAYINLANMAZ — bir sonraki (gerçek içerikli) chunk'ın başına eklenir.
+ * Böylece "Mutifa WG" gibi bir etiket, artık tek başına, bağlamsız bir
+ * chunk olarak izole kalmaz; en azından kendi liste grubuyla veya
+ * ardından gelen ilk gerçek içerikle birlikte bir chunk'ta bulunur.
+ */
+function mergeEmptyLabelChunks(chunks: SemanticChunk[]): SemanticChunk[] {
+  const result: SemanticChunk[] = [];
+  let carryOver: string | null = null;
+
+  for (const current of chunks) {
+    const isEmptyLabel = current.heading !== undefined && current.content.trim() === current.heading.trim();
+
+    if (isEmptyLabel) {
+      carryOver = carryOver ? `${carryOver}\n\n${current.content}` : current.content;
+      continue;
+    }
+
+    if (carryOver) {
+      result.push({ ...current, content: `${carryOver}\n\n${current.content}` });
+      carryOver = null;
+    } else {
+      result.push(current);
+    }
+  }
+
+  // Belgenin en sonu içeriksiz chunk'larla bitiyorsa (birleştirilecek bir
+  // "sonraki" chunk yoksa), son gerçek chunk'a eklenir — hiçbir metin
+  // sessizce kaybolmaz.
+  if (carryOver) {
+    if (result.length > 0) {
+      result[result.length - 1] = {
+        ...result[result.length - 1],
+        content: `${result[result.length - 1].content}\n\n${carryOver}`,
+      };
+    } else {
+      // Aşırı uç durum: belgenin TAMAMI yalnızca ardışık başlıklardan
+      // oluşuyor — bunu tek bir chunk olarak koru.
+      result.push({ content: carryOver });
+    }
+  }
+
+  return result;
 }

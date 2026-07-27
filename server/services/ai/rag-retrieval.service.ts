@@ -217,7 +217,54 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
  *   the entire shared knowledge base). When omitted, searches all chunks,
  *   exactly as before this parameter was introduced.
  */
-export async function searchSimilarChunks(query: string, limit = 4, documentIds?: string[]): Promise<{ chunk: VectorChunk; score: number }[]> {
+/**
+ * Sprint 2D — Aşama 3: Metadata-aware Ranking.
+ *
+ * Bir chunk'ın `heading`/`topics`/`keywords`/`cropType` alanlarında,
+ * sorgudaki kelimelerin geçip geçmediğine göre küçük bir ek puan
+ * hesaplar. Saf embedding benzerliğinin YERİNE değil, YANINDA kullanılır
+ * — amaç, "Mutifa WG" gibi kısa ürün adlarının chunk metadata'sında
+ * birebir geçtiği durumlarda, yalnızca embedding benzerliğinin
+ * kaçırabileceği alaka düzeyini yakalamak.
+ *
+ * NOT: VectorChunk modelinde "category" adlı bir alan YOK (yalnızca
+ * heading/topics/keywords/cropType var, bkz. models.ts) — var
+ * olmayan bir alan varsayılmadı, gerçek alanlar kullanıldı.
+ */
+function computeMetadataBoost(chunk: VectorChunk, queryWords: string[]): number {
+  const metadataText = [chunk.heading, chunk.cropType, ...(chunk.topics ?? []), ...(chunk.keywords ?? [])]
+    .filter((v): v is string => Boolean(v))
+    .join(" ")
+    .toLocaleLowerCase("tr-TR");
+
+  if (!metadataText) return 0;
+
+  let matchCount = 0;
+  for (const word of queryWords) {
+    if (word.length >= 3 && metadataText.includes(word)) {
+      matchCount++;
+    }
+  }
+  // Her eşleşen kelime için küçük, sınırlı bir bonus — saf embedding
+  // skorunu (0-1 aralığı) domine etmeyecek kadar küçük tutuldu.
+  return Math.min(matchCount * 0.05, 0.15);
+}
+
+/**
+ * @param metadataBoostQuery Sprint 2D — İSTEĞE BAĞLI. Verilirse,
+ *   embedding benzerliğine ek olarak heading/topics/keywords/cropType
+ *   eşleşmesine dayalı küçük bir puan eklenir (bkz. computeMetadataBoost).
+ *   Verilmezse (varsayılan, mevcut tüm çağrı yerleri — örn.
+ *   parcel-recommendation.service.ts — dahil), davranış Sprint 2C
+ *   öncesiyle BİREBİR AYNI kalır; bu parametre geriye dönük tam uyumlu
+ *   bir eklemedir.
+ */
+export async function searchSimilarChunks(
+  query: string,
+  limit = 4,
+  documentIds?: string[],
+  metadataBoostQuery?: string
+): Promise<{ chunk: VectorChunk; score: number }[]> {
   try {
     const queryEmbedding = await generateEmbedding(query);
     const allChunks = await vectorChunkRepository.getAll();
@@ -225,13 +272,18 @@ export async function searchSimilarChunks(query: string, limit = 4, documentIds?
       ? allChunks.filter((chunk) => documentIds.includes(chunk.documentId))
       : allChunks;
 
+    const queryWords = metadataBoostQuery
+      ? metadataBoostQuery.toLocaleLowerCase("tr-TR").split(/[^\p{L}0-9]+/u).filter((w) => w.length >= 3)
+      : [];
+
     const matches = candidateChunks.map((chunk) => {
       // Embeddings are stored as individual files on disk (see
       // EmbeddingStorageService); a not-yet-migrated legacy chunk may
       // still carry its embedding inline in the record itself.
       const chunkEmbedding = embeddingStorageService.readEmbedding(chunk.id) ?? chunk.embeddings;
-      const score = cosineSimilarity(queryEmbedding, chunkEmbedding);
-      return { chunk, score };
+      const baseScore = cosineSimilarity(queryEmbedding, chunkEmbedding);
+      const boost = metadataBoostQuery ? computeMetadataBoost(chunk, queryWords) : 0;
+      return { chunk, score: baseScore + boost };
     });
 
     // Sort descending by similarity score
@@ -241,4 +293,111 @@ export async function searchSimilarChunks(query: string, limit = 4, documentIds?
     logger.error("RAG", "Error occurred during vector similarity search", error);
     return [];
   }
+}
+
+/**
+ * Sprint 2D — Aşama 1: Document-aware Retrieval.
+ *
+ * `searchSimilarChunks()`'ın KENDİSİNE dokunulmadı (o fonksiyon
+ * `parcel-recommendation.service.ts` tarafından da kullanılıyor —
+ * değiştirmek Sprint 2D'nin kapsamı dışındaki bir akışı da etkilerdi).
+ * Bunun yerine, bu YENİ, izole fonksiyon onun sonucunu ayrıca zenginleştiriyor.
+ *
+ * PROBLEM (Sprint 2C sonrası gerçek Mutifa WG testinde kanıtlandı): saf
+ * global Top-K sıralaması, aynı dokümandan gelen ama sıralamada biraz
+ * geride kalan (örn. #6, #13, #14) alakalı chunk'ları dışarıda
+ * bırakabiliyor — özellikle bir dokümanın konusu birden fazla chunk'a
+ * yayılmışsa (ürün adı bir chunk'ta, kullanım talimatı başka bir
+ * chunk'ta).
+ *
+ * ÇÖZÜM: İlk Top-K sonuçlarındaki EN YÜKSEK skorlu chunk'ın ait olduğu
+ * dokümandan, henüz sonuçlarda olmayan ama yine de makul ölçüde alakalı
+ * (mutlak bir minimum benzerlik eşiğini geçen) EK chunk'lar aranır ve
+ * sonuçlara eklenir. Sınırlı sayıda (maxExtra) ek chunk eklenir — token
+ * kullanımının kontrolsüz büyümesini önlemek için.
+ */
+export async function expandWithDocumentContext(
+  initialMatches: { chunk: VectorChunk; score: number }[],
+  query: string,
+  maxExtra = 2,
+  minExtraScore = 0.5
+): Promise<{ chunk: VectorChunk; score: number }[]> {
+  if (initialMatches.length === 0) return initialMatches;
+
+  const topDocumentId = initialMatches[0].chunk.documentId;
+  const alreadyIncludedIds = new Set(initialMatches.map((m) => m.chunk.id));
+
+  try {
+    const queryEmbedding = await generateEmbedding(query);
+    const allChunks = await vectorChunkRepository.getAll();
+    const sameDocumentCandidates = allChunks.filter(
+      (chunk) => chunk.documentId === topDocumentId && !alreadyIncludedIds.has(chunk.id)
+    );
+
+    const scoredCandidates = sameDocumentCandidates
+      .map((chunk) => {
+        const chunkEmbedding = embeddingStorageService.readEmbedding(chunk.id) ?? chunk.embeddings;
+        const score = cosineSimilarity(queryEmbedding, chunkEmbedding);
+        return { chunk, score };
+      })
+      .filter((m) => m.score >= minExtraScore)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxExtra);
+
+    if (scoredCandidates.length === 0) return initialMatches;
+
+    return [...initialMatches, ...scoredCandidates];
+  } catch (error) {
+    logger.error("RAG", "Error occurred during document-aware context expansion", error);
+    return initialMatches;
+  }
+}
+
+/**
+ * Sprint 2D — Aşama 2: Adjacent Chunk Retrieval.
+ *
+ * PROBLEM: Bir chunk (örn. "Mutifa WG" ürün adı listesi) ile onu hemen
+ * takip eden veya önceleyen chunk (örn. aynı listenin devamı, ya da
+ * kısa bir başlık + devamındaki ilk paragraf) arasında GERÇEK bir
+ * bağlamsal ilişki olabilir, ama bu ilişki yalnızca `chunkIndex`
+ * sırasıyla ifade edilir — embedding benzerliğiyle YAKALANMAYABİLİR
+ * (iki komşu chunk, konu olarak ilişkili olsa bile birbirinden çok
+ * farklı embed edilebilir).
+ *
+ * ÇÖZÜM: Seçilen her chunk için, YALNIZCA hemen bitişik (chunkIndex ± 1)
+ * komşularını, zaten sonuçlarda değillerse ekler. "Gereksiz token artışı
+ * oluşturma" kısıtına uyarak: yalnızca komşu chunk GERÇEKTEN küçükse
+ * (maxAdjacentLength karakterden az — büyük bir komşu chunk'ı eklemek
+ * orantısız token maliyeti yaratır) ekleniyor, ve zaten sonuçlarda olan
+ * bir chunk asla tekrar eklenmiyor.
+ */
+export async function expandWithAdjacentChunks(
+  matches: { chunk: VectorChunk; score: number }[],
+  maxAdjacentLength = 400
+): Promise<{ chunk: VectorChunk; score: number }[]> {
+  if (matches.length === 0) return matches;
+
+  const alreadyIncludedIds = new Set(matches.map((m) => m.chunk.id));
+  const allChunks = await vectorChunkRepository.getAll();
+  const additions: { chunk: VectorChunk; score: number }[] = [];
+
+  for (const { chunk, score } of matches) {
+    const neighborIndexes = [chunk.chunkIndex - 1, chunk.chunkIndex + 1];
+    for (const neighborIndex of neighborIndexes) {
+      const neighbor = allChunks.find(
+        (c) => c.documentId === chunk.documentId && c.chunkIndex === neighborIndex
+      );
+      if (!neighbor || alreadyIncludedIds.has(neighbor.id)) continue;
+      if (neighbor.content.length > maxAdjacentLength) continue; // gereksiz token artışını önle
+
+      alreadyIncludedIds.add(neighbor.id);
+      // Komşu chunk'ın kendi bağımsız bir benzerlik skoru yok — onu
+      // seçme nedeni "komşuluk", bu yüzden şeffaflık için skor 0 olarak
+      // işaretleniyor (ayırt edilebilir olsun diye, yanıltıcı bir skor
+      // uydurulmuyor).
+      additions.push({ chunk: neighbor, score: 0 });
+    }
+  }
+
+  return [...matches, ...additions];
 }

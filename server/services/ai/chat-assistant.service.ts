@@ -9,7 +9,7 @@ import { aiUsageTrackerService } from "../ai-usage-tracker.service";
 import { capUserQueryLength } from "../../prompts/prompt-safety.util";
 import { buildChatAssistantPrompt } from "../../prompts/chat-assistant.prompt";
 import { getGeminiClient, callGeminiWithRetry } from "./gemini-client";
-import { searchSimilarChunks } from "./rag-retrieval.service";
+import { searchSimilarChunks, expandWithDocumentContext, expandWithAdjacentChunks } from "./rag-retrieval.service";
 
 // ==========================================================================
 // CHAT GREETING SHORT-CIRCUIT
@@ -102,17 +102,54 @@ export class ChatAssistantService {
     }
 
     try {
-      const matches = await searchSimilarChunks(safeQuery, 3, documentIds);
+      // Sprint 2D — Aşama 3: metadataBoostQuery parametresi eklenerek
+      // heading/topics/keywords/cropType eşleşmesi de sıralamaya dahil
+      // ediliyor (geriye dönük uyumlu — parcel-recommendation.service.ts
+      // bu parametreyi hiç geçmediği için etkilenmiyor).
+      const initialMatches = await searchSimilarChunks(safeQuery, 3, documentIds, safeQuery);
 
       // A knowledge base "match" whose top score falls below the
       // relevance threshold is really just the least-dissimilar chunk
       // available, not a genuine answer — treated the same as no match
       // at all, which is what triggers the web-search fallback below.
-      const hasRelevantMatch = matches.length > 0 && matches[0].score >= MIN_RELEVANT_SIMILARITY_SCORE;
+      // ÖNEMLİ: Bu karar, GENİŞLETME ÖNCESİ orijinal Top-3'ün en yüksek
+      // skoruna göre veriliyor — Aşama 1/2'nin eklediği ek chunk'lar
+      // (özellikle adjacent chunk'lar, skor=0) bu kararı etkilemiyor.
+      const hasRelevantMatch = initialMatches.length > 0 && initialMatches[0].score >= MIN_RELEVANT_SIMILARITY_SCORE;
       const webFallbackEnabled = !hasRelevantMatch;
 
-      const ragContext = matches.length > 0
-        ? matches.map((m, idx) => `[Referans ${idx + 1}]: ${m.chunk.content}`).join("\n\n")
+      // Sprint 2D — Aşama 1 + 2: yalnızca gerçek bir eşleşme varken
+      // (RAG kullanılacaksa) ek bağlam genişletmesi yapılır — alakasız
+      // bir sonucu daha da büyütmenin bir anlamı yok.
+      const matches = hasRelevantMatch
+        ? await expandWithAdjacentChunks(await expandWithDocumentContext(initialMatches, safeQuery))
+        : initialMatches;
+
+      // Sprint 2D — Aşama 4: Context Assembly v2. Chunk'lar artık
+      // documentId'ye göre gruplanıp, her grup içinde chunkIndex sırasına
+      // göre (belgedeki doğal akışı koruyarak) sunuluyor — önceki sürüm
+      // yalnızca ham benzerlik sırasında (karışık dokümanlar, karışık
+      // sıra) sunuyordu. Prompt ŞABLONUNUN kendisi (buildChatAssistantPrompt)
+      // DEĞİŞMEDİ — yalnızca ona gönderilen ragContext metninin
+      // düzenlenme sırası iyileştirildi.
+      const groupedByDocument = new Map<string, typeof matches>();
+      for (const m of matches) {
+        const list = groupedByDocument.get(m.chunk.documentId) ?? [];
+        list.push(m);
+        groupedByDocument.set(m.chunk.documentId, list);
+      }
+      // Doküman grupları, o dokümandaki EN YÜKSEK skora göre sıralanıyor
+      // (en alakalı doküman önce) — grup içi sıra ise chunkIndex'e göre.
+      const orderedGroups = Array.from(groupedByDocument.values()).sort(
+        (a, b) => Math.max(...b.map((m) => m.score)) - Math.max(...a.map((m) => m.score))
+      );
+      for (const group of orderedGroups) {
+        group.sort((a, b) => a.chunk.chunkIndex - b.chunk.chunkIndex);
+      }
+      const orderedMatches = orderedGroups.flat();
+
+      const ragContext = orderedMatches.length > 0
+        ? orderedMatches.map((m, idx) => `[Referans ${idx + 1}]: ${m.chunk.content}`).join("\n\n")
         : "Eşleşen spesifik bir döküman bulunamadı.";
 
       const prompt = buildChatAssistantPrompt(ragContext, safeQuery, scopeLabel, webFallbackEnabled);
@@ -134,7 +171,7 @@ export class ChatAssistantService {
 
       return {
         text: response.text ? response.text.trim() : "Yapay zeka asistanından bir yanıt alınamadı.",
-        usedChunks: webFallbackEnabled ? [] : matches.map((m) => m.chunk.content),
+        usedChunks: webFallbackEnabled ? [] : orderedMatches.map((m) => m.chunk.content),
       };
     } catch (error) {
       logger.error("AI", "Error inside general chat assistant query", error);

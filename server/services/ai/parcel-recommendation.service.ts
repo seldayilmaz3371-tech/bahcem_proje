@@ -149,6 +149,7 @@ export class ParcelRecommendationService {
         parcelName: parcel.name,
         areaDekar: parcel.areaDekar,
         treeCount: parcel.treeCount,
+        cropType: parcel.cropType,
         soilType: parcel.soilType,
         irrigationType: parcel.irrigationType,
         observationsContext,

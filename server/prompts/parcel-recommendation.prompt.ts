@@ -14,6 +14,7 @@ export interface ParcelRecommendationPromptContext {
   parcelName: string;
   areaDekar: number;
   treeCount: number;
+  cropType: string;
   soilType: string;
   irrigationType: string;
   observationsContext: string;
@@ -71,7 +72,7 @@ Aşağıdaki verilere dayanarak çiftçiye özel, bilimsel, pratik ve bölgesel 
 === ÇİFTLİK VE PARSEL BİLGİLERİ (KAYNAK: Yerel Proje Verisi) ===
 Parsel Adı: ${context.parcelName}
 Alan: ${context.areaDekar} Dekar
-Ağaç Sayısı: ${context.treeCount} adet zeytin ağacı
+Ağaç Sayısı: ${context.treeCount} adet ${context.cropType} ${context.cropType === "Zeytin" ? "ağacı" : "bitkisi"}
 Toprak Yapısı: ${context.soilType}
 Sulama Yöntemi: ${context.irrigationType}
 
