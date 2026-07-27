@@ -19,7 +19,7 @@ export interface User {
   createdAt: string;
 }
 
-export type CropType = "Zeytin" | "Sebze" | "Meyve";
+export type CropType = string;
 
 export interface Parcel {
   id: string;

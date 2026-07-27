@@ -84,20 +84,82 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     });
   });
 
-  const embeddings = response.embeddings || (response as any).embedding;
+  // SDK'nın kendi tip tanımına göre (@google/genai, EmbedContentResponse):
+  // `embeddings`, TEK bir nesne değil, her biri kendi `.values` alanına
+  // sahip bir ContentEmbedding DİZİSİdir — toplu (batch) istekleri de
+  // desteklemek için API'nin tek-metin isteklerinde bile 1 elemanlı bir
+  // dizi döndürmesinden kaynaklanıyor. Önceki kod bu diziyi tek bir
+  // nesne gibi okumaya çalışıyordu (`embeddings.values`), bu yüzden
+  // hiçbir zaman değer bulamıyordu.
+  const embeddingsArray = response.embeddings;
   let values: number[] | null = null;
-  if (embeddings && Array.isArray(embeddings.values)) {
-    values = embeddings.values;
-  } else if (response && Array.isArray((response as any).values)) {
-    values = (response as any).values;
+  if (Array.isArray(embeddingsArray) && embeddingsArray.length > 0 && Array.isArray(embeddingsArray[0].values)) {
+    values = embeddingsArray[0].values;
   }
 
   if (!values) {
+    // Ham cevabı loglamak, SDK bir daha format değiştirirse teşhisi
+    // saniyeler içinde mümkün kılar — geçen seferki gibi tahmin
+    // yürütmeye gerek kalmaz.
+    logger.error("RAG", "Embedding response'unda beklenen '.values' alanı bulunamadı.", undefined, { rawResponse: response });
     throw new Error("Gemini API'den vektör verisi alınamadı.");
   }
 
   cacheEmbedding(cacheKey, values);
   return values;
+}
+
+/**
+ * Şu anki chunking algoritmasının sürüm numarası (bkz. VectorChunk.chunkVersion,
+ * models.ts).
+ *
+ * - Versiyon 1 (Sprint 2A ve öncesi): karakter-bazlı `chunkText()` —
+ *   yapıyı (başlık/paragraf) hiç bilmeden, sabit karakter sayısında kesme.
+ * - Versiyon 2 (Sprint 2B, ŞİMDİ): `semanticChunkText()`
+ *   (semantic-chunking.util.ts) — başlık/paragraf sınırlarını koruyan,
+ *   format-bağımsız yapısal chunking. Gerçekten farklı bir algoritma
+ *   olduğu için sürüm artırıldı — ileride bir "yeniden indeksle"
+ *   özelliği, hâlâ sürüm 1 ile üretilmiş (daha düşük kaliteli) eski
+ *   chunk'ları bu sayı üzerinden kesin olarak ayırt edebilecek.
+ */
+export const CURRENT_CHUNK_VERSION = 2;
+
+/**
+ * Bir chunk'ın tüm metadata alanlarını (yalnızca ham içeriği değil)
+ * birlikte özetleyen SHA-256 karması (bkz. Sprint 2A madde 3). Yalnızca
+ * content değişince değil, heading/cropType/keywords/topics/chunkVersion
+ * gibi ÜRETİLEN metadata değişince de farklı bir özet üretir — ileride
+ * bir "yeniden indeksle" işleminde, bu özeti karşılaştırarak GERÇEKTEN
+ * hiçbir şeyi değişmemiş bir chunk'ı gereksiz yere tekrar Gemini'ye
+ * göndermeyi (ve o API maliyetini) atlamak mümkün olacak.
+ *
+ * SHA-256 seçildi çünkü: (a) projede zaten kurulu bir standart —
+ * doküman içerik özeti ve fotoğraf içerik özeti aynı algoritmayı
+ * kullanıyor, yeni bir bağımlılık eklemiyor (Node'un yerleşik `crypto`
+ * modülü yeterli), (b) bu ölçekteki küçük metin/metadata kayıtları için
+ * performansı önemsizce hızlı, kriptografik güvenlik değil yalnızca
+ * "değişti mi değişmedi mi" tespiti için kullanılıyor.
+ */
+export function computeChunkHash(fields: {
+  content: string;
+  heading?: string;
+  cropType?: string;
+  keywords?: string[];
+  topics?: string[];
+  chunkVersion?: number;
+}): string {
+  // Alanlar sabit bir sırayla birleştiriliyor — dizi/nesne sıralamasına
+  // bağlı tutarsız özetler üretmemek için (örn. keywords dizisinin
+  // eleman sırası değişse bile aynı küme aynı özeti vermeli).
+  const canonical = JSON.stringify({
+    content: fields.content,
+    heading: fields.heading ?? null,
+    cropType: fields.cropType ?? null,
+    keywords: [...(fields.keywords ?? [])].sort(),
+    topics: [...(fields.topics ?? [])].sort(),
+    chunkVersion: fields.chunkVersion ?? null,
+  });
+  return crypto.createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
 /**

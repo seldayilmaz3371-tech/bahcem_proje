@@ -23,6 +23,7 @@ import {
   chemicalRepository,
   productApplicationRepository
 } from "./server/repositories/inventory.repository";
+import { plantInfoRepository } from "./server/repositories/plant-info.repository";
 import { activityLogRepository, weatherRepository, notificationRepository } from "./server/repositories/activity.repository";
 import { 
   harvestRepository, 
@@ -52,6 +53,7 @@ import {
   WeatherRecord
 } from "./server/models";
 import { logger } from "./server/logger";
+import { AgriUtils } from "./server/utils";
 import multer from "multer";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
@@ -359,7 +361,21 @@ app.get("/api/parcels", requireAuth, requirePermission("parcels:read"), asyncHan
   res.json(list);
 }));
 
-const VALID_CROP_TYPES: readonly string[] = ["Zeytin", "Sebze", "Meyve"];
+// Autocomplete kaynağı: mevcut parsellerde şu ana kadar gerçekten
+// kullanılmış benzersiz bitki türlerini döner — sabit bir liste değil,
+// kullanıcının kendi geçmiş girişlerinden büyüyen, doğal bir öneri
+// kümesi (bkz. Sprint 1 madde 6: Autocomplete Sistemi).
+app.get("/api/parcels/crop-types", requireAuth, requirePermission("parcels:read"), asyncHandler(async (req, res) => {
+  const list = await parcelRepository.getAll();
+  const uniqueCropTypes = Array.from(new Set(list.map((p) => p.cropType))).sort();
+  res.json(uniqueCropTypes);
+}));
+
+// Ürün türü artık sabit üç değerle sınırlı değil (bkz. Sprint 1:
+// Dinamik Bitki Türü Sistemi) — herhangi bir boş olmayan, makul
+// uzunluktaki metin geçerli. "Zeytin"/"Sebze"/"Meyve" hâlâ tamamen
+// geçerli değerler, artık yalnızca özel bir statüleri yok.
+const MAX_CROP_TYPE_LENGTH = 50;
 
 app.post("/api/parcels", requireAuth, requirePermission("parcels:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { name, areaDekar, soilType, irrigationType, cropType, treeCount } = req.body;
@@ -367,9 +383,9 @@ app.post("/api/parcels", requireAuth, requirePermission("parcels:write"), asyncH
     return res.status(400).json({ error: "Parsel adı, büyüklük (dekar), toprak yapısı ve sulama yöntemi zorunludur." });
   }
 
-  const resolvedCropType = cropType || "Zeytin";
-  if (!VALID_CROP_TYPES.includes(resolvedCropType)) {
-    return res.status(400).json({ error: `Geçersiz ürün türü. İzin verilen değerler: ${VALID_CROP_TYPES.join(", ")}.` });
+  const resolvedCropType = AgriUtils.normalizePlantName(cropType || "Zeytin");
+  if (resolvedCropType.length === 0 || resolvedCropType.length > MAX_CROP_TYPE_LENGTH) {
+    return res.status(400).json({ error: `Ürün türü boş bırakılamaz ve en fazla ${MAX_CROP_TYPE_LENGTH} karakter olabilir.` });
   }
 
   let resolvedTreeCount = 0;
@@ -1333,6 +1349,77 @@ app.delete("/api/inventory/applications/:id", requireAuth, requirePermission("in
 }));
 
 // ==========================================
+// 4b. BİTKİ BİLGİ SÖZLÜĞÜ (PLANT INFO)
+// ==========================================
+// Sprint 1 kapsamı: yalnızca temel CRUD. Henüz hiçbir AI/RAG akışına
+// bağlı değil — bu bağlantı bilinçli olarak sonraki bir sprintte ele
+// alınacak (bkz. PlantInfo arayüzü, models.ts).
+
+app.get("/api/plant-info", requireAuth, requirePermission("parcels:read"), asyncHandler(async (req, res) => {
+  const list = await plantInfoRepository.getAll();
+  res.json(list);
+}));
+
+app.post("/api/plant-info", requireAuth, requirePermission("parcels:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { name, parentGroup, category, scientificName, alternativeNames, localNames, tags } = req.body;
+  if (!name || typeof name !== "string" || !name.trim()) {
+    return res.status(400).json({ error: "Bitki adı zorunludur." });
+  }
+  const normalizedName = AgriUtils.normalizePlantName(name);
+
+  const existing = await plantInfoRepository.getByName(normalizedName);
+  if (existing) {
+    return res.status(409).json({ error: `'${normalizedName}' adlı bir bitki kaydı zaten mevcut.`, existingId: existing.id });
+  }
+
+  const newEntry = await plantInfoRepository.create({
+    name: normalizedName,
+    parentGroup: parentGroup || undefined,
+    category: category || undefined,
+    scientificName: scientificName || undefined,
+    alternativeNames: Array.isArray(alternativeNames) ? alternativeNames : undefined,
+    localNames: Array.isArray(localNames) ? localNames : undefined,
+    tags: Array.isArray(tags) ? tags : undefined,
+    createdAt: new Date().toISOString(),
+  });
+
+  res.status(201).json(newEntry);
+}));
+
+app.put("/api/plant-info/:id", requireAuth, requirePermission("parcels:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const existing = await plantInfoRepository.getById(req.params.id);
+  if (!existing) {
+    return res.status(404).json({ error: "Güncellenmek istenen bitki kaydı bulunamadı." });
+  }
+
+  const { name, parentGroup, category, scientificName, alternativeNames, localNames, tags } = req.body;
+  if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+    return res.status(400).json({ error: "Bitki adı boş bırakılamaz." });
+  }
+
+  const updated = await plantInfoRepository.update(req.params.id, {
+    ...(name !== undefined && { name: AgriUtils.normalizePlantName(name) }),
+    ...(parentGroup !== undefined && { parentGroup }),
+    ...(category !== undefined && { category }),
+    ...(scientificName !== undefined && { scientificName }),
+    ...(alternativeNames !== undefined && { alternativeNames }),
+    ...(localNames !== undefined && { localNames }),
+    ...(tags !== undefined && { tags }),
+  });
+
+  res.json(updated);
+}));
+
+app.delete("/api/plant-info/:id", requireAuth, requirePermission("parcels:write"), asyncHandler(async (req, res) => {
+  const existing = await plantInfoRepository.getById(req.params.id);
+  if (!existing) {
+    return res.status(404).json({ error: "Silinmek istenen bitki kaydı bulunamadı." });
+  }
+  await plantInfoRepository.delete(req.params.id);
+  res.json({ success: true });
+}));
+
+// ==========================================
 // 5. AGRICULTURAL FINANCIALS & REVENUES
 // ==========================================
 
@@ -1658,9 +1745,15 @@ app.post("/api/ai/documents/parse", requireAuth, requirePermission("documents:wr
 
 // Index a new text document into the vector RAG engine
 app.post("/api/ai/documents/upload", requireAuth, requirePermission("documents:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { fileName, fileType, textContent, forceUpload } = req.body;
+  const { fileName, fileType, textContent, forceUpload, cropType } = req.body;
   if (!fileName || !textContent) {
     return res.status(400).json({ error: "Doküman adı ve doküman içeriği (metin) zorunludur." });
+  }
+  // İsteğe bağlı — Sprint 1'in aynı üst sınırıyla tutarlı, kullanıcı
+  // bu dokümanı hangi bitkiyle ilişkilendirdiğini açıkça belirtir
+  // (bkz. Sprint 2A: cropType asla içerikten tahmin edilmez).
+  if (cropType !== undefined && (typeof cropType !== "string" || cropType.length > 50)) {
+    return res.status(400).json({ error: "Bitki türü en fazla 50 karakter olabilir." });
   }
 
   // Warns (rather than silently re-indexing) when the exact same text
@@ -1690,7 +1783,10 @@ app.post("/api/ai/documents/upload", requireAuth, requirePermission("documents:w
     fileName,
     fileType || "text/plain",
     textBytes,
-    textContent
+    textContent,
+    undefined,
+    undefined,
+    cropType || undefined
   );
 
   if (!doc) {

@@ -12,7 +12,8 @@ import { embeddingStorageService } from "../embedding-storage.service";
 import { aiUsageTrackerService } from "../ai-usage-tracker.service";
 import { buildDocumentSummaryPrompt } from "../../prompts/document-summary.prompt";
 import { getGeminiClient, callGeminiWithRetry } from "./gemini-client";
-import { chunkText, generateEmbedding } from "./rag-retrieval.service";
+import { generateEmbedding, CURRENT_CHUNK_VERSION, computeChunkHash } from "./rag-retrieval.service";
+import { semanticChunkText } from "./semantic-chunking.util";
 
 /**
  * Manages the lifecycle of RAG knowledge-base documents: ingestion
@@ -53,6 +54,10 @@ export class DocumentService {
    *   specific equipment's manual, so it can later be searched in
    *   isolation from the general knowledge base. Omit both for a normal
    *   general-purpose RAG document (unchanged default behavior).
+   * @param cropType Optional, user-declared plant type this document
+   *   relates to (see UploadedDocument.cropType, Sprint 2A). NEVER
+   *   inferred from the document's content — copied verbatim, as-is,
+   *   onto every chunk produced from this document.
    */
   public async processDocument(
     uploadedBy: string,
@@ -61,7 +66,8 @@ export class DocumentService {
     fileSize: number,
     textContent: string,
     linkedEntityType?: "equipment",
-    linkedEntityId?: string
+    linkedEntityId?: string,
+    cropType?: string
   ): Promise<UploadedDocument | null> {
     try {
       // Step 1: Create uploaded document entry
@@ -74,17 +80,21 @@ export class DocumentService {
         uploadDate: timestamp,
         linkedEntityType,
         linkedEntityId,
+        cropType: cropType || undefined,
         contentHash: this.computeContentHash(textContent),
       });
 
-      // Step 2: Split text into overlapping segments
-      const textChunks = chunkText(textContent);
+      // Step 2: Split text into structurally-aware chunks (Sprint 2B —
+      // see semantic-chunking.util.ts for why this preserves headings/
+      // paragraph boundaries instead of cutting at a fixed character
+      // count).
+      const semanticChunks = semanticChunkText(textContent);
 
       // Step 3: Embed each chunk, persist the (large) embedding vector to
       // its own file on disk, and save only a lightweight record (id,
       // content, chunk index) in the main database.
-      for (let i = 0; i < textChunks.length; i++) {
-        const chunkTextContent = textChunks[i];
+      for (let i = 0; i < semanticChunks.length; i++) {
+        const { content: chunkTextContent, heading } = semanticChunks[i];
         let embeddings: number[] = [];
         try {
           embeddings = await generateEmbedding(chunkTextContent);
@@ -96,12 +106,31 @@ export class DocumentService {
         const chunkId = crypto.randomUUID();
         embeddingStorageService.saveEmbedding(embeddings, chunkId);
 
+        // Sprint 2B: `heading`, semantic chunking'in belge yapısından
+        // güvenilir şekilde tespit edebildiği durumlarda dolduruluyor
+        // (bulamazsa undefined kalır, uydurulmaz). `topics`/`keywords`
+        // hâlâ Sprint 2C'nin kapsamı, bilinçli olarak boş bırakılıyor.
+        // cropType, İÇERİKTEN TAHMİN EDİLMİYOR — yalnızca kullanıcı bu
+        // dokümanı yüklerken açıkça belirttiyse (newDoc.cropType)
+        // doğrudan kopyalanıyor.
+        const embeddedAt = new Date().toISOString();
         await vectorChunkRepository.create({
           id: chunkId,
           documentId: newDoc.id,
           chunkIndex: i,
           content: chunkTextContent,
           embeddings: [],
+          heading,
+          cropType: newDoc.cropType,
+          chunkVersion: CURRENT_CHUNK_VERSION,
+          embeddingModel: config.ai.embeddingModel,
+          embeddedAt,
+          chunkHash: computeChunkHash({
+            content: chunkTextContent,
+            heading,
+            cropType: newDoc.cropType,
+            chunkVersion: CURRENT_CHUNK_VERSION,
+          }),
         });
       }
 
@@ -125,7 +154,7 @@ export class DocumentService {
         logger.error("RAG", "Could not generate automated summary for document.", sumErr);
       }
 
-      logger.info("RAG", `Successfully processed and indexed document: '${fileName}' into ${textChunks.length} chunks.`);
+      logger.info("RAG", `Successfully processed and indexed document: '${fileName}' into ${semanticChunks.length} chunks.`);
       return newDoc;
     } catch (error) {
       logger.error("RAG", "Fatal error processing uploaded document.", error);

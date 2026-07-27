@@ -44,7 +44,13 @@ export interface Role {
  * allowing the existing Parcel/Tree infrastructure (observations, applications,
  * harvests, finance, AI recommendations) to be reused for non-olive crops.
  */
-export type CropType = "Zeytin" | "Sebze" | "Meyve";
+/**
+ * Ürün türü — artık sabit üç değerle sınırlı değil, serbest metin.
+ * "Zeytin"/"Sebze"/"Meyve" hâlâ geçerli, sıradan string değerler; hiçbir
+ * özel anlamları yok, yalnızca sıkça kullanıldıkları için varsayılan
+ * öneriler olarak kalıyorlar (bkz. GET /api/parcels/crop-types).
+ */
+export type CropType = string;
 
 /**
  * 3. Parcels Table Schema (Mersin Toroslar / Değirmençay fields)
@@ -282,6 +288,25 @@ export interface InventoryCategory {
 }
 
 /**
+ * Bitki Bilgi Sözlüğü — Sprint 1 kapsamında yalnızca bir VERİ MODELİ
+ * olarak eklendi. Şu an hiçbir AI/RAG/Intent Router akışına bağlı
+ * değil (bkz. Sprint 1 talimatı madde 5) — bu bağlantılar bilinçli
+ * olarak sonraki bir sprintte ele alınacak, burada yalnızca temel
+ * CRUD ile veri girilebilir hale getiriliyor.
+ */
+export interface PlantInfo {
+  id: string;
+  name: string; // "Limon"
+  parentGroup?: string; // "Narenciye"
+  category?: string; // "Meyve"
+  scientificName?: string; // "Citrus limon"
+  alternativeNames?: string[];
+  localNames?: string[];
+  tags?: string[];
+  createdAt: string;
+}
+
+/**
  * 9. Fertilizers Table Schema (Nutrient tracking helper)
  */
 export interface Fertilizer {
@@ -471,6 +496,17 @@ export interface UploadedDocument {
    * they simply never match against anything new.
    */
   contentHash?: string;
+  /**
+   * Bu dokümanın hangi bitki türüyle ilgili olduğu — yükleme anında
+   * kullanıcı tarafından İSTEĞE BAĞLI olarak, açıkça belirtilir (bkz.
+   * Sprint 1'in CropType'ıyla aynı serbest metin/autocomplete).
+   * İÇERİKTEN HİÇBİR ZAMAN TAHMİN EDİLMEZ — bu, Sprint 2 mimari
+   * kararının doğrudan sonucu ("tahmine dayalı sistem istemiyorum").
+   * Belirtilmezse, doküman genel bilgi tabanının bir parçası olarak
+   * kalır (mevcut davranışla birebir aynı). Bu dokümandan üretilen her
+   * VectorChunk'ın kendi cropType alanı, bu değerden DOĞRUDAN kopyalanır.
+   */
+  cropType?: string;
 }
 
 /**
@@ -482,6 +518,66 @@ export interface VectorChunk {
   chunkIndex: number;
   content: string;
   embeddings: number[]; // JSON represented float array
+
+  // ============================================================
+  // Sprint 2A — Vector Metadata Modeli. Hepsi optional: eski
+  // chunk'lar bu alanları hiç taşımadan geçerliliğini korur, hiçbir
+  // migration gerekmez. Bu alanların DOLDURULMASI (semantic chunking,
+  // metadata extraction) Sprint 2A'nın kapsamı DIŞINDA — burada
+  // yalnızca veri modeli ve (var olan bilgilerden hesaplanabilen)
+  // altyapı hazırlanıyor.
+  // ============================================================
+
+  /** En yakın belge başlığı/bölümü (Sprint 2B: Semantic Chunking sonrası doldurulacak). */
+  heading?: string;
+  /** Sprint 1'in CropType'ıyla aynı serbest metin — İÇERİKTEN TAHMİN EDİLMEZ, doğrudan UploadedDocument.cropType'tan kopyalanır (bkz. UploadedDocument). */
+  cropType?: string;
+  /**
+   * Yalnızca başlık/alt başlık/belge yapısından türetilir — asla
+   * içerik tahmini/AI çıkarımı ile üretilmez (bkz. Sprint 2A madde 4).
+   * Sprint 2C'de dolduruluncaya kadar boş kalır.
+   */
+  topics?: string[];
+  /** Yerel (AI'sız) anahtar kelime çıkarımı — Sprint 2C'nin kapsamı. */
+  keywords?: string[];
+
+  /**
+   * Bu chunk'ı ÜRETEN chunking algoritmasının sürüm numarası — içeriğin
+   * kendisinin değil, "chunkText() bu chunk'ı nasıl kestiği"nin
+   * versiyonu. Sprint 2A/mevcut karakter-bazlı algoritma = 1. Sprint
+   * 2B'nin semantic chunking algoritması devreye girdiğinde bu sayı
+   * artacak. Kullanım amacı: ileride "yeniden indeksle" özelliği,
+   * yalnızca ESKİ sürümle üretilmiş chunk'ları öncelikli olarak
+   * işaretleyebilecek — tüm koleksiyonu körü körüne değil, gerçekten
+   * eski algoritmayla üretilmiş olanları hedefleyerek.
+   */
+  chunkVersion?: number;
+  /**
+   * Bu chunk'ın embedding'ini üreten Gemini modelinin adı (örn.
+   * "gemini-embedding-2-preview"). Kullanım amacı: Google embedding
+   * modelini/SDK'sını değiştirdiğinde (bu gece Sprint 0'da tam olarak
+   * yaşadığımız senaryo), hangi chunk'ların HANGİ model sürümüyle
+   * üretildiğini kesin olarak bilip, yalnızca etkilenenleri yeniden
+   * işaretleyebilmek için.
+   */
+  embeddingModel?: string;
+  /**
+   * Bu chunk'ın embedding'inin üretildiği zaman damgası. Kullanım
+   * amacı: document.service.ts'teki embedding hatası durumunda devreye
+   * giren "768 sıfırdan oluşan boş embedding" (bkz. Sprint 2 analiz
+   * raporu madde 1) gibi şüpheli kayıtları, belirli bir tarih
+   * aralığına göre geriye dönük tarayıp tespit edebilmek için.
+   */
+  embeddedAt?: string;
+  /**
+   * content + heading + cropType + keywords + topics + chunkVersion
+   * birlikte özetlenerek üretilen SHA-256 özeti (bkz.
+   * computeChunkHash, rag-retrieval.service.ts). Yalnızca içerik değil,
+   * metadata değişikliklerini de takip eder — ileride "yeniden
+   * indeksle" bu özeti karşılaştırıp, GERÇEKTEN değişmemiş bir chunk'ı
+   * gereksiz yere tekrar Gemini'ye göndermeyi atlayabilecek.
+   */
+  chunkHash?: string;
 }
 
 /**
@@ -544,6 +640,7 @@ export interface DatabaseSchema {
   fertilizers: Fertilizer[];
   chemicals: Chemical[];
   productApplications: ProductApplication[];
+  plantInfo: PlantInfo[];
   applications: Application[];
   irrigation: Irrigation[];
   harvest: Harvest[];

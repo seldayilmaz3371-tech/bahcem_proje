@@ -69,6 +69,8 @@ export async function callGeminiWithRetry<T>(operation: () => Promise<T>): Promi
     try {
       return await operation();
     } catch (error) {
+      console.log("===== GEMINI RAW ERROR =====");
+       console.dir(error, { depth: null });
       lastError = error;
       const isLastAttempt = attempt === MAX_GEMINI_RETRY_ATTEMPTS;
       if (isLastAttempt || !isRetryableGeminiError(error)) {

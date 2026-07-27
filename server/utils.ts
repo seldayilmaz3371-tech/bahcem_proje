@@ -126,4 +126,29 @@ export class AgriUtils {
       return fallback;
     }
   }
+
+  /**
+   * Merkezi bitki türü normalizasyonu (bkz. Sprint 1: Bitki Türü
+   * Normalizasyonu). "domates", "DOMATES", "  domates " gibi farklı
+   * yazımların hepsinin tek, tutarlı bir kayıt olarak ("Domates")
+   * saklanmasını sağlar — aynı ismin farklı yazımlarla iki ayrı kayıt
+   * oluşturmasını önler.
+   *
+   * Türkçe'ye özgü büyük/küçük harf kuralları (İ/i, I/ı ayrımı)
+   * kasıtlı olarak `'tr-TR'` yerel ayarıyla uygulanıyor —
+   * JavaScript'in varsayılan (İngilizce kuralı uygulayan)
+   * toLowerCase()/toUpperCase() metotları "LİMON" gibi bir girdiyi
+   * yanlış çevirir (örn. İ harfini bozar). `toLocaleLowerCase('tr-TR')`
+   * bunu doğru şekilde "limon" yapar.
+   */
+  public static normalizePlantName(raw: string): string {
+    const collapsed = raw.trim().replace(/\s+/g, " ");
+    if (!collapsed) return "";
+
+    return collapsed
+      .toLocaleLowerCase("tr-TR")
+      .split(" ")
+      .map((word) => word.charAt(0).toLocaleUpperCase("tr-TR") + word.slice(1))
+      .join(" ");
+  }
 }

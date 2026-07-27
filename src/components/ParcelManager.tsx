@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Plus, MapPin, Trash2, X, Folder, ChevronRight } from "lucide-react";
 import { Parcel, Tree, CropType, TreeCountChangeLog, ParcelHealthSummary } from "../types";
 import TreeCountManager from "./parcels/TreeCountManager";
@@ -31,6 +31,26 @@ export default function ParcelManager() {
   const [parcelArea, setParcelArea] = useState("");
   const [parcelTreeCount, setParcelTreeCount] = useState("");
   const [cropType, setCropType] = useState<CropType>("Zeytin");
+  // Autocomplete önerileri: mevcut parsellerde şu ana kadar gerçekten
+  // kullanılmış benzersiz bitki türleri (bkz. Sprint 1: Dinamik Bitki
+  // Türü Sistemi) — sabit bir liste değil, kullanıcının kendi geçmiş
+  // girişlerinden büyüyen bir öneri kümesi.
+  const [cropTypeSuggestions, setCropTypeSuggestions] = useState<string[]>(["Zeytin", "Sebze", "Meyve"]);
+  // Kendi kontrolümüzdeki açılır liste — native <datalist> elemanının
+  // "odak alınca tüm listeyi göster" davranışını tarayıcılar arasında
+  // (özellikle Android Chrome'da) güvenilir şekilde sağlayamaması
+  // nedeniyle tercih edildi (bkz. Root Cause Analysis).
+  const [showCropTypeDropdown, setShowCropTypeDropdown] = useState(false);
+  // "Alan boş mu" yerine "kullanıcı gerçekten yazdı mı" ayrımını
+  // yapıyor — Root Cause Analysis'te bulunan hatayı düzeltiyor: alan
+  // "Zeytin" gibi bir varsayılan değerle dolu başlasa bile, odak
+  // alındığında (henüz hiç yazılmamışken) TAM liste gösterilmeli,
+  // yalnızca kullanıcı fiilen bir tuşa bastıktan sonra filtrelenmeli.
+  const [hasTypedCropType, setHasTypedCropType] = useState(false);
+  // Klavye ile (yukarı/aşağı ok + Enter) seçim için, o an vurgulanan
+  // önerinin listedeki sırası. -1 = hiçbiri vurgulanmamış.
+  const [highlightedCropTypeIndex, setHighlightedCropTypeIndex] = useState(-1);
+  const cropTypeFieldRef = useRef<HTMLDivElement>(null);
   const [soilType, setSoilType] = useState("Killi-Tınlı");
   const [irrigationType, setIrrigationType] = useState("Damlama");
   const [error, setError] = useState("");
@@ -95,9 +115,42 @@ export default function ParcelManager() {
     }
   };
 
+  const fetchCropTypeSuggestions = async () => {
+    try {
+      const headers = { "Authorization": `Bearer ${localStorage.getItem("agri_token") || ""}` };
+      const res = await fetch("/api/parcels/crop-types", { headers });
+      if (res.ok) {
+        const types: string[] = await res.json();
+        // Sunucudan gelen liste zaten "gerçekten kullanılmış" türleri
+        // içeriyor — "Zeytin"/"Sebze"/"Meyve" varsayılan önerilerini de
+        // (henüz hiç parsel yoksa dahi öneri boş kalmasın diye) birlikte
+        // gösterip tekrarları eliyoruz.
+        setCropTypeSuggestions(Array.from(new Set([...types, "Zeytin", "Sebze", "Meyve"])).sort());
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     fetchParcels();
+    fetchCropTypeSuggestions();
   }, []);
+
+  // Madde 6: Liste dışında tıklayınca kapanır. onBlur'a ek olarak
+  // (fare ile dışarı tıklamalarda daha güvenilir) global bir dinleyici
+  // kullanılıyor — yalnızca dropdown açıkken aktif, kapalıyken hiçbir
+  // ek iş yükü getirmiyor.
+  useEffect(() => {
+    if (!showCropTypeDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (cropTypeFieldRef.current && !cropTypeFieldRef.current.contains(e.target as Node)) {
+        setShowCropTypeDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showCropTypeDropdown]);
 
   const handleSelectParcel = (parcel: Parcel) => {
     setSelectedParcel(parcel);
@@ -111,6 +164,10 @@ export default function ParcelManager() {
     setError("");
     if (!parcelName || !parcelArea) {
       setError("Parsel adı ve büyüklük bilgisi zorunludur.");
+      return;
+    }
+    if (!cropType.trim()) {
+      setError("Ürün türü boş bırakılamaz.");
       return;
     }
 
@@ -136,6 +193,7 @@ export default function ParcelManager() {
       setCropType("Zeytin");
       setShowParcelForm(false);
       fetchParcels();
+      fetchCropTypeSuggestions();
     } catch (err: any) {
       setError(err.message);
     }
@@ -199,17 +257,92 @@ export default function ParcelManager() {
                 className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Ürün Türü</label>
-              <select
+            <div className="relative" ref={cropTypeFieldRef}>
+              <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Bitki Türü</label>
+              <input
+                type="text"
                 value={cropType}
-                onChange={(e) => setCropType(e.target.value as CropType)}
+                onChange={(e) => {
+                  setCropType(e.target.value);
+                  setHasTypedCropType(true);
+                  setHighlightedCropTypeIndex(-1);
+                }}
+                // Madde 1: Odak alındığında, kullanıcı henüz fiilen bir
+                // şey YAZMAMIŞSA (alan varsayılan bir değerle dolu olsa
+                // bile) TAM liste gösterilir — Root Cause Analysis'te
+                // bulunan hatanın düzeltmesi budur.
+                onFocus={() => {
+                  setShowCropTypeDropdown(true);
+                  setHasTypedCropType(false);
+                }}
+                onBlur={() => setTimeout(() => setShowCropTypeDropdown(false), 150)}
+                onKeyDown={(e) => {
+                  const filtered = hasTypedCropType && cropType.trim()
+                    ? cropTypeSuggestions.filter((t) => t.toLowerCase().includes(cropType.trim().toLowerCase()))
+                    : cropTypeSuggestions;
+
+                  if (e.key === "Escape") {
+                    // Madde 5: ESC ile kapanır.
+                    setShowCropTypeDropdown(false);
+                    setHighlightedCropTypeIndex(-1);
+                  } else if (e.key === "ArrowDown") {
+                    // Madde 3: Klavye ile aşağı gezinme.
+                    e.preventDefault();
+                    setShowCropTypeDropdown(true);
+                    setHighlightedCropTypeIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setHighlightedCropTypeIndex((prev) => Math.max(prev - 1, 0));
+                  } else if (e.key === "Enter" && showCropTypeDropdown && highlightedCropTypeIndex >= 0 && filtered[highlightedCropTypeIndex]) {
+                    // Madde 7: Klavye ile vurgulanan bir öneri varken Enter,
+                    // o öneriyi seçer. Vurgulanan öğe yoksa Enter'ın normal
+                    // form-gönderme davranışına dokunulmuyor (serbest metin
+                    // olduğu gibi kaydedilebilsin diye).
+                    e.preventDefault();
+                    setCropType(filtered[highlightedCropTypeIndex]);
+                    setShowCropTypeDropdown(false);
+                    setHighlightedCropTypeIndex(-1);
+                  }
+                }}
+                placeholder="Örn: Zeytin, Domates, Limon..."
+                maxLength={50}
+                autoComplete="off"
                 className="w-full px-4 py-2.5 bg-white border border-[#cdd4ca] rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]"
-              >
-                <option value="Zeytin">Zeytin</option>
-                <option value="Sebze">Sebze</option>
-                <option value="Meyve">Meyve</option>
-              </select>
+              />
+              {showCropTypeDropdown && (() => {
+                // Madde 2: Kullanıcı fiilen yazdığında filtrelenir.
+                const filtered = hasTypedCropType && cropType.trim()
+                  ? cropTypeSuggestions.filter((t) => t.toLowerCase().includes(cropType.trim().toLowerCase()))
+                  : cropTypeSuggestions;
+                if (filtered.length === 0) return null;
+                return (
+                  <ul className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-white border border-[#cdd4ca] rounded-2xl shadow-lg">
+                    {filtered.map((type, index) => (
+                      <li key={type}>
+                        <button
+                          type="button"
+                          // Madde 4: Fare ile seçim. onMouseDown kullanılıyor
+                          // (onClick değil) çünkü input'un onBlur'undan
+                          // ÖNCE tetiklenmesi gerekiyor.
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setCropType(type);
+                            setShowCropTypeDropdown(false);
+                            setHighlightedCropTypeIndex(-1);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm ${
+                            index === highlightedCropTypeIndex ? "bg-[#f0f4ee]" : "hover:bg-[#f0f4ee]"
+                          } text-[#1a2416]`}
+                        >
+                          {type}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+              {/* Madde: Serbest metin her zaman kabul edilir — listede
+                  olmayan bir tür yazmak hiçbir şekilde engellenmez. */}
             </div>
             <div>
               <label className="block text-xs font-bold text-[#5a6a55] uppercase tracking-wider mb-1">Alan (Dekar)</label>
@@ -357,7 +490,7 @@ export default function ParcelManager() {
                 </button>
                 <h2 className="text-xl font-bold font-display text-[#1a2416]">{selectedParcel.name} - Detaylı {plantLabel} Listesi</h2>
                 <p className="text-xs text-[#5a6a55] mt-0.5">
-                  Ürün: <span className="font-semibold text-[#1a2416]">{selectedParcel.cropType}</span> | Toprak: <span className="font-semibold text-[#1a2416]">{selectedParcel.soilType}</span> | Sulama: <span className="font-semibold text-[#1a2416]">{selectedParcel.irrigationType}</span>
+                  Bitki: <span className="font-semibold text-[#1a2416]">{selectedParcel.cropType}</span> | Toprak: <span className="font-semibold text-[#1a2416]">{selectedParcel.soilType}</span> | Sulama: <span className="font-semibold text-[#1a2416]">{selectedParcel.irrigationType}</span>
                 </p>
               </div>
 
