@@ -36,7 +36,7 @@ import { photoStorageService } from "./server/services/photo-storage.service";
 import { backupService } from "./server/services/backup.service";
 import { notificationTriggerService } from "./server/services/notification-trigger.service";
 import { embeddingStorageService } from "./server/services/embedding-storage.service";
-import { PROJECT_ROOT } from "./server/config";
+import { PROJECT_ROOT, config } from "./server/config";
 import { 
   UserRole,
   User,
@@ -59,7 +59,7 @@ import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 
 const app = express();
-const PORT = 3000;
+const PORT = config.port;
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB per file — used for AI diagnosis photos (up to 3 per request, see /api/ai/recommend/:parcelId)

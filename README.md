@@ -48,6 +48,24 @@ Sunucu çalışırken şu görevler otomatik olarak yürütülür:
 - **Yedekleme:** `BACKUP_INTERVAL_HOURS` değişkenine göre (varsayılan 24 saat) veritabanı ve fotoğraflar yedeklenir (`backups/` klasörü, opsiyonel Google Drive senkronizasyonu).
 - **Bildirim Kontrolü:** Kritik stok seviyeleri ve don riski her 6 saatte bir kontrol edilip gerçek bildirimler oluşturulur.
 
+## CI Nasıl Çalışıyor
+
+Bu proje, `.github/workflows/ci.yml` içinde tanımlı bir GitHub Actions workflow'u ile otomatik olarak doğrulanır.
+
+**Ne zaman çalışır:** `main` veya `develop` branch'ine her `push`'ta, ve bu iki branch'e açılan her Pull Request'te.
+
+**Ne yapar (sırayla):**
+1. Repository'yi checkout eder.
+2. Node.js 22 kurar (npm bağımlılık cache'i aktif — tekrarlanan çalışmalarda kurulumu hızlandırır).
+3. `npm ci` ile bağımlılıkları `package-lock.json`'a birebir sadık kalarak kurar.
+4. `npm test` ile mevcut Vitest test süitini çalıştırır.
+5. `npm run build` ile hem frontend (Vite) hem backend (esbuild) derlemesini yapar.
+6. `npm run lint` ile TypeScript tip kontrolünü (`tsc --noEmit`) çalıştırır.
+
+**Başarısızlık davranışı:** Yukarıdaki adımlardan herhangi biri (test veya build) başarısız olursa, workflow otomatik olarak **FAIL** olarak işaretlenir ve bu durum GitHub arayüzünde (commit yanında, PR'da) görünür hale gelir — hiçbir ek yapılandırma gerekmez, çünkü `npm test`/`npm run build` zaten başarısızlıkta sıfırdan farklı bir çıkış koduyla sonlanır.
+
+**Neyi kapsamaz:** Deployment/release otomasyonu bu workflow'un kapsamında değildir; yalnızca kod kalitesi doğrulamasıdır (test + build + tip kontrolü).
+
 ## Bilinen Kısıtlamalar
 
 - Uygulama, aktif internet bağlantısı gerektirir; çevrimdışı çalışma desteklenmez.

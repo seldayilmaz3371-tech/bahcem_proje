@@ -1,0 +1,77 @@
+name: CI
+
+# Sprint 6E — Production Readiness: Continuous Integration.
+#
+# Bu workflow'un tek amacı, Sprint 5'te bir kez sessizce yaşanan sorunun
+# (test altyapısı bozukken fark edilmeden commit edilmesi) bir daha
+# yaşanmamasını garanti etmektir: her push ve her Pull Request'te
+# bağımlılıklar kurulur, mevcut Vitest test süiti çalıştırılır ve
+# mevcut build komutu çalıştırılır — herhangi biri başarısız olursa
+# workflow FAIL olur ve bu GitHub arayüzünde açıkça görünür.
+#
+# Kapsam dışı (bilinçli olarak): deployment, release, linting (ayrı bir
+# ESLint kurulumu bu projede yok — mevcut `npm run lint` zaten
+# `tsc --noEmit` çalıştırıyor, bu da aşağıdaki build adımı sırasında
+# TypeScript derleyicisi tarafından zaten dolaylı olarak kapsanıyor).
+# Yeni bir araç/adım eklenmedi; yalnızca projenin zaten sahip olduğu
+# `npm test` ve `npm run build` komutları otomatik hale getirildi.
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# Aynı branch/PR için art arda gelen push'larda, önceki (artık güncelliğini
+# yitirmiş) çalışmayı iptal eder — CI dakikalarını israf etmez.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    name: Test & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository'yi checkout et
+        uses: actions/checkout@v4
+
+      # actions/setup-node'un yerleşik `cache: 'npm'` özelliği, ~/.npm
+      # dizinini (npm'in kendi indirme önbelleği) package-lock.json'un
+      # hash'ine göre otomatik olarak cache'ler — ayrı bir actions/cache
+      # adımı eklemeye gerek kalmadan npm ci'ı hızlandırır.
+      - name: Node.js kur (sürüm 22, npm cache aktif)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      # `npm ci`, package-lock.json'u birebir baz alır (package.json'u
+      # değil) ve kurulum öncesi node_modules'ü temizler — CI için
+      # `npm install`'dan daha hızlı ve daha güvenilirdir (deterministik).
+      - name: Bağımlılıkları kur (npm ci)
+        run: npm ci
+
+      # Mevcut Vitest süiti — herhangi bir test başarısız olursa `vitest
+      # run` sıfırdan farklı bir çıkış koduyla döner, bu da GitHub
+      # Actions tarafından otomatik olarak adım/workflow FAIL'i olarak
+      # işlenir. Ekstra bir "if failed then exit 1" mantığına gerek yok.
+      - name: Testleri çalıştır (npm test)
+        run: npm test
+
+      # `npm run build`, hem frontend'i (vite build) hem backend'i
+      # (esbuild ile server.ts) derler. Bu adım TypeScript tip
+      # hatalarını da (esbuild/vite transpile sürecinin bir parçası
+      # olarak) yakalar; ayrıca proje zaten `npm run lint` altında
+      # `tsc --noEmit` sağlıyor, o da burada ayrı bir adım olarak
+      # eklenebilir (bkz. Sprint Sonu Raporu, kapsam kararı).
+      - name: Build al (npm run build)
+        run: npm run build
+
+      - name: Type-check (npm run lint — tsc --noEmit)
+        run: npm run lint

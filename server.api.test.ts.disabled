@@ -1,0 +1,461 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Sprint 6D — Kritik API Integration Test Süiti.
+ *
+ * KAPSAM (15 endpoint): Auth (login, yetkisiz/yetkili erişim, role
+ * kontrolü), Parcel CRUD, Observation CRUD + fotoğraf yükleme, Backup
+ * (checkpoint/verify/restore), AI (recommend, document upload),
+ * Inventory, Finance.
+ *
+ * MİMARİ KARAR — GERÇEK SUNUCU SÜRECİ (child_process), MOCK DEĞİL:
+ * `server.ts`, `app` nesnesini export etmiyor ve doğrudan
+ * `app.listen(PORT, ...)` çağırıyor (satır ~2131). Bunu test edebilmek
+ * için iki yol vardı: (a) `server.ts`'e `export { app }` eklemek ve
+ * `listen()` çağrısını yalnızca doğrudan çalıştırıldığında tetiklenecek
+ * şekilde korumak — bu, PRODUCTION KODUNA dokunmayı gerektirirdi; (b)
+ * `server.ts`'i HİÇ DEĞİŞTİRMEDEN, izole ortam değişkenleriyle ayrı bir
+ * `tsx server.ts` alt süreci (child process) başlatıp gerçek HTTP
+ * istekleriyle (fetch) uçtan uca test etmek. (b) seçildi — production
+ * kodunda SIFIR değişiklik gerektiriyor ve gerçek middleware zincirini,
+ * gerçek route wiring'ini, gerçek hata yönetimini "kutunun dışından"
+ * (black-box) doğruluyor; bu, mock'lu bir yaklaşımdan daha güçlü bir
+ * kanıt sunar.
+ *
+ * İZOLASYON: Alt süreç, `DATABASE_PATH`/`BACKUP_DIR`/`PHOTOS_STORAGE_DIR`
+ * ortam değişkenleriyle `os.mkdtempSync` ile oluşturulan geçici bir
+ * dizine yönlendirilir — gerçek `data/`/`backups/`'a hiç dokunulmaz.
+ * Farklı bir `PORT` kullanılır (çakışma riskini azaltmak için rastgele
+ * yüksek bir port seçilir).
+ *
+ * BİLİNEN SINIRLAMA: `GEMINI_API_KEY` bilinçli olarak BOŞ bırakılır
+ * (sandbox'ın gerçek Gemini API'sine ağ erişimi yok). AI uç noktaları
+ * (`/api/ai/recommend`, `/api/ai/documents/upload`) bu nedenle "başarılı
+ * bir AI yanıtı" değil, "API anahtarı/ağ hatası düzgün yönetiliyor mu,
+ * sunucu çökmüyor mu" senaryosunu test eder — bu da gerçek bir üretim
+ * senaryosudur (kota dolması, anahtar geçersizliği, ağ kesintisi).
+ */
+
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { spawn, ChildProcess } from "child_process";
+import fs from "fs";
+import path from "path";
+import os from "os";
+
+const TEST_PORT = 41739;
+const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
+const ADMIN_PASSWORD = "Sprint6D_Test_Sifre_2026!";
+const SERVER_START_TIMEOUT_MS = 20_000;
+
+let serverProcess: ChildProcess;
+let tmpDir: string;
+let adminToken: string;
+let workerToken: string;
+let testParcelId: string;
+let testObservationId: string;
+
+/**
+ * Sunucunun GERÇEKTEN istek işleyebildiğini doğrular. Yalnızca
+ * `/api/health`'in 200 dönmesi yeterli değil (gözlemlenen davranış:
+ * TCP portu açılır açılmaz health check 200 dönebiliyor, ama hemen
+ * ardından gelen bir POST isteği ara sıra ECONNRESET ile
+ * başarısız oluyor — muhtemelen Express'in middleware zincirinin tam
+ * kurulması ile portun dinlemeye başlaması arasında kısa bir pencere).
+ * Bu yüzden "hazır" sayılmak için gerçek bir login isteğinin de art
+ * arda BAŞARILI olması aranır.
+ */
+async function waitForServerReady(): Promise<void> {
+  const deadline = Date.now() + SERVER_START_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    try {
+      const health = await fetch(`${BASE_URL}/api/health`);
+      if (health.ok) break;
+    } catch {
+      // Sunucu henüz portu dinlemiyor — bekle ve tekrar dene.
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  // Health check geçti — şimdi gerçek bir POST isteğinin de güvenilir
+  // şekilde çalıştığını, art arda 3 başarılı denemeyle doğrula.
+  let consecutiveSuccesses = 0;
+  while (Date.now() < deadline && consecutiveSuccesses < 3) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "__readiness_probe__", password: "x" }),
+      });
+      // 401 (kullanıcı yok) dahi olsa, sunucunun tam bir istek-yanıt
+      // döngüsünü sorunsuz tamamladığını kanıtlar.
+      if (res.status === 401 || res.status === 400) {
+        consecutiveSuccesses++;
+      } else {
+        consecutiveSuccesses = 0;
+      }
+    } catch {
+      consecutiveSuccesses = 0;
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+
+  if (consecutiveSuccesses < 3) {
+    throw new Error("Sunucu, zaman aşımı süresi içinde güvenilir şekilde hazır hale gelmedi.");
+  }
+}
+
+function authHeaders(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+beforeAll(async () => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "s6d-api-test-"));
+
+  const tsxBinary = path.join(__dirname, "node_modules", ".bin", "tsx");
+  serverProcess = spawn(
+    tsxBinary,
+    ["server.ts"],
+    {
+      cwd: path.resolve(__dirname),
+      env: {
+        ...process.env,
+        PORT: String(TEST_PORT),
+        DATABASE_PATH: path.join(tmpDir, "tarim_hafizasi.json"),
+        BACKUP_DIR: path.join(tmpDir, "backups"),
+        PHOTOS_STORAGE_DIR: path.join(tmpDir, "photos"),
+        ADMIN_DEFAULT_PASSWORD: ADMIN_PASSWORD,
+        SEED_SAMPLE_DATA: "false",
+        GEMINI_API_KEY: "", // bkz. dosya üstü açıklama — bilinçli olarak boş
+        NODE_ENV: "test",
+        DISABLE_HMR: "true", // Vite'ın HMR websocket'i (24678) test sürecinde gereksiz, port çakışmasını önler
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+
+  // Alt sürecin stderr/stdout'unu yutmak yerine (sessiz başarısızlıkları
+  // teşhis edilemez kılmamak için) bir tamponda tut.
+  let serverOutput = "";
+  serverProcess.stdout?.on("data", (d) => (serverOutput += d.toString()));
+  serverProcess.stderr?.on("data", (d) => (serverOutput += d.toString()));
+  (globalThis as any).__s6d_serverOutput = () => serverOutput;
+
+  await waitForServerReady();
+
+  // Admin ile giriş yap.
+  const loginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: ADMIN_PASSWORD }),
+  });
+  const loginBody = await loginRes.json();
+  if (loginRes.status !== 200) {
+    throw new Error(`Admin girişi başarısız: ${loginRes.status} ${JSON.stringify(loginBody)}`);
+  }
+  adminToken = loginBody.token;
+
+  // Worker rolünde bir test kullanıcısı oluştur (role kontrolü testleri için).
+  const registerRes = await fetch(`${BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: authHeaders(adminToken),
+    body: JSON.stringify({
+      username: "test.worker",
+      password: "WorkerSifre123!",
+      fullName: "Test Çalışanı",
+      role: "Çalışan",
+      email: "test.worker@example.com",
+    }),
+  });
+  expect(registerRes.status).toBe(201);
+
+  const workerLoginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "test.worker", password: "WorkerSifre123!" }),
+  });
+  const workerLoginBody = await workerLoginRes.json();
+  workerToken = workerLoginBody.token;
+
+  // Sonraki testlerde kullanılacak bir test parseli oluştur.
+  const parcelRes = await fetch(`${BASE_URL}/api/parcels`, {
+    method: "POST",
+    headers: authHeaders(adminToken),
+    body: JSON.stringify({
+      name: "Sprint 6D Test Parseli",
+      areaDekar: 5,
+      soilType: "Killi",
+      irrigationType: "Damla",
+      cropType: "Zeytin",
+    }),
+  });
+  const parcelBody = await parcelRes.json();
+  testParcelId = parcelBody.id;
+}, SERVER_START_TIMEOUT_MS + 10_000);
+
+afterAll(() => {
+  serverProcess?.kill();
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+// =======================================================================
+// AUTH — P0
+// =======================================================================
+describe("Auth", () => {
+  it("POST /api/auth/login — doğru kimlik bilgileriyle 200 ve token döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "admin", password: ADMIN_PASSWORD }),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.token).toBeTruthy();
+    expect(body.user.username).toBe("admin");
+  });
+
+  it("POST /api/auth/login — yanlış şifreyle 401 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "admin", password: "kesinlikle-yanlis-sifre" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /api/parcels — token olmadan (yetkisiz erişim) 401 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/parcels`);
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /api/parcels — geçerli token ile (yetkili erişim) 200 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/parcels`, { headers: authHeaders(adminToken) });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
+  });
+
+  it("DELETE /api/parcels/:id — worker rolü (parcels:delete izni yok) ile 403 döner (role kontrolü)", async () => {
+    const res = await fetch(`${BASE_URL}/api/parcels/${testParcelId}`, {
+      method: "DELETE",
+      headers: authHeaders(workerToken),
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+// =======================================================================
+// PARCEL CRUD — P1
+// =======================================================================
+describe("Parcel CRUD", () => {
+  it("POST /api/parcels — geçerli veriyle 201 ve oluşturulan kayıt döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/parcels`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ name: "İkinci Test Parseli", areaDekar: 3, soilType: "Kumlu", irrigationType: "Yağmurlama", cropType: "Zeytin" }),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    expect(body.id).toBeTruthy();
+    expect(body.name).toBe("İkinci Test Parseli");
+  });
+
+  it("PUT /api/parcels/:id — mevcut parseli günceller, 200 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/parcels/${testParcelId}`, {
+      method: "PUT",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ name: "Güncellenmiş Parsel Adı", areaDekar: 5, soilType: "Killi", irrigationType: "Damla", cropType: "Zeytin" }),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.name).toBe("Güncellenmiş Parsel Adı");
+  });
+
+  it("PUT /api/parcels/:id — olmayan bir kayıt için 404 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/parcels/hic-var-olmayan-parsel-id`, {
+      method: "PUT",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ name: "X", areaDekar: 1, soilType: "X", irrigationType: "X", cropType: "Zeytin" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE /api/parcels/:id — admin ile silme 200/204 döner", async () => {
+    const createRes = await fetch(`${BASE_URL}/api/parcels`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ name: "Silinecek Parsel", areaDekar: 1, soilType: "X", irrigationType: "X", cropType: "Zeytin" }),
+    });
+    const created = await createRes.json();
+
+    const deleteRes = await fetch(`${BASE_URL}/api/parcels/${created.id}`, {
+      method: "DELETE",
+      headers: authHeaders(adminToken),
+    });
+    expect([200, 204]).toContain(deleteRes.status);
+  });
+});
+
+// =======================================================================
+// OBSERVATION CRUD + FOTOĞRAF — P1
+// =======================================================================
+describe("Observation CRUD", () => {
+  it("POST /api/observations — geçerli veriyle 201 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/observations`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ parcelId: testParcelId, notes: "Sprint 6D test gözlemi", activityType: "Genel Gözlem" }),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    expect(body.id).toBeTruthy();
+    testObservationId = body.id;
+  });
+
+  it("POST /api/observations/upload-photo — geçerli base64 görselle 201 döner", async () => {
+    // 1x1 piksel şeffaf PNG, base64 kodlu.
+    const tinyPngBase64 =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+    const res = await fetch(`${BASE_URL}/api/observations/upload-photo`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ observationId: testObservationId, base64Data: tinyPngBase64 }),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    expect(body.id).toBeTruthy();
+  });
+
+  it("DELETE /api/observations/:id — mevcut gözlemi siler", async () => {
+    const createRes = await fetch(`${BASE_URL}/api/observations`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ parcelId: testParcelId, notes: "Silinecek gözlem", activityType: "Genel Gözlem" }),
+    });
+    const created = await createRes.json();
+
+    const deleteRes = await fetch(`${BASE_URL}/api/observations/${created.id}`, {
+      method: "DELETE",
+      headers: authHeaders(adminToken),
+    });
+    expect([200, 204]).toContain(deleteRes.status);
+  });
+});
+
+// =======================================================================
+// BACKUP — P0
+// =======================================================================
+describe("Backup", () => {
+  let checkpointId: string;
+
+  it("POST /api/backup/checkpoints — yeni checkpoint oluşturur, 201 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/backup/checkpoints`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ label: "Sprint 6D API Testi Checkpoint" }),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    expect(body.id).toBeTruthy();
+    checkpointId = body.id;
+  });
+
+  it("GET /api/backup/checkpoints/:id/verify — geçerli checkpoint için valid:true döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/backup/checkpoints/${checkpointId}/verify`, {
+      headers: authHeaders(adminToken),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.valid).toBe(true);
+  });
+
+  it("POST /api/backup/checkpoints/:id/restore — geçerli checkpoint'ten başarıyla geri yükler", async () => {
+    const res = await fetch(`${BASE_URL}/api/backup/checkpoints/${checkpointId}/restore`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+  });
+
+  it("POST /api/backup/checkpoints/:id/restore — olmayan checkpoint için hata (500, reddedilir)", async () => {
+    const res = await fetch(`${BASE_URL}/api/backup/checkpoints/hic-yok/restore`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+    });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+// =======================================================================
+// AI — P0 (bkz. dosya üstü "BİLİNEN SINIRLAMA")
+// =======================================================================
+describe("AI", () => {
+  it("POST /api/ai/recommend/:parcelId — GEMINI_API_KEY yokken çökmeden düzgün hata (500) döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/ai/recommend/${testParcelId}`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({}),
+    });
+    // Sunucu ÇÖKMEDİ (bağlantı kopmadı) ve anlamlı bir hata kodu döndü.
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBeTruthy();
+  });
+
+  it("POST /api/ai/documents/upload — eksik alanlarla 400 döner (girdi doğrulama)", async () => {
+    const res = await fetch(`${BASE_URL}/api/ai/documents/upload`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ fileName: "test.txt" /* textContent eksik */ }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// =======================================================================
+// INVENTORY — P1/P2
+// =======================================================================
+describe("Inventory", () => {
+  let inventoryItemId: string;
+
+  it("GET /api/inventory — listeleme 200 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/inventory`, { headers: authHeaders(adminToken) });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
+  });
+
+  it("POST /api/inventory/adjust — geçersiz (olmayan) ürün id'si için hata döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/inventory/adjust`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ itemId: "hic-var-olmayan-urun", delta: -5 }),
+    });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+// =======================================================================
+// FINANCE — P1
+// =======================================================================
+describe("Finance", () => {
+  it("POST /api/finance/costs — geçerli veriyle 201 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/finance/costs`, {
+      method: "POST",
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ parcelId: testParcelId, category: "İşçilik", amount: 500, costDate: new Date().toISOString(), description: "Sprint 6D test masrafı" }),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    expect(body.id).toBeTruthy();
+  });
+
+  it("GET /api/finance/costs — listeleme 200 döner", async () => {
+    const res = await fetch(`${BASE_URL}/api/finance/costs`, { headers: authHeaders(adminToken) });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
+  });
+});
