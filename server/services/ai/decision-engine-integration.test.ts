@@ -14,6 +14,7 @@
  * Çalıştırma: npx tsx server/services/ai/decision-engine-integration.test.ts
  */
 
+import { describe, it } from "vitest";
 import { decisionEngineService } from "./decision-engine.service";
 import { createRealEvaluators } from "./evaluator-registry.service";
 import { dosageRuleRepository } from "../../repositories/dosage-rule.repository";
@@ -107,7 +108,11 @@ async function main() {
     console.log("\nTest verileri temizlendi.");
   }
 
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("decision-engine-integration", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

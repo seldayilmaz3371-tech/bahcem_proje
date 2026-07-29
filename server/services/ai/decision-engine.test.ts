@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/decision-engine.test.ts */
 
+import { describe, it } from "vitest";
 import { decisionEngineService } from "./decision-engine.service";
 import { BaseEvaluator, EvaluatorContext, EvaluatorResult } from "./evaluator-framework.service";
 
@@ -108,7 +109,11 @@ async function main() {
   check("Hatali evaluator INSUFFICIENT_DATA'ya donusuyor", r11.evaluatorResults.some((r) => r.status === "INSUFFICIENT_DATA"));
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("decision-engine", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

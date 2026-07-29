@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/inventory.evaluator.test.ts */
 
+import { describe, it } from "vitest";
 import { InventoryEvaluator } from "./inventory.evaluator";
 import { InventoryItemRepository } from "../../repositories/inventory.repository";
 import { InventoryItem } from "../../models";
@@ -53,7 +54,11 @@ async function main() {
   check("Kritik ürün evidence'da", resultCritical.evidence?.some((e) => e.includes("Kritik Stok")));
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("inventory.evaluator", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

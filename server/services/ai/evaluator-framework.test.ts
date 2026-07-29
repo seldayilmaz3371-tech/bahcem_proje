@@ -15,6 +15,7 @@
  * TypeScript) tutarlıdır.
  */
 
+import { describe, it } from "vitest";
 import { BaseEvaluator, EvaluatorContext, EvaluatorResult } from "./evaluator-framework.service";
 
 let passed = 0, failed = 0;
@@ -55,7 +56,11 @@ async function main() {
   check("Normal calisma dogru sonuc donuyor", workingResult.status === "PASS");
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("evaluator-framework", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

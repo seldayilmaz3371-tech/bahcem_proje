@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/history.evaluator.test.ts */
 
+import { describe, it } from "vitest";
 import { HistoryEvaluator } from "./history.evaluator";
 import { ProductApplicationRepository } from "../../repositories/inventory.repository";
 import { DosageRuleRepository } from "../../repositories/dosage-rule.repository";
@@ -69,7 +70,11 @@ async function main() {
   check("Yeterli surede blocking=false", resultEnoughTime.blocking === false);
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("history.evaluator", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

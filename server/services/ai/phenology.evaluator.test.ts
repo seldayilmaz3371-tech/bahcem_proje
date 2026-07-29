@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/phenology.evaluator.test.ts */
 
+import { describe, it } from "vitest";
 import { PhenologyEvaluator } from "./phenology.evaluator";
 import { PhenologyRuleRepository } from "../../repositories/phenology-rule.repository";
 import { PhenologyRule } from "../../models";
@@ -52,7 +53,11 @@ async function main() {
   check("Dönem eşleşmezse NOT_APPLICABLE", resultMismatch.status === "NOT_APPLICABLE");
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("phenology.evaluator", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

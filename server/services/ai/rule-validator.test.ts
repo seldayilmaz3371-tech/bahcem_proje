@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/rule-validator.test.ts */
 
+import { describe, it } from "vitest";
 import { ruleValidatorService } from "./rule-validator.service";
 import { DosageRule } from "../../models";
 
@@ -55,7 +56,11 @@ async function main() {
   check("min/max olmadan da geçerli", r8.isValid);
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("rule-validator", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

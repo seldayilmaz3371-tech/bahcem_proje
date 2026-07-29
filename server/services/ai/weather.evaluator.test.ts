@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/weather.evaluator.test.ts */
 
+import { describe, it } from "vitest";
 import { WeatherEvaluator } from "./weather.evaluator";
 import { WeatherRuleRepository } from "../../repositories/weather-rule.repository";
 import { WeatherRule } from "../../models";
@@ -51,7 +52,11 @@ async function main() {
   check("Eşik ihlali yoksa blocking=false", resultOk.blocking === false);
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("weather.evaluator", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

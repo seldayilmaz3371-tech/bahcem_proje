@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/decision-explanation-builder.test.ts */
 
+import { describe, it } from "vitest";
 import { decisionExplanationBuilderService } from "./decision-explanation-builder.service";
 import { DecisionResult } from "./decision-engine.service";
 
@@ -166,7 +167,11 @@ async function main() {
   check("Bilinmeyen evaluator için çökmüyor, güvenli varsayılan gösteriyor", unknownPrompt.includes("Diğer Kontroller"));
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("decision-explanation-builder", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

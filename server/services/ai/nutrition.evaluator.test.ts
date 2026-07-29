@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/nutrition.evaluator.test.ts */
 
+import { describe, it } from "vitest";
 import { NutritionEvaluator } from "./nutrition.evaluator";
 import { NutritionRuleRepository } from "../../repositories/nutrition-rule.repository";
 import { NutritionRule } from "../../models";
@@ -38,7 +39,11 @@ async function main() {
   check("Kural bulunursa PASS", result.status === "PASS");
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("nutrition.evaluator", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

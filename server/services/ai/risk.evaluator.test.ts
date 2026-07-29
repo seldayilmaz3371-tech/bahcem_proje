@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/risk.evaluator.test.ts */
 
+import { describe, it } from "vitest";
 import { RiskEvaluator } from "./risk.evaluator";
 import { SafetyWarningRepository } from "../../repositories/safety-warning.repository";
 import { SafetyWarning } from "../../models";
@@ -52,7 +53,11 @@ async function main() {
   check("Koşulsuz uyarı yine de dahil", resultNoMatch.warnings?.includes("Genel kritik uyarı (koşulsuz)"));
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("risk.evaluator", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

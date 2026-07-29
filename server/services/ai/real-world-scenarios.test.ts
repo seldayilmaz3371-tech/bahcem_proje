@@ -21,6 +21,7 @@
  * iyileştirme #3).
  */
 
+import { describe, it } from "vitest";
 import { decisionEngineService, DecisionResult, DecisionStatus } from "./decision-engine.service";
 import { decisionExplanationBuilderService } from "./decision-explanation-builder.service";
 import { Evaluator, EvaluatorContext } from "./evaluator-framework.service";
@@ -333,7 +334,11 @@ async function main() {
   );
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("real-world-scenarios", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

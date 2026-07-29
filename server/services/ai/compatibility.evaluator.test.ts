@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/compatibility.evaluator.test.ts */
 
+import { describe, it } from "vitest";
 import { CompatibilityEvaluator } from "./compatibility.evaluator";
 import { CompatibilityRuleRepository } from "../../repositories/compatibility-rule.repository";
 import { CompatibilityRule } from "../../models";
@@ -41,7 +42,11 @@ async function main() {
   check("Uyumsuzsa blocking=true", result.blocking === true);
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("compatibility.evaluator", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});

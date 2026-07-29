@@ -5,6 +5,7 @@
 
 /** Çalıştırma: npx tsx server/services/ai/dosage.evaluator.test.ts */
 
+import { describe, it } from "vitest";
 import { DosageEvaluator } from "./dosage.evaluator";
 import { DosageRuleRepository } from "../../repositories/dosage-rule.repository";
 import { DosageRule } from "../../models";
@@ -63,7 +64,11 @@ async function main() {
   check("Geçersiz kural blocking=true (güvenlik)", resultInvalid.blocking === true);
 
   console.log(`\nTOPLAM: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  if (failed > 0) throw new Error(`${failed} test başarısız oldu`);
 }
 
-main();
+describe("dosage.evaluator", () => {
+  it("mevcut senaryo doğrulamalarının tümünü PASS ile geçer", async () => {
+    await main();
+  });
+});
