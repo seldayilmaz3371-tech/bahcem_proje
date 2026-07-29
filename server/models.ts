@@ -303,6 +303,26 @@ export interface PlantInfo {
   alternativeNames?: string[];
   localNames?: string[];
   tags?: string[];
+  // ============================================================
+  // Sprint 4B — Plant Knowledge Entegrasyonu. Hepsi optional: eski
+  // (Sprint 1) kayıtlar bu alanları hiç taşımadan geçerliliğini
+  // korur, hiçbir migration gerekmez. Bu bilgi, RAG'ın YERİNE değil,
+  // RAG'DAN BAĞIMSIZ, doğrulanmış (elle girilmiş) bir kaynak olarak
+  // AI context'ine ek bir bölüm halinde sunulur (bkz.
+  // plant-knowledge.service.ts).
+  // ============================================================
+  description?: string;
+  lifecycle?: string;
+  growthStages?: string[];
+  wateringNotes?: string;
+  fertilizingNotes?: string;
+  pruningNotes?: string;
+  commonDiseases?: string[];
+  commonPests?: string[];
+  nutrientDeficiencies?: string[];
+  criticalCareNotes?: string;
+  /** Sprint 5A — Rule Layer Foundation. Bu bitkiye bağlı, yapılandırılmış fenolojik dönem kuralları — opsiyonel, `growthStages` (açıklayıcı metin) alanından bağımsız, geriye dönük tam uyumlu. */
+  phenologyRuleIds?: string[];
   createdAt: string;
 }
 
@@ -315,6 +335,8 @@ export interface Fertilizer {
   npkRatio?: string; // e.g. "15-15-15"
   organicContentPercent?: number;
   microElements?: string; // e.g. "Bor, Çinko"
+  /** Sprint 5A — Rule Layer Foundation. Bu gübreye bağlı, bitki/dönem bazlı doz kuralları — opsiyonel, geriye dönük tam uyumlu. */
+  nutritionRuleIds?: string[];
 }
 
 /**
@@ -326,7 +348,187 @@ export interface Chemical {
   activeIngredient: string; // Etken madde
   targetPests: string[]; // e.g. ["Zeytin Sineği", "Halkalı Leke"]
   preHarvestIntervalDays: number; // Hasat öncesi bekleme süresi (PH)
+  /** Sprint 5A — Rule Layer Foundation. Bu ilaca bağlı doz kuralları — opsiyonel, geriye dönük tam uyumlu. */
+  dosageRuleIds?: string[];
 }
+
+// ============================================================================
+// SPRINT 5A — RULE LAYER FOUNDATION (Sprint 5A Revizyonu ile güncellendi)
+//
+// Bu bölümdeki modeller, Decision Engine'in (henüz yazılmayan) veri
+// temelidir. Hiçbiri şu an hiçbir servis/repository tarafından
+// OKUNMUYOR — yalnızca veri modeli + CRUD altyapısı kuruluyor.
+//
+// REVİZYON NOTU (BaseRule): Sprint 5A'da 7 modelin 11 alanı (id, version,
+// isActive, supersededBy, sourceType, sourceReference, officialDocument,
+// approvedBy, approvalDate, lastReviewedAt, createdAt) BİREBİR
+// tekrarlanıyordu. Mevcut proje genelinde interface `extends` deseni HİÇ
+// kullanılmıyor (kanıtlandı: sıfır örnek) — ancak bu 7 modeldeki tekrar
+// kapsamı, projenin başka hiçbir yerinde görülmeyen bir orandaydı. Bu
+// nedenle `BaseRule` ortak interface'i EKLENDİ — TypeScript `extends`,
+// üretilen JSON/veritabanı yapısını DEĞİŞTİRMEZ (yalnızca derleme
+// zamanı tip kontrolü), bu yüzden hiçbir çalışma zamanı davranışı
+// etkilenmedi.
+// ============================================================================
+
+/** Bir kuralın hangi türden bir kaynağa dayandığını belirtir — kapalı bir küme, tutarlı raporlama için (mevcut TreeCountChangeReason deseniyle aynı yaklaşım). */
+export type RuleSourceType = "Resmi Etiket" | "Uzman Onayı" | "Bilimsel Kaynak" | "Diğer";
+
+/**
+ * Tüm Rule Layer modellerinin ortak temeli.
+ *
+ * REVİZYON — Rule Metadata (Sprint 5A Revizyonu, madde 3):
+ * - `manufacturer` EKLENDİ: etiket doğrulaması için gerçek ihtiyaç
+ *   (hangi üreticinin dozu olduğu, aynı etken maddeyi farklı üreticiler
+ *   farklı dozda satabilir).
+ * - `documentVersion` EKLENDİ: `officialDocument`'ın (dosya/URL)
+ *   HANGİ VERSİYONU olduğu ayrı bir bilgidir (örn. "2024 etiket
+ *   revizyonu") — ürün etiketleri zamanla değişir.
+ * - `countryCode` EKLENDİ (varsayılan "TR" olacak şekilde kullanılacak,
+ *   opsiyonel): düşük maliyetli (tek string alan), yüksek gelecek
+ *   faydalı (uluslararası genişleme migrasyon gerektirmeden mümkün
+ *   olur) — önceki mimari raporda zaten önerilmişti.
+ * - `regulatoryAuthority` EKLENDİ: `sourceReference` yalnızca bir
+ *   referans/ruhsat NUMARASI taşır, hangi KURUMUN (örn. "T.C. Tarım ve
+ *   Orman Bakanlığı") onayladığı ayrı, faydalı bir bilgidir.
+ * - `referenceUrl` EKLENMEDİ: `officialDocument` zaten "dosya
+ *   yolu/URL" olarak tanımlı — ayrı bir `referenceUrl` alanı, AYNI
+ *   işlevi tekrar eden, normalizasyon sorunu yaratacak bir alan olurdu.
+ */
+export interface BaseRule {
+  id: string;
+  version: number;
+  isActive: boolean;
+  supersededBy?: string;
+  sourceType: RuleSourceType;
+  sourceReference?: string;
+  officialDocument?: string;
+  approvedBy?: string; // Foreign Key to Users
+  approvalDate?: string;
+  lastReviewedAt?: string;
+  manufacturer?: string;
+  documentVersion?: string;
+  countryCode?: string;
+  regulatoryAuthority?: string;
+  createdAt: string;
+}
+
+/**
+ * 20. DosageRules Table Schema — Sprint 5A.
+ * Bir ilacın (Chemical), belirli bir bitki/hastalık kombinasyonu için
+ * doğrulanmış dozu ve tekrar uygulama aralığı.
+ */
+export interface DosageRule extends BaseRule {
+  chemicalId: string; // Foreign Key to Chemicals
+  plantName: string; // PlantInfo.name ile eşleşir (serbest metin, PlantInfo'dan bağımsız kayıt için)
+  targetPest?: string; // Chemical.targetPests içindeki bir değerle eşleşir
+  dosageAmount: number; // Önerilen/standart doz
+  /** Sprint 5E — Rule Evaluation. Bu doz aralığının ALT sınırı — opsiyonel, geriye dönük tam uyumlu. Verilmezse DosageEvaluator yalnızca `dosageAmount`'a göre değerlendirir. */
+  minimumDose?: number;
+  /** Sprint 5E — Rule Evaluation. Bu doz aralığının ÜST sınırı (güvenlik sınırı). */
+  maximumDose?: number;
+  dosageUnit: string; // e.g. "ml/100L", "gr/dekar"
+  intervalDays: number; // Tekrar uygulama aralığı (gün)
+  maxApplicationsPerSeason?: number;
+}
+
+/**
+ * 21. PhenologyRules Table Schema — Sprint 5A.
+ * Bir bitkinin belirli bir gelişim döneminde geçerli olan kısıtlar/notlar.
+ */
+export interface PhenologyRule extends BaseRule {
+  plantName: string; // PlantInfo.name ile eşleşir
+  growthStage: string; // PlantInfo.growthStages içindeki bir değerle eşleşir
+  applicableDosageRuleIds?: string[];
+  restrictionNote?: string;
+}
+
+/**
+ * 22. WeatherRules Table Schema — Sprint 5A.
+ * Bir uygulamanın (ilaçlama vb.) hangi hava koşullarında YAPILMAMASI
+ * gerektiğine dair eşik değerler.
+ */
+export interface WeatherRule extends BaseRule {
+  name: string; // e.g. "Rüzgarlı Havada İlaçlama Yasağı"
+  maxWindSpeedKmh?: number;
+  minTemperatureC?: number;
+  maxTemperatureC?: number;
+  maxHumidityPercent?: number;
+  forbidsDuringPrecipitation?: boolean;
+  applicableDosageRuleIds?: string[];
+}
+
+/**
+ * 23. CompatibilityRules Table Schema — Sprint 5A.
+ * İki ürünün (InventoryItem) birlikte karıştırılıp karıştırılamayacağı.
+ */
+export interface CompatibilityRule extends BaseRule {
+  inventoryItemIdA: string; // Foreign Key to InventoryItem
+  inventoryItemIdB: string; // Foreign Key to InventoryItem
+  isCompatible: boolean;
+  note?: string;
+}
+
+/**
+ * 24. SafetyWarnings Table Schema — Sprint 5A.
+ * Önceki mimari analiz raporunda SafetyRule/WarningRule/RiskRule'ün
+ * BİRLEŞTİRİLMESİYLE ortaya çıkan tek model (bkz. Normalizasyon
+ * Analizi — üç ayrı model aynı kavramın tekrarıydı).
+ */
+export interface SafetyWarning extends BaseRule {
+  relatedChemicalId?: string; // Foreign Key to Chemicals
+  relatedFertilizerId?: string; // Foreign Key to Fertilizers
+  severity: "CRITICAL" | "HIGH" | "NORMAL" | "LOW" | "INFO"; // Önceki mimari raporda tanımlanan öncelik seviyeleri
+  message: string;
+  triggerCondition?: string; // Serbest metin — hangi koşulda tetiklenir
+}
+
+/**
+ * 25. NutritionRules Table Schema — Sprint 5A.
+ * Bir gübrenin (Fertilizer), belirli bir bitki/dönem için doğrulanmış dozu.
+ */
+export interface NutritionRule extends BaseRule {
+  fertilizerId: string; // Foreign Key to Fertilizers
+  plantName: string;
+  growthStage?: string;
+  dosageAmount: number;
+  dosageUnit: string;
+  intervalDays?: number;
+}
+
+/**
+ * 26. DecisionTemplates Table Schema — Sprint 5A (Revizyon: yeniden adlandırıldı).
+ *
+ * İSİMLENDİRME NOTU (Sprint 5A Revizyonu, madde 2): Sprint 5A'da
+ * "TreatmentRecipe" olarak adlandırılmıştı. Bu isim, yalnızca hastalık/
+ * zararlı TEDAVİSİ kapsamını çağrıştırıyordu — ama Decision Engine
+ * gelecekte gübre, sulama, budama, hasat, stok, finans kararları da
+ * üretecek (bkz. Sprint 5A Revizyonu talebi). "DecisionTemplate", bu
+ * modelin GERÇEK rolünü ("birden fazla kuralı birleştiren, yeniden
+ * kullanılabilir bir karar KALIBI") doğru yansıtıyor ve "Decision
+ * Engine" ile "DecisionRule" kadar kavramsal çakışma riski taşımıyor
+ * ("Template" son eki, bunun bir motor değil bir veri kalıbı olduğunu
+ * netleştiriyor).
+ *
+ * GERİYE DÖNÜK UYUMLULUK NOTU: Sprint 5A henüz üretime çıkmadığı
+ * (hiçbir gerçek kural verisi girilmediği) için bu yeniden adlandırma
+ * güvenlidir — ama eğer bu sprint ARASINDA test amaçlı `treatmentRecipes`
+ * tablosuna herhangi bir kayıt eklendiyse, o kayıtlar yeni
+ * `decisionTemplates` tablosuna taşınmaz (boş, kullanılmayan bir tablo
+ * olarak diskte kalır) — bu, aşağıda Backward Compatibility bölümünde
+ * açıkça belirtilmiştir.
+ */
+export interface DecisionTemplate extends BaseRule {
+  name: string; // e.g. "Domates Mildiyösü - Mutifa WG Tedavisi"
+  plantName: string;
+  targetDisease?: string;
+  dosageRuleId: string; // Foreign Key to DosageRules
+  applicableWeatherRuleIds?: string[];
+  applicablePhenologyRuleIds?: string[];
+  relatedSafetyWarningIds?: string[];
+}
+
+
 
 /**
  * 11b. ProductApplications Table Schema — simple record-keeping of which
@@ -461,12 +663,20 @@ export interface AIRecommendation {
   treeId?: string; // Set only when the report is scoped to a single reference tree (see Gelişim Analizi)
   recommendationType: "Hastalık" | "Gübreleme" | "Sulama" | "Genel" | "Gelişim Analizi";
   content: string;
-  confidenceScore: number; // AI Güven Skoru
+  confidenceScore: number; // AI Güven Skoru (0-1) — Sprint 0'dan beri var, frontend'de aktif kullanılıyor, DEĞİŞTİRİLMEDİ
   usedDocumentsCount: number;
   usedObservationsCount: number;
   usedWeatherCount: number;
   usedInventoryCount: number;
   createdDate: string;
+  /**
+   * Sprint 4F — Confidence Model. Yukarıdaki `confidenceScore`'dan
+   * (0-1, yalnızca RAG skoruna dayalı) FARKLI ve BAĞIMSIZ bir alan:
+   * çoklu sinyal (RAG + Plant Knowledge + fallback vb.) birleşiminden
+   * üretilen, 0-100 arası, açıklanabilir bir puan. Opsiyonel — eski
+   * kayıtlarda bulunmaz, geriye dönük tam uyumlu.
+   */
+  confidenceModel?: { confidence: number; reasons: string[] };
 }
 
 /**
@@ -583,6 +793,53 @@ export interface VectorChunk {
 /**
  * 22. Notifications Table Schema (Akıllı Bildirimler)
  */
+/**
+ * Sprint 3A — Backup & Recovery Modülü, Manuel Checkpoint.
+ *
+ * Bu, mevcut otomatik `BackupService.createBackup()` mekanizmasının
+ * ÜRETTİĞİ aynı snapshot dosyasının üzerine, yalnızca "neden
+ * oluşturuldu" bağlamını (etiket, kim oluşturdu, sürüm bütünlüğü
+ * özeti) ekleyen küçük bir meta-veri kaydıdır — yedekleme mantığının
+ * kendisi tekrar yazılmadı, yeniden kullanıldı.
+ *
+ * KASITLI OLARAK ana veritabanı şemasının (DatabaseSchema) bir parçası
+ * DEĞİL — ayrı bir `backups/checkpoints.json` indeks dosyasında
+ * saklanır (bkz. BackupService). Gerekçe: checkpoint'ler, uygulamanın
+ * kendi verisiyle (parseller, gözlemler vb.) kavramsal olarak
+ * alakasızdır — "yedeklerin yedeği" anlamına gelecek döngüsel bir
+ * karmaşıklık yaratmadan, kendi başına yeten bir alanda tutulur.
+ */
+export interface BackupCheckpoint {
+  id: string;
+  label: string;
+  createdBy: string;
+  createdAt: string;
+  snapshotFileName: string;
+  fileSizeBytes: number;
+  /** SHA-256 — geri yükleme öncesi bütünlük doğrulaması için (bkz. Sprint 3B). */
+  checksum: string;
+}
+
+/**
+ * Sprint 3B — Manuel Geri Yükleme (Restore) sonucu.
+ *
+ * `safetyCheckpointId`, geri yükleme İŞLEMİNDEN HEMEN ÖNCE, mevcut
+ * (geri yüklenecek eski veriyle DEĞİŞTİRİLECEK) durumun otomatik
+ * olarak alınan bir checkpoint'inin kimliğidir — kullanıcı yanlış bir
+ * checkpoint'e geri dönerse, bu güvenlik ağı sayesinde geri
+ * yüklemeden HEMEN ÖNCEKİ duruma da geri dönülebilir. Bu, "geri
+ * yükleme sırasında mevcut veri kaybı" riskine (bkz. Backup & Recovery
+ * mimari analiz raporu, madde 11) karşı kasıtlı bir tasarım kararıdır.
+ */
+export interface RestoreResult {
+  success: boolean;
+  restoredCheckpointId: string;
+  safetyCheckpointId: string;
+  /** Geri yükleme öncesi/sonrası, ana tablolardaki kayıt sayıları — veri bütünlüğü doğrulaması için. */
+  recordCountsBefore: Record<string, number>;
+  recordCountsAfter: Record<string, number>;
+}
+
 export interface Notification {
   id: string;
   title: string;
@@ -641,6 +898,14 @@ export interface DatabaseSchema {
   chemicals: Chemical[];
   productApplications: ProductApplication[];
   plantInfo: PlantInfo[];
+  // Sprint 5A — Rule Layer Foundation
+  dosageRules: DosageRule[];
+  phenologyRules: PhenologyRule[];
+  weatherRules: WeatherRule[];
+  compatibilityRules: CompatibilityRule[];
+  safetyWarnings: SafetyWarning[];
+  nutritionRules: NutritionRule[];
+  treatmentRecipes: DecisionTemplate[]; // NOT: tablo adı geriye dönük uyumluluk için korunuyor, tip DecisionTemplate'e güncellendi (bkz. Sprint 5A Revizyonu madde 2)
   applications: Application[];
   irrigation: Irrigation[];
   harvest: Harvest[];

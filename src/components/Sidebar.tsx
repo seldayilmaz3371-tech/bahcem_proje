@@ -15,6 +15,7 @@ import {
   TrendingUp,
   FolderOpen, 
   ShieldAlert,
+  Archive,
   LogOut,
   Leaf,
   User as UserIcon,
@@ -135,6 +136,7 @@ export default function Sidebar({ activeTab, setActiveTab, user, permissions, on
       title: "Sistem",
       items: [
         { id: "activities", label: "Sistem Logları", icon: ShieldAlert, requiredPermission: "activities:read" },
+        { id: "backup-recovery", label: "Yedekleme & Geri Yükleme", icon: Archive, requiredPermission: "backup:read" },
       ],
     },
   ];

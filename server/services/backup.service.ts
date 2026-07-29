@@ -5,10 +5,12 @@
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { config } from "../config";
 import { logger } from "../logger";
 import { db } from "../database";
 import { photoStorageService } from "./photo-storage.service";
+import { BackupCheckpoint, RestoreResult, DatabaseSchema } from "../models";
 
 /**
  * Summary of a single backup run, returned for logging and (optionally)
@@ -40,12 +42,15 @@ export class BackupService {
   private readonly backupDirectory: string;
   private readonly snapshotsDirectory: string;
   private readonly photosBackupDirectory: string;
+  /** Sprint 3A — manuel checkpoint meta-verisinin tutulduğu indeks dosyası. */
+  private readonly checkpointsIndexPath: string;
   private intervalHandle: NodeJS.Timeout | null = null;
 
   constructor() {
     this.backupDirectory = path.resolve(config.backup.directory);
     this.snapshotsDirectory = path.join(this.backupDirectory, "snapshots");
     this.photosBackupDirectory = path.join(this.backupDirectory, "photos");
+    this.checkpointsIndexPath = path.join(this.backupDirectory, "checkpoints.json");
     this.ensureDirectoriesExist();
   }
 
@@ -253,6 +258,234 @@ export class BackupService {
       logger.info("DATABASE", `Saklama süresi dolan ${filesToDelete.length} eski yedek dosyası temizlendi.`, { directory });
     } catch (error) {
       logger.error("DATABASE", "Eski yedek dosyaları temizlenirken bir hata oluştu.", error, { directory });
+    }
+  }
+
+  /**
+   * Sprint 3A — Manuel Checkpoint oluşturma.
+   *
+   * Mevcut `createBackup()`'ı OLDUĞU GİBİ çağırır (yedekleme mantığının
+   * kendisi hiç tekrar yazılmadı) — yalnızca üzerine, kullanıcının
+   * verdiği bir etiketi, kim oluşturduğunu ve SHA-256 checksum'ını
+   * ekleyen bir meta-veri kaydı oluşturur.
+   */
+  public async createManualCheckpoint(label: string, createdBy: string): Promise<BackupCheckpoint> {
+    const backupResult = await this.createBackup();
+    const snapshotFileName = path.basename(backupResult.snapshotPath);
+    const fileBuffer = fs.readFileSync(backupResult.snapshotPath);
+
+    const checkpoint: BackupCheckpoint = {
+      id: crypto.randomUUID(),
+      label,
+      createdBy,
+      createdAt: backupResult.timestamp,
+      snapshotFileName,
+      fileSizeBytes: fileBuffer.length,
+      checksum: this.computeChecksum(fileBuffer),
+    };
+
+    const existingCheckpoints = this.readCheckpointsIndex();
+    existingCheckpoints.push(checkpoint);
+    this.writeFileAtomically(this.checkpointsIndexPath, JSON.stringify(existingCheckpoints, null, 2));
+
+    logger.info("DATABASE", `Manuel checkpoint oluşturuldu: '${label}' (${createdBy})`, { checkpointId: checkpoint.id });
+    return checkpoint;
+  }
+
+  /**
+   * Sprint 3A — Checkpoint listeleme. En yeni checkpoint en başta.
+   */
+  public listCheckpoints(): BackupCheckpoint[] {
+    return this.readCheckpointsIndex().sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+
+  /**
+   * Sprint 3A — Checkpoint Doğrulama.
+   *
+   * Bir checkpoint'in işaret ettiği snapshot dosyasının hâlâ diskte
+   * var olduğunu VE içeriğinin oluşturulduğu andaki SHA-256 checksum'ıyla
+   * birebir eşleştiğini (yani dosyanın o tarihten beri hiç
+   * değişmediğini/bozulmadığını) doğrular. Geri yükleme (Sprint 3B),
+   * bu kontrolü geri yüklemeden ÖNCE zorunlu bir ön koşul olarak
+   * kullanacak.
+   */
+  public verifyCheckpoint(checkpointId: string): { valid: boolean; reason?: string } {
+    const checkpoint = this.readCheckpointsIndex().find((c) => c.id === checkpointId);
+    if (!checkpoint) {
+      return { valid: false, reason: "Checkpoint kaydı bulunamadı." };
+    }
+
+    const snapshotPath = path.join(this.snapshotsDirectory, checkpoint.snapshotFileName);
+    if (!fs.existsSync(snapshotPath)) {
+      return { valid: false, reason: "Checkpoint'in işaret ettiği yedek dosyası diskte bulunamadı (silinmiş olabilir)." };
+    }
+
+    const fileBuffer = fs.readFileSync(snapshotPath);
+    const actualChecksum = this.computeChecksum(fileBuffer);
+    if (actualChecksum !== checkpoint.checksum) {
+      return { valid: false, reason: "Dosya bütünlüğü doğrulanamadı: checksum uyuşmuyor (dosya bozulmuş veya değiştirilmiş olabilir)." };
+    }
+
+    try {
+      JSON.parse(fileBuffer.toString("utf8"));
+    } catch {
+      return { valid: false, reason: "Dosya geçerli bir JSON formatında değil." };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Sprint 3B — Manuel Geri Yükleme (Restore).
+   *
+   * Akış (talimattaki tüm kapsamı karşılayacak şekilde):
+   * 1. Hedef checkpoint'in bütünlüğü doğrulanır (`verifyCheckpoint` —
+   *    mevcut, yeniden kullanılıyor). Doğrulama başarısız olursa geri
+   *    yükleme YAPILMAZ.
+   * 2. Geri yüklemeden HEMEN ÖNCE, mevcut durumun otomatik bir güvenlik
+   *    checkpoint'i alınır (`createManualCheckpoint` — mevcut, yeniden
+   *    kullanılıyor). Bu, geri yüklemenin kendisi bir hataysa bile
+   *    veri kaybı olmamasını garanti eder.
+   * 3. Checkpoint'in işaret ettiği snapshot dosyası okunup, `db`'nin
+   *    KENDİ `transaction()` mekanizmasıyla (yeni bir veritabanı yazma
+   *    yolu İCAT EDİLMEDİ) canlı veritabanının yerine geçirilir.
+   * 4. Geri yükleme öncesi/sonrası kayıt sayıları karşılaştırılarak
+   *    temel bir veri bütünlüğü raporu üretilir.
+   */
+  public async restoreFromCheckpoint(checkpointId: string, restoredBy: string): Promise<RestoreResult> {
+    const verification = this.verifyCheckpoint(checkpointId);
+    if (!verification.valid) {
+      throw new Error(`Geri yükleme reddedildi — checkpoint bütünlüğü doğrulanamadı: ${verification.reason}`);
+    }
+
+    const checkpoint = this.readCheckpointsIndex().find((c) => c.id === checkpointId);
+    if (!checkpoint) {
+      throw new Error("Checkpoint kaydı bulunamadı.");
+    }
+
+    // Güvenlik ağı: geri yüklemeden hemen önce, mevcut durumu kaybetmemek
+    // için otomatik bir checkpoint alınır.
+    const safetyCheckpoint = await this.createManualCheckpoint(
+      `Otomatik güvenlik yedeği ('${checkpoint.label}' geri yüklemesinden hemen önce)`,
+      restoredBy
+    );
+
+    const recordCountsBefore = this.countTopLevelRecords(await db.readRaw());
+
+    const snapshotPath = path.join(this.snapshotsDirectory, checkpoint.snapshotFileName);
+    let restoredData: DatabaseSchema;
+    try {
+      restoredData = JSON.parse(fs.readFileSync(snapshotPath, "utf8"));
+    } catch (error) {
+      throw new Error("Checkpoint dosyası geçerli bir JSON formatında değil, geri yükleme durduruldu.");
+    }
+
+    await db.transaction((liveDb) => {
+      for (const key of Object.keys(liveDb)) {
+        delete (liveDb as any)[key];
+      }
+      Object.assign(liveDb, restoredData);
+    });
+
+    const recordCountsAfter = this.countTopLevelRecords(await db.readRaw());
+
+    logger.info(
+      "DATABASE",
+      `Geri yükleme tamamlandı: '${checkpoint.label}' (${restoredBy}). Güvenlik checkpoint'i: ${safetyCheckpoint.id}`
+    );
+
+    return {
+      success: true,
+      restoredCheckpointId: checkpointId,
+      safetyCheckpointId: safetyCheckpoint.id,
+      recordCountsBefore,
+      recordCountsAfter,
+    };
+  }
+
+  /** Veri bütünlüğü karşılaştırması için, üst düzey her tablonun kayıt sayısını çıkarır. */
+  private countTopLevelRecords(data: DatabaseSchema): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (Array.isArray(value)) counts[key] = value.length;
+    }
+    return counts;
+  }
+
+  /**
+   * Sprint 3C — İçe Aktarma.
+   *
+   * Kullanıcının kendi diskinden yüklediği bir yedek dosyasını, sisteme
+   * YENİ bir checkpoint olarak kaydeder. Dosya önce JSON geçerliliği
+   * açısından doğrulanır (bozuk/alakasız bir dosyanın sisteme
+   * girmesini önlemek için) — yalnızca bundan SONRA snapshot'lar
+   * klasörüne kopyalanıp indekse eklenir. Bu, henüz GERİ YÜKLEME
+   * yapmaz — yalnızca dosyayı, kullanıcının daha sonra bilinçli olarak
+   * seçip `restoreFromCheckpoint()` ile geri yükleyebileceği bir
+   * checkpoint haline getirir.
+   */
+  public async importCheckpointFromFile(fileBuffer: Buffer, label: string, importedBy: string): Promise<BackupCheckpoint> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fileBuffer.toString("utf8"));
+    } catch {
+      throw new Error("Yüklenen dosya geçerli bir JSON formatında değil.");
+    }
+    if (typeof parsed !== "object" || parsed === null || !("parcels" in parsed)) {
+      throw new Error("Yüklenen dosya, geçerli bir Mersin AgriTech yedek dosyası gibi görünmüyor.");
+    }
+
+    this.ensureDirectoriesExist();
+    const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const snapshotFileName = `tarim_hafizasi_ithal_${safeTimestamp}.json`;
+    const snapshotPath = path.join(this.snapshotsDirectory, snapshotFileName);
+    this.writeFileAtomically(snapshotPath, fileBuffer.toString("utf8"));
+
+    const checkpoint: BackupCheckpoint = {
+      id: crypto.randomUUID(),
+      label,
+      createdBy: importedBy,
+      createdAt: new Date().toISOString(),
+      snapshotFileName,
+      fileSizeBytes: fileBuffer.length,
+      checksum: this.computeChecksum(fileBuffer),
+    };
+
+    const existingCheckpoints = this.readCheckpointsIndex();
+    existingCheckpoints.push(checkpoint);
+    this.writeFileAtomically(this.checkpointsIndexPath, JSON.stringify(existingCheckpoints, null, 2));
+
+    logger.info("DATABASE", `Dışarıdan bir yedek dosyası içe aktarıldı: '${label}' (${importedBy})`, { checkpointId: checkpoint.id });
+    return checkpoint;
+  }
+
+  /**
+   * Sprint 3C — Dışa Aktarma. Bir checkpoint'in snapshot dosyasının tam
+   * yolunu döner (route katmanı bunu indirilebilir bir dosya olarak
+   * sunar) — yeni bir dosya oluşturmaz, mevcut dosyayı olduğu gibi işaret eder.
+   */
+  public getCheckpointFilePath(checkpointId: string): string | null {
+    const checkpoint = this.readCheckpointsIndex().find((c) => c.id === checkpointId);
+    if (!checkpoint) return null;
+    const snapshotPath = path.join(this.snapshotsDirectory, checkpoint.snapshotFileName);
+    return fs.existsSync(snapshotPath) ? snapshotPath : null;
+  }
+
+  /** SHA-256 checksum — projede zaten kurulu standart (doküman/fotoğraf/chunk içerik özetiyle aynı desen), yeni bağımlılık gerektirmiyor. */
+  private computeChecksum(buffer: Buffer): string {
+    return crypto.createHash("sha256").update(buffer).digest("hex");
+  }
+
+  /** Checkpoint indeks dosyasını okur; dosya yoksa veya bozuksa boş liste döner (asla hata fırlatmaz). */
+  private readCheckpointsIndex(): BackupCheckpoint[] {
+    if (!fs.existsSync(this.checkpointsIndexPath)) return [];
+    try {
+      return JSON.parse(fs.readFileSync(this.checkpointsIndexPath, "utf8"));
+    } catch (error) {
+      logger.error("DATABASE", "Checkpoint indeks dosyası okunamadı, boş liste ile devam ediliyor.", error);
+      return [];
     }
   }
 

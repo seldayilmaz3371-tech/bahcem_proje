@@ -16,6 +16,7 @@ import AIRecommendations from "./components/AIRecommendations";
 import PhotoGrowthAnalysis from "./components/PhotoGrowthAnalysis";
 import DocumentHub from "./components/DocumentHub";
 import ActivityLogs from "./components/ActivityLogs";
+import BackupRecovery from "./components/BackupRecovery";
 import { ActiveTab, User } from "./types";
 import { RefreshCw, WifiOff, UploadCloud, Menu } from "lucide-react";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
@@ -187,6 +188,7 @@ export default function App() {
         {activeTab === "photo-growth" && <PhotoGrowthAnalysis />}
         {activeTab === "document-hub" && <DocumentHub />}
         {activeTab === "activities" && <ActivityLogs />}
+        {activeTab === "backup-recovery" && <BackupRecovery />}
       </main>
     </div>
   );

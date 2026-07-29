@@ -25,6 +25,10 @@ export interface ParcelRecommendationPromptContext {
   userQuery: string;
   hasPhotos: boolean;
   photosUsedCount: number;
+  /** Sprint 4B — Plant Knowledge. Boşsa ("henüz sözlük kaydı yok") bu bölüm prompt'a HİÇ eklenmez — mevcut prompt yapısı aynen korunur. */
+  plantKnowledgeContext?: string;
+  /** Sprint 5F — Decision Engine. Boşsa (Failsafe: Decision Engine hata verdi/hiç çalıştırılmadı) bu bölüm prompt'a HİÇ eklenmez. */
+  decisionEngineContext?: string;
 }
 
 /**
@@ -64,9 +68,25 @@ export function buildParcelRecommendationPrompt(context: ParcelRecommendationPro
   const photoInstructionBlock = context.hasPhotos ? buildPhotoInstructionBlock(context.photosUsedCount) : "";
   const defaultQuery = "Bu parsel için genel durum analizi ve gelecek haftaki tarımsal faaliyet planı nedir?";
   const userQuerySection = buildSafeUserQuerySection(context.userQuery || defaultQuery);
+  // Sprint 4B — yalnızca gerçekten bir Bitki Bilgi Sözlüğü kaydı
+  // bulunduysa eklenen, RAG'dan TAMAMEN AYRI bir bölüm. Kayıt yoksa bu
+  // değişken boş string olur ve aşağıdaki şablonda hiçbir görünür fark
+  // yaratmaz (mevcut prompt yapısı aynen korunur).
+  const plantKnowledgeSection = context.plantKnowledgeContext
+    ? `\n=== PLANT KNOWLEDGE / DOĞRULANMIŞ BİTKİ BİLGİSİ (KAYNAK: Bitki Bilgi Sözlüğü — elle doğrulanmış, RAG'dan bağımsız) ===\n${context.plantKnowledgeContext}\n`
+    : "";
+  // Sprint 5F — yalnızca Decision Engine GERÇEKTEN çalıştıysa (Failsafe:
+  // hata verirse bu alan boş kalır, prompt aynen ESKİ haliyle devam
+  // eder). Bu bölüm KASITLI OLARAK promptun EN BAŞINDA — Decision
+  // Engine'in kararı, Gemini'nin göreceği EN ÖNCELİKLİ, DEĞİŞTİRİLEMEZ
+  // bilgi olmalı (bkz. "Decision Engine KARAR VERİR, Gemini KARAR
+  // VERMEZ" ilkesi).
+  const decisionEngineSection = context.decisionEngineContext
+    ? `\n=== DECISION ENGINE KARARI (KAYNAK: Deterministik Kural Motoru — DEĞİŞTİRİLEMEZ) ===\n${context.decisionEngineContext}\n`
+    : "";
 
   return `
-Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış yapay zeka destekli bir Tarım Danışmanısın (Mersin Tarım Asistanı).
+${decisionEngineSection}Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış yapay zeka destekli bir Tarım Danışmanısın (Mersin Tarım Asistanı).
 Aşağıdaki verilere dayanarak çiftçiye özel, bilimsel, pratik ve bölgesel (Toroslar mikro-klimasına uygun) tavsiyeler üreteceksin.
 
 === ÇİFTLİK VE PARSEL BİLGİLERİ (KAYNAK: Yerel Proje Verisi) ===
@@ -75,7 +95,7 @@ Alan: ${context.areaDekar} Dekar
 Ağaç Sayısı: ${context.treeCount} adet ${context.cropType} ${context.cropType === "Zeytin" ? "ağacı" : "bitkisi"}
 Toprak Yapısı: ${context.soilType}
 Sulama Yöntemi: ${context.irrigationType}
-
+${plantKnowledgeSection}
 === SON GÖZLEMLER VE SAHA RAPORLARI (KAYNAK: Yerel Proje Verisi) ===
 ${context.observationsContext}
 
@@ -99,7 +119,7 @@ Senden istenenler:
 3. **Uygulama Dozajı**: Envanterde bulunan ilaç ve gübrelerin, parsel büyüklüğüne ve ağaç sayısına göre yaklaşık dozajlarını hesapla. Bu dozajın kesin/doğrulanmış bir reçete olmadığını, uygulamadan önce ürün etiketinin mutlaka kontrol edilmesi gerektiğini belirt.
 4. **Hasat Öngörüsü**: Eğer hasat dönemi yaklaşıyorsa, son ilaçlama ile hasat arasındaki bekleme sürelerine (PH) dikkat çek.
 5. **Güven Seviyesi**: Analizinin ne kadar kesin olduğunu belirt. Kanıt zayıfsa (örn. net olmayan fotoğraf, çelişkili gözlem) bunu "Belirsiz" olarak işaretle ve çiftçiden ek bilgi/farklı açıdan fotoğraf iste; tahmin yürütme.
-6. **Kaynak Beyanı**: Yanıtının sonunda kısa bir "Kullanılan Kaynaklar" notu ekle; hangi bölümler için Yerel Proje Verisi, hangi bölümler için Harici Web Verisi (Open-Meteo), hangi bölümler için RAG dokümanlarını${context.hasPhotos ? " ve fotoğraf analizi için hangi kaynağı (RAG veya Gemini genel bilgisi)" : ""} kullandığını belirt.
+6. **Kaynak Beyanı**: Yanıtının sonunda kısa bir "Kullanılan Kaynaklar" notu ekle; hangi bölümler için Yerel Proje Verisi, hangi bölümler için Harici Web Verisi (Open-Meteo), hangi bölümler için RAG dokümanlarını${context.hasPhotos ? " ve fotoğraf analizi için hangi kaynağı (RAG veya Gemini genel bilgisi)" : ""}${context.plantKnowledgeContext ? ", hangi bölümler için Bitki Bilgi Sözlüğü'nü" : ""}${context.decisionEngineContext ? ", hangi bölümler için Decision Engine kararını" : ""} kullandığını belirt.
 
 Cevabını Markdown formatında, net başlıklar, maddeler ve profesyonel/samimi bir Türkçe tonuyla yaz.
 `;

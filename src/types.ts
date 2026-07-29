@@ -382,4 +382,5 @@ export type ActiveTab =
   | "ai-advisor" 
   | "photo-growth"
   | "document-hub"
-  | "activities";
+  | "activities"
+  | "backup-recovery";

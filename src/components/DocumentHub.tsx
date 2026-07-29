@@ -230,7 +230,7 @@ export default function DocumentHub() {
         throw new Error(data.error || "Yapay zeka yanıt üretemedi.");
       }
 
-      setChatMessages((prev) => [...prev, { id: crypto.randomUUID(), sender: "bot", text: data.response || data.text }]);
+      setChatMessages((prev) => [...prev, { id: crypto.randomUUID(), sender: "bot", text: data.response || data.text, sources: data.sources }]);
     } catch (err: any) {
       setChatMessages((prev) => [...prev, { id: crypto.randomUUID(), sender: "bot", text: `Yanıt alınırken hata oluştu: ${err.message}` }]);
     } finally {
@@ -462,6 +462,36 @@ export default function DocumentHub() {
                     <div className="markdown-body prose max-w-none text-xs leading-relaxed">
                       <ReactMarkdown>{msg.text}</ReactMarkdown>
                     </div>
+                    {/* Sprint 2E — Kaynak Bilgisi: yalnızca bot mesajlarında,
+                        ve sources verisi varsa (eski/geçmiş mesajlarda
+                        bu alan olmayabilir — geriye dönük uyumlu, hata
+                        vermeden hiç gösterilmez). */}
+                    {isBot && msg.sources && (
+                      <div className="mt-2 pt-2 border-t border-[#eef2ec] text-[10px] space-y-1">
+                        <span className="flex items-center gap-1 font-bold text-[#5a6a55]">
+                          📚 Kaynak Bilgisi
+                        </span>
+                        <div>
+                          <span className="text-[#80907a]">Kaynak Türü: </span>
+                          <span className="font-semibold text-[#1a2416]">
+                            {msg.sources.sourceType === "RAG" ? "RAG (Yüklenen Dokümanlar)" : "Gemini (Genel Bilgi)"}
+                          </span>
+                        </div>
+                        {msg.sources.documents && msg.sources.documents.length > 0 && (
+                          <div className="space-y-1.5">
+                            {msg.sources.documents.map((doc: any) => (
+                              <div key={doc.documentId} className="bg-[#f7f9f6] rounded-lg p-2 border border-[#eef2ec]">
+                                <div className="font-semibold text-[#1a2416]">{doc.fileName}</div>
+                                {doc.headings && doc.headings.length > 0 && (
+                                  <div className="text-[#5a6a55]">Bölüm: {doc.headings.join(", ")}</div>
+                                )}
+                                <div className="text-[#80907a]">Retrieval Score: {doc.score.toFixed(3)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

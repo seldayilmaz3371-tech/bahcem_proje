@@ -676,7 +676,9 @@ app.post("/api/equipment/:id/ai-support", requireAuth, requirePermission("equipm
   res.json({
     response: result.text,
     text: result.text,
-    usedChunks: result.usedChunks
+    usedChunks: result.usedChunks,
+    sources: result.sources,
+    confidence: result.confidence
   });
 }));
 
@@ -1361,7 +1363,11 @@ app.get("/api/plant-info", requireAuth, requirePermission("parcels:read"), async
 }));
 
 app.post("/api/plant-info", requireAuth, requirePermission("parcels:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { name, parentGroup, category, scientificName, alternativeNames, localNames, tags } = req.body;
+  const {
+    name, parentGroup, category, scientificName, alternativeNames, localNames, tags,
+    description, lifecycle, growthStages, wateringNotes, fertilizingNotes, pruningNotes,
+    commonDiseases, commonPests, nutrientDeficiencies, criticalCareNotes,
+  } = req.body;
   if (!name || typeof name !== "string" || !name.trim()) {
     return res.status(400).json({ error: "Bitki adı zorunludur." });
   }
@@ -1380,6 +1386,17 @@ app.post("/api/plant-info", requireAuth, requirePermission("parcels:write"), asy
     alternativeNames: Array.isArray(alternativeNames) ? alternativeNames : undefined,
     localNames: Array.isArray(localNames) ? localNames : undefined,
     tags: Array.isArray(tags) ? tags : undefined,
+    // Sprint 4B — Plant Knowledge alanları, hepsi opsiyonel.
+    description: description || undefined,
+    lifecycle: lifecycle || undefined,
+    growthStages: Array.isArray(growthStages) ? growthStages : undefined,
+    wateringNotes: wateringNotes || undefined,
+    fertilizingNotes: fertilizingNotes || undefined,
+    pruningNotes: pruningNotes || undefined,
+    commonDiseases: Array.isArray(commonDiseases) ? commonDiseases : undefined,
+    commonPests: Array.isArray(commonPests) ? commonPests : undefined,
+    nutrientDeficiencies: Array.isArray(nutrientDeficiencies) ? nutrientDeficiencies : undefined,
+    criticalCareNotes: criticalCareNotes || undefined,
     createdAt: new Date().toISOString(),
   });
 
@@ -1392,7 +1409,11 @@ app.put("/api/plant-info/:id", requireAuth, requirePermission("parcels:write"), 
     return res.status(404).json({ error: "Güncellenmek istenen bitki kaydı bulunamadı." });
   }
 
-  const { name, parentGroup, category, scientificName, alternativeNames, localNames, tags } = req.body;
+  const {
+    name, parentGroup, category, scientificName, alternativeNames, localNames, tags,
+    description, lifecycle, growthStages, wateringNotes, fertilizingNotes, pruningNotes,
+    commonDiseases, commonPests, nutrientDeficiencies, criticalCareNotes,
+  } = req.body;
   if (name !== undefined && (typeof name !== "string" || !name.trim())) {
     return res.status(400).json({ error: "Bitki adı boş bırakılamaz." });
   }
@@ -1405,6 +1426,17 @@ app.put("/api/plant-info/:id", requireAuth, requirePermission("parcels:write"), 
     ...(alternativeNames !== undefined && { alternativeNames }),
     ...(localNames !== undefined && { localNames }),
     ...(tags !== undefined && { tags }),
+    // Sprint 4B — Plant Knowledge alanları.
+    ...(description !== undefined && { description }),
+    ...(lifecycle !== undefined && { lifecycle }),
+    ...(growthStages !== undefined && { growthStages }),
+    ...(wateringNotes !== undefined && { wateringNotes }),
+    ...(fertilizingNotes !== undefined && { fertilizingNotes }),
+    ...(pruningNotes !== undefined && { pruningNotes }),
+    ...(commonDiseases !== undefined && { commonDiseases }),
+    ...(commonPests !== undefined && { commonPests }),
+    ...(nutrientDeficiencies !== undefined && { nutrientDeficiencies }),
+    ...(criticalCareNotes !== undefined && { criticalCareNotes }),
   });
 
   res.json(updated);
@@ -1893,7 +1925,9 @@ app.post("/api/ai/chat", requireAuth, requirePermission("ai:read"), asyncHandler
   res.json({
     response: result.text,
     text: result.text,
-    usedChunks: result.usedChunks
+    usedChunks: result.usedChunks,
+    sources: result.sources,
+    confidence: result.confidence
   });
 }));
 
@@ -1958,6 +1992,67 @@ app.post("/api/ai/growth-analysis/:parcelId", requireAuth, requirePermission("ai
   }
 
   res.status(201).json(result);
+}));
+
+// ==========================================
+// 7b. BACKUP & RECOVERY — MANUEL CHECKPOINT (Sprint 3A)
+// ==========================================
+// Yalnızca oluşturma/listeleme/doğrulama — geri yükleme (restore) Sprint
+// 3B'nin kapsamı, bu sprintte kasıtlı olarak eklenmedi.
+
+app.post("/api/backup/checkpoints", requireAuth, requirePermission("backup:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { label } = req.body;
+  if (!label || typeof label !== "string" || !label.trim()) {
+    return res.status(400).json({ error: "Checkpoint etiketi zorunludur." });
+  }
+  if (label.length > 200) {
+    return res.status(400).json({ error: "Checkpoint etiketi en fazla 200 karakter olabilir." });
+  }
+
+  const checkpoint = await backupService.createManualCheckpoint(label.trim(), req.user.fullName);
+  res.status(201).json(checkpoint);
+}));
+
+app.get("/api/backup/checkpoints", requireAuth, requirePermission("backup:read"), asyncHandler(async (req, res) => {
+  const checkpoints = backupService.listCheckpoints();
+  res.json(checkpoints);
+}));
+
+app.get("/api/backup/checkpoints/:id/verify", requireAuth, requirePermission("backup:read"), asyncHandler(async (req, res) => {
+  const result = backupService.verifyCheckpoint(req.params.id);
+  res.json(result);
+}));
+
+// Sprint 3B — Restore. "backup:write" izni yeterli görüldü (yeni,
+// ayrı bir "restore" izni oluşturmak, "gereksiz karmaşıklık
+// oluşturma" ilkesine aykırı düşerdi — geri yükleme de bir yazma
+// işlemidir).
+app.post("/api/backup/checkpoints/:id/restore", requireAuth, requirePermission("backup:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const result = await backupService.restoreFromCheckpoint(req.params.id, req.user.fullName);
+  res.json(result);
+}));
+
+// Sprint 3C — Dışa Aktarma. Mevcut snapshot dosyasını olduğu gibi indirilebilir yapar.
+app.get("/api/backup/checkpoints/:id/download", requireAuth, requirePermission("backup:read"), asyncHandler(async (req, res) => {
+  const filePath = backupService.getCheckpointFilePath(req.params.id);
+  if (!filePath) {
+    return res.status(404).json({ error: "Checkpoint dosyası bulunamadı." });
+  }
+  res.download(filePath);
+}));
+
+// Sprint 3C — İçe Aktarma. `uploadDocument` (mevcut, 30MB limitli
+// multer instance'ı) yeniden kullanılıyor — yeni bir yükleme
+// mekanizması icat edilmedi.
+app.post("/api/backup/checkpoints/import", requireAuth, requirePermission("backup:write"), uploadDocument.single("file"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ error: "İçe aktarılacak dosya bulunamadı." });
+  }
+  const label = req.body.label && String(req.body.label).trim() ? String(req.body.label).trim() : `İçe aktarılan yedek (${file.originalname})`;
+
+  const checkpoint = await backupService.importCheckpointFromFile(file.buffer, label, req.user.fullName);
+  res.status(201).json(checkpoint);
 }));
 
 // ==========================================

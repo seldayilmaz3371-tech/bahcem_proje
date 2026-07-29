@@ -267,6 +267,14 @@ class DatabaseManager {
       chemicals: [],
       productApplications: [],
       plantInfo: [],
+      // Sprint 5A — Rule Layer Foundation
+      dosageRules: [],
+      phenologyRules: [],
+      weatherRules: [],
+      compatibilityRules: [],
+      safetyWarnings: [],
+      nutritionRules: [],
+      treatmentRecipes: [],
       applications: [],
       irrigation: [],
       harvest: [],
@@ -299,6 +307,7 @@ class DatabaseManager {
       "users", "roles", "parcels", "trees", "treeCountChangeLogs", "observations", "photos", "inventory",
       "equipment",
       "inventoryCategories", "fertilizers", "chemicals", "productApplications", "plantInfo", "applications", "irrigation",
+      "dosageRules", "phenologyRules", "weatherRules", "compatibilityRules", "safetyWarnings", "nutritionRules", "treatmentRecipes",
       "harvest", "costs", "sales", "weatherHistory",
       "aiRecommendations", "uploadedDocuments", "vectorChunks", "notifications",
       "activityLogs", "settings"
