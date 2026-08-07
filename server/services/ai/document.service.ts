@@ -65,9 +65,10 @@ export class DocumentService {
     fileType: string,
     fileSize: number,
     textContent: string,
-    linkedEntityType?: "equipment",
+    linkedEntityType?: "equipment" | "product", // Sprint 8: "product" eklendi (katkısal tip genişletmesi, Sprint 7H Karar 1 ile aynı gerekçe — davranış değişmedi)
     linkedEntityId?: string,
-    cropType?: string
+    cropType?: string,
+    documentCategory?: string // Sprint 8 — bkz. models.ts UploadedDocument.documentCategory, katkısal, sona eklendi
   ): Promise<UploadedDocument | null> {
     try {
       // Step 1: Create uploaded document entry
@@ -81,6 +82,7 @@ export class DocumentService {
         linkedEntityType,
         linkedEntityId,
         cropType: cropType || undefined,
+        documentCategory: documentCategory || undefined,
         contentHash: this.computeContentHash(textContent),
       });
 
@@ -93,6 +95,15 @@ export class DocumentService {
       // Step 3: Embed each chunk, persist the (large) embedding vector to
       // its own file on disk, and save only a lightweight record (id,
       // content, chunk index) in the main database.
+      // Sprint 9.3 — SORUN 5: ÖNCEDEN, embedding başarısızlığı yalnızca
+      // TEK bir logger.error satırıyla (döngü içinde, "Successfully
+      // processed" ANA başarı mesajının GÖLGESİNDE) kaydediliyordu —
+      // kolayca fark edilmiyordu. Bu, "sessizce mi geçiliyor?" sorusuna
+      // kesin bir EVET cevabıydı (kanıt: bu turun teslim raporu). Bu
+      // liste, kaç/hangi chunk'ın SIFIR-EMBEDDİNG (asla hiçbir sorguyla
+      // eşleşemeyecek) aldığını ANA başarı logunun HEMEN yanında,
+      // gözden kaçırılamayacak şekilde özetler.
+      const failedEmbeddingChunks: { chunkIndex: number; heading?: string; preview: string }[] = [];
       for (let i = 0; i < semanticChunks.length; i++) {
         const { content: chunkTextContent, heading } = semanticChunks[i];
         let embeddings: number[] = [];
@@ -101,6 +112,7 @@ export class DocumentService {
         } catch (e) {
           logger.error("RAG", `Embedding failed for chunk index ${i}. Using blank fallback embeddings.`, e);
           embeddings = new Array(768).fill(0); // Blank embedding fallback to avoid hard crashes
+          failedEmbeddingChunks.push({ chunkIndex: i, heading, preview: chunkTextContent.slice(0, 80) });
         }
 
         const chunkId = crypto.randomUUID();
@@ -155,6 +167,12 @@ export class DocumentService {
       }
 
       logger.info("RAG", `Successfully processed and indexed document: '${fileName}' into ${semanticChunks.length} chunks.`);
+      if (failedEmbeddingChunks.length > 0) {
+        logger.error(
+          "RAG",
+          `[EMBEDDİNG ÖZET UYARISI] '${fileName}' — ${failedEmbeddingChunks.length}/${semanticChunks.length} chunk SIFIR-EMBEDDİNG ile kaydedildi, bu chunk'lar ARTIK HİÇBİR sorguyla ASLA eşleşmeyecek (cosineSimilarity her zaman 0 döner). Etkilenen chunk'lar: ${JSON.stringify(failedEmbeddingChunks)}`
+        );
+      }
       return newDoc;
     } catch (error) {
       logger.error("RAG", "Fatal error processing uploaded document.", error);

@@ -85,7 +85,14 @@ export class NotificationTriggerService {
    */
   private async checkCriticalStock(): Promise<void> {
     const items = await inventoryItemRepository.getAll();
-    const criticalItems = items.filter((item) => item.stockQuantity <= item.minStockAlert);
+    // ADR-003: yalnızca gerçek stok takibi yapılan kayıtlar (trackStock
+    // === true) kritik-stok bildirimine dahil edilir — AI Ürün Bilgi
+    // Bankası kayıtları (trackStock === false) hiçbir zaman bildirim
+    // üretmez. Kasıtlı olarak `!== false` değil, pozitif `=== true`
+    // kontrolü kullanılıyor: migration'ın herhangi bir nedenle eksik
+    // kaldığı bir ara durumda `trackStock` `undefined` gelirse, bu
+    // güvenli (bildirim ÜRETMEME) tarafa düşer.
+    const criticalItems = items.filter((item) => item.trackStock === true && item.stockQuantity <= item.minStockAlert);
 
     for (const item of criticalItems) {
       const referenceKey = `lowstock-${item.id}`;

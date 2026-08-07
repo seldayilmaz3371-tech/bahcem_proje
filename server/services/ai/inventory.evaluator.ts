@@ -38,7 +38,13 @@ export class InventoryEvaluator extends BaseEvaluator {
     }
 
     const foundItems = ids.map((id) => allItems.find((item) => item.id === id)!);
-    const belowCritical = foundItems.filter((item) => item.stockQuantity <= item.minStockAlert);
+    // ADR-003: yalnızca gerçek stok takibi yapılan (trackStock === true)
+    // ürünler stok yeterliliği değerlendirmesine dahil edilir. AI Ürün
+    // Bilgi Bankası kayıtları (trackStock === false) için "stok
+    // yetersiz" kavramı anlamsızdır — bu ürünler değerlendirme dışında
+    // bırakılır (ne PASS'e ne FAIL'e katkı yapar), böylece Decision
+    // Engine bu ürünleri stok gerekçesiyle YANLIŞLIKLA engellemez.
+    const belowCritical = foundItems.filter((item) => item.trackStock === true && item.stockQuantity <= item.minStockAlert);
 
     return {
       status: belowCritical.length === 0 ? "PASS" : "FAIL",

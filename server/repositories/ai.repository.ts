@@ -43,7 +43,7 @@ export class UploadedDocumentRepository extends BaseRepository<UploadedDocument>
    * uploaded for one piece of equipment), as opposed to the general
    * shared knowledge base.
    */
-  public async getByLinkedEntity(entityType: "equipment", entityId: string): Promise<UploadedDocument[]> {
+  public async getByLinkedEntity(entityType: "equipment" | "product", entityId: string): Promise<UploadedDocument[]> {
     return this.find((doc) => doc.linkedEntityType === entityType && doc.linkedEntityId === entityId);
   }
 }

@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { aiRecommendationRepository } from "../../repositories/ai.repository";
+import { aiRecommendationRepository, uploadedDocumentRepository } from "../../repositories/ai.repository";
+import { groupMatchesByDocument } from "./rag-retrieval.service";
+import { evaluateDocumentCoverage } from "./evidence-evaluation.util";
 import { observationRepository, photoRepository } from "../../repositories/observation.repository";
 import { logger } from "../../logger";
 import { config } from "../../config";
@@ -50,7 +52,8 @@ export class ParcelRecommendationService {
     parcelId: string,
     userQuery?: string,
     photoFiles?: Array<{ buffer: Buffer; mimeType: string }>,
-    requestedByUserId?: string
+    requestedByUserId?: string,
+    evidenceMode?: "STRICT_RAG" | "HYBRID"
   ): Promise<AIRecommendation | null> {
     const pipelineStartTime = Date.now();
     try {
@@ -69,6 +72,17 @@ export class ParcelRecommendationService {
         requestedByUserId,
         hasPhotos,
         ragLimit: 3,
+        // Sprint 9.9 — TEST 1 kök neden düzeltmesi (kod kanıtıyla
+        // doğrulandı): Bu mekanizma Sprint 2D'den beri VARDI ama
+        // yalnızca Genel Sohbet'te (chat-assistant.service.ts)
+        // aktifti — Karar Destek hiç kullanmıyordu. Aktif edilmesi,
+        // kullanıcının KENDİ sorgu metnindeki terimlerin (örn. ürün
+        // adı "10.5.40+ME") RAG boost hesabına katkı sağlamasını
+        // sağlar — chunk.heading/cropType alanında bu terimler
+        // geçen, ürüne özel chunk'ların Genel Havuzda öne çıkmasına
+        // yardımcı olur. Genel Sohbet akışı ZATEN bunu kullanıyordu,
+        // bu değişiklik onu ETKİLEMEZ.
+        useMetadataBoost: true,
       });
 
       if (!context.parcel) {
@@ -91,8 +105,23 @@ export class ParcelRecommendationService {
       });
       logger.info("AI", `Intent sınıflandırıldı: ${intentResult.intent}`, { matchedKeywords: intentResult.matchedKeywords, parcelId });
 
+      // Sprint 9.8 — TEST 2 kök neden düzeltmesi (kod kanıtıyla doğrulandı):
+      // AYNI sorun chat-assistant.service.ts'te de vardı (bkz. o dosyadaki
+      // aynı-tarihli düzeltme) — prompt'a giden "[RAG Kaynak N]" etiketi
+      // GERÇEK dosya adını hiç içermiyordu, model belge isimlerini asla
+      // görmüyordu. `context.ragMatches`'in SIRASI/SKORLAMASI (bu
+      // fonksiyonun başka yerlerinde ragMatches[0].score'a dayanan kodlar
+      // var) DEĞİŞTİRİLMEDİ — yalnızca fileName çözünürlüğü eklendi.
+      const documentNameById = new Map<string, string>();
+      for (const m of context.ragMatches) {
+        if (!documentNameById.has(m.chunk.documentId)) {
+          const doc = await uploadedDocumentRepository.getById(m.chunk.documentId);
+          documentNameById.set(m.chunk.documentId, doc?.fileName ?? "(bilinmeyen doküman)");
+        }
+      }
+
       const ragContext = context.ragMatches.length > 0
-        ? context.ragMatches.map((m, idx) => `[RAG Kaynak ${idx + 1} - Güven Skoru: ${(m.score * 100).toFixed(1)}%]: ${m.chunk.content}`).join("\n")
+        ? context.ragMatches.map((m, idx) => `[RAG Kaynak ${idx + 1} - Belge: ${documentNameById.get(m.chunk.documentId) ?? "(bilinmeyen doküman)"} - Güven Skoru: ${(m.score * 100).toFixed(1)}%]: ${m.chunk.content}`).join("\n")
         : "Bilgi deposunda zeytin tarımıyla ilgili eşleşen makale bulunamadı.";
 
       // Sprint 5F — Decision Engine Entegrasyonu (Failsafe).
@@ -160,6 +189,18 @@ export class ParcelRecommendationService {
       }
 
       const promptBuilderStartTime = Date.now();
+      // Sprint 9.11 — Evidence Architecture v2: Gemini'ye SORULMADAN,
+      // BELGE BAZLI (tek chunk değil) olarak, mevcut ragMatches
+      // skorlarından deterministik hesaplanıyor. `documentNameById`
+      // (yukarıda, Sprint 9.8'de zaten oluşturulan map) YENİDEN
+      // KULLANILIYOR — tekrar repository çağrısı yapılmıyor.
+      const coverageResult = evaluateDocumentCoverage(context.ragMatches);
+      const perDocumentCoverageText = coverageResult.perDocument
+        .map((d) => {
+          const label = d.coverage === "full" ? "YÜKSEK" : d.coverage === "partial" ? "ORTA" : "DÜŞÜK";
+          return `- ${documentNameById.get(d.documentId) ?? "(bilinmeyen doküman)"}: skor ${d.topScore.toFixed(2)}, kapsam ${label}`;
+        })
+        .join("\n");
       const prompt = buildParcelRecommendationPrompt({
         parcelName: parcel.name,
         areaDekar: parcel.areaDekar,
@@ -177,6 +218,9 @@ export class ParcelRecommendationService {
         photosUsedCount,
         plantKnowledgeContext: context.plantKnowledgeContextText || undefined,
         decisionEngineContext,
+        documentCoverage: coverageResult.overall,
+        perDocumentCoverageText,
+        evidenceMode,
       });
       const promptBuilderDurationMs = Date.now() - promptBuilderStartTime;
 
@@ -215,6 +259,7 @@ export class ParcelRecommendationService {
       if (!responseText) {
         throw new Error("Yapay zeka asistanından boş bir cevap döndü.");
       }
+      logger.info("AI", `[Gemini Response — Karar Destek] ${responseText.slice(0, 300)}`);
 
       let score = 0.85;
       if (context.ragMatches.length > 0) {
@@ -244,6 +289,24 @@ export class ParcelRecommendationService {
       });
       logger.info("AI", `Confidence hesaplandı: ${confidenceModel.confidence}/100`, { intent: "ParcelRecommendation", reasons: confidenceModel.reasons, parcelId });
 
+      // Sprint 9.1 — SORUN 2/3: RAG'den gelen bilginin kaynağını
+      // (hangi belge, hangi skor) yapılandırılmış olarak üretiyoruz —
+      // PAYLAŞILAN groupMatchesByDocument() (rag-retrieval.service.ts)
+      // kullanılıyor, product-document-qa.service.ts ile AYNI mantık.
+      const orderedGroups = groupMatchesByDocument(context.ragMatches);
+      const sources: NonNullable<AIRecommendation["sources"]> = [];
+      for (const group of orderedGroups) {
+        const doc = await uploadedDocumentRepository.getById(group[0].chunk.documentId);
+        const headings = Array.from(new Set(group.map((m) => m.chunk.heading).filter((h): h is string => Boolean(h))));
+        sources.push({
+          documentId: group[0].chunk.documentId,
+          fileName: doc?.fileName ?? "(bilinmeyen belge)",
+          headings,
+          score: Math.max(...group.map((m) => m.score)),
+        });
+      }
+      logger.info("AI", `[Response Sources — Karar Destek] ${JSON.stringify(sources)}`);
+
       const recommendation = await aiRecommendationRepository.create({
         parcelId,
         recommendationType: hasPhotos ? "Hastalık" : "Genel",
@@ -255,6 +318,9 @@ export class ParcelRecommendationService {
         usedInventoryCount: context.totalInventoryItemCount,
         createdDate: timestamp,
         confidenceModel,
+        sources,
+        documentCoverage: coverageResult.overall,
+        evidenceMode: evidenceMode ?? "HYBRID",
       });
 
       logger.info(

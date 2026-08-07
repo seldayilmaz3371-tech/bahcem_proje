@@ -425,8 +425,26 @@ export class ChatAssistantService {
     }
     const orderedMatches = orderedGroups.flat();
 
+    // Sprint 9.8 — TEST 2 kök neden düzeltmesi (kod kanıtıyla doğrulandı):
+    // ÖNCEDEN prompt'a giden referans etiketleri yalnızca "[Referans N]"
+    // idi — GERÇEK dosya adı (fileName) Gemini'ye HİÇ GÖNDERİLMİYORDU,
+    // yalnızca YANITTAN SONRA (sourceDocuments, kullanıcıya gösterim
+    // için) çözülüyordu. Bu yüzden model, "belge isimlerine göre
+    // özetle" gibi taleplere GERÇEKTEN cevap veremiyordu — elinde isim
+    // yoktu. Aynı documentId→fileName çözünürlüğü (aşağıdaki
+    // sourceDocuments bloğuyla AYNI repository çağrısı) artık PROMPT
+    // OLUŞTURULMADAN ÖNCE de yapılıyor.
+    const documentNameById = new Map<string, string>();
+    for (const group of orderedGroups) {
+      const documentId = group[0].chunk.documentId;
+      if (!documentNameById.has(documentId)) {
+        const doc = await uploadedDocumentRepository.getById(documentId);
+        documentNameById.set(documentId, doc?.fileName ?? "(bilinmeyen doküman)");
+      }
+    }
+
     const ragContext = orderedMatches.length > 0
-      ? orderedMatches.map((m, idx) => `[Referans ${idx + 1}]: ${m.chunk.content}`).join("\n\n")
+      ? orderedMatches.map((m, idx) => `[Referans ${idx + 1}] (${documentNameById.get(m.chunk.documentId) ?? "(bilinmeyen doküman)"}): ${m.chunk.content}`).join("\n\n")
       : "Eşleşen spesifik bir döküman bulunamadı.";
 
     const prompt = buildChatAssistantPrompt(ragContext, safeQuery, scopeLabel, webFallbackEnabled, context.plantKnowledgeContextText || undefined);

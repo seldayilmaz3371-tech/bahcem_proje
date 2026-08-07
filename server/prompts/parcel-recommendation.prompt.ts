@@ -29,6 +29,29 @@ export interface ParcelRecommendationPromptContext {
   plantKnowledgeContext?: string;
   /** Sprint 5F — Decision Engine. Boşsa (Failsafe: Decision Engine hata verdi/hiç çalıştırılmadı) bu bölüm prompt'a HİÇ eklenmez. */
   decisionEngineContext?: string;
+  /**
+   * Sprint 9.10 — Kanıt Değerlendirme (bkz. evidence-evaluation.util.ts).
+   * Gemini'ye SORULMADAN, DETERMİNİSTİK olarak (mevcut confidence
+   * eşikleriyle) hesaplanır — Gemini bu SONUCU alır, kendisi
+   * belirlemez. OPSİYONEL: verilmezse ("full" varsayılan), mevcut
+   * (Sprint 9.9 ve öncesi) davranış birebir korunur.
+   */
+  documentCoverage?: "full" | "partial" | "none";
+  /**
+   * Sprint 9.11 — Evidence Architecture v2: her belgenin KENDİ skoru ve
+   * kapsamıyla listelendiği, hazır-biçimlendirilmiş metin (bkz.
+   * evidence-evaluation.util.ts). Boşsa (eski çağıranlar, geriye dönük
+   * uyumluluk) bu bölüm prompt'a eklenmez.
+   */
+  perDocumentCoverageText?: string;
+  /**
+   * Sprint 9.10 — STRICT_RAG: belge desteği yoksa Gemini teknik öneri
+   * ÜRETMEZ, yalnızca "bulunamadı" der. HYBRID (VARSAYILAN, MEVCUT
+   * davranışla birebir aynı): belge desteği yoksa Gemini genel bilgisini
+   * kullanabilir, ama AÇIKÇA etiketler (fotoğraf teşhisinde zaten var
+   * olan, Sprint 5B'nin kuralının GENELLEŞTİRİLMİŞ hali).
+   */
+  evidenceMode?: "STRICT_RAG" | "HYBRID";
 }
 
 /**
@@ -85,8 +108,28 @@ export function buildParcelRecommendationPrompt(context: ParcelRecommendationPro
     ? `\n=== DECISION ENGINE KARARI (KAYNAK: Deterministik Kural Motoru — DEĞİŞTİRİLEMEZ) ===\n${context.decisionEngineContext}\n`
     : "";
 
+  // Sprint 9.10 — Kanıt Değerlendirme + Mod talimatı. `documentCoverage`
+  // Gemini'ye SORULMADAN, deterministik olarak (evidence-evaluation.util.ts)
+  // hesaplanmıştır — Gemini bu SONUCU okur, kendisi karar VERMEZ. Bu,
+  // "Gemini yalnızca kanıtları yorumlayan bir analiz katmanı olacak"
+  // hedef mimarisinin doğrudan uygulanmasıdır.
+  const evidenceMode = context.evidenceMode ?? "HYBRID"; // Varsayılan: MEVCUT (Sprint 9.9 ve öncesi) davranışla birebir aynı
+  const documentCoverage = context.documentCoverage ?? "full"; // Belirtilmezse, MEVCUT davranışa en yakın (kısıtlama eklenmez)
+  const evidenceInstructionBlock = `
+=== KANIT DEĞERLENDİRMESİ (KOD TARAFINDAN, DETERMİNİSTİK OLARAK, BELGE BAZLI HESAPLANDI) ===
+${context.perDocumentCoverageText ? `Belge bazlı kapsam:\n${context.perDocumentCoverageText}\n` : ""}Genel kapsam (en zayıf belgeye göre): ${documentCoverage === "full" ? "TAMAMEN VAR (tüm ilgili belgeler güçlü bir eşleşmeyle bu konuyu kapsıyor)" : documentCoverage === "partial" ? "KISMEN VAR (en az bir ilgili belge yalnızca orta düzeyde eşleşiyor)" : "HİÇ YOK (RAG belgelerinde bu konuyla ilgili yeterli eşleşme bulunamadı)"}
+Çalışma modu: ${evidenceMode}
+
+MUTLAKA UYULMASI GEREKEN KURALLAR:
+${documentCoverage === "full" ? "- Belge kapsamı TAMAMEN VAR: Yukarıdaki RAG/Decision Engine/Yerel Veri bölümlerinde YER ALMAYAN YENİ bir teknik bilgi (doz, tarih, oran) EKLEME. Yalnızca mevcut bilgiyi düzenle, özetle, tekrarları kaldır." : ""}
+${documentCoverage === "partial" ? "- Belge kapsamı KISMEN VAR: Belgede bulunan bilgiyi AYNEN koru ve \"BELGE BİLGİSİ\" başlığı altında sun. Belgede olmayan, eksik kalan kısmı AYRI bir \"AI DESTEKLİ AÇIKLAMA\" başlığı altında, açıkça etiketleyerek ekle." : ""}
+${documentCoverage === "none" && evidenceMode === "STRICT_RAG" ? "- Belge kapsamı HİÇ YOK ve mod STRICT_RAG: Bu konuda TEKNİK ÖNERİ ÜRETME. Yalnızca \"Bu bilgi yüklenen belgelerde bulunmamaktadır.\" yaz ve bitir." : ""}
+${documentCoverage === "none" && evidenceMode === "HYBRID" ? "- Belge kapsamı HİÇ YOK ve mod HYBRID: Önce açıkça \"Bu bilgi yüklenen belgelerde bulunmamaktadır.\" de. Ardından, istersen \"Aşağıdaki bilgiler genel AI değerlendirmesidir.\" başlığı altında kendi genel bilgini ekleyebilirsin — ama bunu ASLA belge bilgisi gibi sunma." : ""}
+- KAYNAK ETİKETLEME (HER paragraf/madde için ZORUNLU): her paragrafın veya maddenin SONUNA, kullandığın kaynağı şu biçimde ekle: "**Kaynak:** [RAG - Belge: <dosya adı>]" veya "**Kaynak:** [Yerel Proje Verisi]" veya "**Kaynak:** [Open-Meteo]" veya "**Kaynak:** [Decision Engine]" veya "**Kaynak:** [AI Çıkarımı - Belge Dışı]". Bu etiketlerin DIŞINDA başka bir kaynak adı UYDURMA.
+`;
+
   return `
-${decisionEngineSection}Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış yapay zeka destekli bir Tarım Danışmanısın (Mersin Tarım Asistanı).
+${evidenceInstructionBlock}${decisionEngineSection}Sen Mersin Toroslar ve Değirmençay bölgesinde uzmanlaşmış yapay zeka destekli bir Tarım Danışmanısın (Mersin Tarım Asistanı).
 Aşağıdaki verilere dayanarak çiftçiye özel, bilimsel, pratik ve bölgesel (Toroslar mikro-klimasına uygun) tavsiyeler üreteceksin.
 
 === ÇİFTLİK VE PARSEL BİLGİLERİ (KAYNAK: Yerel Proje Verisi) ===

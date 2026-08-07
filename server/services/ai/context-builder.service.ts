@@ -8,9 +8,10 @@ import { observationRepository } from "../../repositories/observation.repository
 import { inventoryItemRepository, productApplicationRepository } from "../../repositories/inventory.repository";
 import { aiRecommendationRepository } from "../../repositories/ai.repository";
 import { db } from "../../database";
+import { logger } from "../../logger";
 import { weatherService } from "../weather.service";
 import { capUserQueryLength } from "../../prompts/prompt-safety.util";
-import { searchSimilarChunks } from "./rag-retrieval.service";
+import { searchSimilarChunks, filterRelevantMatches } from "./rag-retrieval.service";
 import { plantKnowledgeService } from "./plant-knowledge.service";
 import { Parcel, Tree, Observation, ProductApplication, AIRecommendation, InventoryItem, WeatherRecord, VectorChunk, PlantInfo } from "../../models";
 
@@ -149,7 +150,12 @@ export class ContextBuilderService {
         .slice(0, 5);
 
       const allInventory = await inventoryItemRepository.getAll();
-      stockAlerts = allInventory.filter((item) => item.stockQuantity <= item.minStockAlert);
+      // ADR-003: yalnızca gerçek stok takibi yapılan (trackStock ===
+      // true) ürünler Gemini'ye "kritik stok" bağlamı olarak gönderilir
+      // — AI Ürün Bilgi Bankası kayıtları (trackStock === false) bu
+      // listeye hiç girmez. Bu, AI'ın ürettiği önerilerin yanlış bir
+      // "stoğunuz kritik" bağlamıyla kirlenmesini önler.
+      stockAlerts = allInventory.filter((item) => item.trackStock === true && item.stockQuantity <= item.minStockAlert);
       totalInventoryItemCount = allInventory.length;
     }
 
@@ -204,10 +210,19 @@ export class ContextBuilderService {
     if (plantKnowledgeSearchTerms.length > 0) boostTerms.push(...plantKnowledgeSearchTerms);
     const metadataBoostQuery = boostTerms.length > 0 ? boostTerms.join(" ") : undefined;
 
-    const [liveWeather, ragMatches] = await Promise.all([
+    const [liveWeather, rawRagMatches] = await Promise.all([
       params.parcelId ? weatherService.getWeatherSummaryForAI() : Promise.resolve({ text: "", available: false, daysUsed: 0 }),
-      searchSimilarChunks(ragSearchTerm, params.ragLimit ?? 3, params.documentIds, metadataBoostQuery),
+      searchSimilarChunks(ragSearchTerm, params.ragLimit ?? 3, params.documentIds, metadataBoostQuery, parcel?.cropType ?? params.overrideCropType),
     ]);
+    // Sprint 9.1 — SORUN 1: ProductDocumentQaService'teki AYNI, PAYLAŞILAN
+    // eşik filtresi (rag-retrieval.service.ts) burada da uygulanıyor —
+    // önceden HİÇ eşik kontrolü yoktu, düşük-alakalı chunk'lar filtrelenmeden
+    // context'e/prompt'a gidiyordu.
+    const ragMatches = filterRelevantMatches(rawRagMatches);
+    logger.info(
+      "AI",
+      `[Prompt Context — Karar Destek] ${ragMatches.length} chunk prompt'a eklenecek: ${JSON.stringify(ragMatches.map((m) => ({ documentId: m.chunk.documentId, chunkId: m.chunk.id, score: m.score.toFixed(4), preview: m.chunk.content.slice(0, 60) })))}`
+    );
 
     return {
       requestedByUserId: params.requestedByUserId,

@@ -231,23 +231,75 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
  * heading/topics/keywords/cropType var, bkz. models.ts) — var
  * olmayan bir alan varsayılmadı, gerçek alanlar kullanıldı.
  */
-function computeMetadataBoost(chunk: VectorChunk, queryWords: string[]): number {
-  const metadataText = [chunk.heading, chunk.cropType, ...(chunk.topics ?? []), ...(chunk.keywords ?? [])]
+/**
+ * Sprint 9.8 — TEST 3/5 kök neden düzeltmesi (kod kanıtıyla doğrulandı):
+ * ÖNCEDEN `cropType` yalnızca POZİTİF bir bonus kaynağıydı — chunk'ın
+ * kendi cropType'ı, sorgu kelimeleriyle eşleşirse küçük bir puan
+ * eklerdi, ama YANLIŞ bitkiye ait (örn. "Patates" chunk'ı, "Zeytin"
+ * parseli için) chunk'lar İÇİN HİÇBİR CEZA/ELEME YOKTU — yalnızca saf
+ * embedding benzerliği yeterince yüksekse (genel "gübreleme" teması
+ * gibi), retrieval'a giriyorlardı.
+ *
+ * `activeCropType` OPSİYONEL bir parametredir — yalnızca Karar Destek'in
+ * `buildContext()`'i (parselin GERÇEK cropType'ı bilindiğinde) bunu
+ * geçer. Belgelere Sor (`ProductDocumentQaService`) bu parametreyi HİÇ
+ * kullanmıyor/geçmiyor — bu yüzden Sprint 9.7'nin ürün-bazlı RAG
+ * düzeltmesi (documentIds-scope'lu, çeşitlilik-korumalı seçim) HİÇ
+ * ETKİLENMEZ (geriye dönük tam uyumlu, opt-in).
+ *
+ * Bir chunk'ın KENDİ cropType'ı VARSA (belirtilmişse) ve `activeCropType`'tan
+ * FARKLIYSA, sabit bir ceza uygulanır — chunk TAMAMEN ELENMEZ (sert
+ * filtre değil, cropType hiç belirtilmemiş genel belgeleri yanlışlıkla
+ * dışlama riski taşımaz), yalnızca skoru düşürülerek doğru bitkiye ait
+ * chunk'ların ÖNÜNE geçmesi engellenir.
+ */
+const CROP_TYPE_MISMATCH_PENALTY = 0.2;
+/**
+ * Sprint 9.13 — TEST 3 kök neden düzeltmesi (kod kanıtıyla doğrulandı):
+ * `computeMetadataBoost`, ÖNCEDEN yalnızca heading/cropType/topics/keywords
+ * alanlarına bakıyordu — chunk'ın GERÇEK İÇERİĞİNE (content) hiç
+ * bakmıyordu. Bu yüzden, "10.5.40+ME" gibi SPESİFİK bir ürün adı geçen
+ * sorgularda, bu terimi content'inde İÇEREN ama heading'inde İÇERMEYEN
+ * (örn. bir tablo satırı) chunk'lar hiçbir ek sinyal alamıyor, yalnızca
+ * saf embedding benzerliğine kalıyordu — bu da alakasız (örn. "Domates"
+ * gübreleme tablosu) chunk'ların, genel "gübreleme" temasındaki
+ * benzerlikleri yüzünden öne çıkabilmesine yol açıyordu.
+ * Yalnızca content'in İLK bu kadar karakteri taranır (performans —
+ * tüm chunk metnini taramak yerine, başlangıç genelde en tanımlayıcı
+ * kısımdır).
+ */
+const CONTENT_BOOST_SCAN_LENGTH = 200;
+
+function computeMetadataBoost(chunk: VectorChunk, queryWords: string[], activeCropType?: string): number {
+  const metadataText = [
+    chunk.heading,
+    chunk.cropType,
+    ...(chunk.topics ?? []),
+    ...(chunk.keywords ?? []),
+    chunk.content.slice(0, CONTENT_BOOST_SCAN_LENGTH),
+  ]
     .filter((v): v is string => Boolean(v))
     .join(" ")
     .toLocaleLowerCase("tr-TR");
 
-  if (!metadataText) return 0;
-
-  let matchCount = 0;
-  for (const word of queryWords) {
-    if (word.length >= 3 && metadataText.includes(word)) {
-      matchCount++;
+  let score = 0;
+  if (metadataText) {
+    let matchCount = 0;
+    for (const word of queryWords) {
+      if (word.length >= 3 && metadataText.includes(word)) {
+        matchCount++;
+      }
     }
+    // Her eşleşen kelime için küçük, sınırlı bir bonus — saf embedding
+    // skorunu (0-1 aralığı) domine etmeyecek kadar küçük tutuldu.
+    score += Math.min(matchCount * 0.05, 0.15);
   }
-  // Her eşleşen kelime için küçük, sınırlı bir bonus — saf embedding
-  // skorunu (0-1 aralığı) domine etmeyecek kadar küçük tutuldu.
-  return Math.min(matchCount * 0.05, 0.15);
+
+  if (activeCropType && chunk.cropType && chunk.cropType.toLocaleLowerCase("tr-TR") !== activeCropType.toLocaleLowerCase("tr-TR")) {
+    score -= CROP_TYPE_MISMATCH_PENALTY;
+  }
+
+  return score;
 }
 
 /**
@@ -259,18 +311,207 @@ function computeMetadataBoost(chunk: VectorChunk, queryWords: string[]): number 
  *   öncesiyle BİREBİR AYNI kalır; bu parametre geriye dönük tam uyumlu
  *   bir eklemedir.
  */
+/**
+ * Sprint 9.1 — SORUN 1/6. "Alakalı sonuç" için minimum benzerlik eşiği.
+ *
+ * ÖNCEDEN bu değer İKİ AYRI dosyada (chat-assistant.service.ts,
+ * product-document-qa.service.ts) BAĞIMSIZ, TEKRARLANMIŞ sabitler olarak
+ * tanımlıydı. Bu, "kod tekrarına izin verme" ilkesine aykırıydı — burada,
+ * Retriever katmanının kendisinde, TEK, PAYLAŞILAN bir kaynak olarak
+ * tanımlanıyor. `chat-assistant.service.ts`'e KASITLI OLARAK dokunulmadı
+ * (Sprint 9.1 kapsamı yalnızca raporlanan sorunları kapsıyor — o dosyada
+ * zaten eşik kontrolü çalışıyordu, sorun listesinde değildi).
+ */
+export const MIN_RELEVANT_SIMILARITY_SCORE = 0.55;
+
+/**
+ * `searchSimilarChunks()`'ın ham sonucunu, YALNIZCA gerçekten alakalı
+ * (her birinin KENDİ skoru eşiği geçen) sonuçlarla sınırlar.
+ *
+ * ÖNCEKİ HATA (Sprint 8, 6. tur): bazı çağıranlar yalnızca EN YÜKSEK
+ * skorlu sonucu eşikle karşılaştırıyordu — bu, düşük-skorlu, alakasız
+ * chunk'ların (yüksek skorlu bir sonuç varsa) filtrelemeden geçmesine
+ * yol açıyordu. Bu fonksiyon, HER adayı ayrı ayrı kontrol eder.
+ */
+export function filterRelevantMatches(
+  matches: { chunk: VectorChunk; score: number }[]
+): { chunk: VectorChunk; score: number }[] {
+  const filtered = matches.filter((m) => m.score >= MIN_RELEVANT_SIMILARITY_SCORE);
+  logger.info(
+    "RAG",
+    `[Threshold] eşik=${MIN_RELEVANT_SIMILARITY_SCORE} | öncesi=${matches.length} sonrası=${filtered.length} | elenenler=${JSON.stringify(matches.filter((m) => m.score < MIN_RELEVANT_SIMILARITY_SCORE).map((m) => ({ documentId: m.chunk.documentId, score: m.score.toFixed(4) })))}`
+  );
+  return filtered;
+}
+
+/**
+ * Sprint 9.1 — SORUN 2/3/6. Eşleşen chunk'ları `documentId`'ye göre
+ * gruplar; her grup EN YÜKSEK skoruna göre sıralanır (en alakalı belge
+ * önce), her grubun İÇİ `chunkIndex`'e göre sıralanır (belge içi okuma
+ * sırası). Bu, ÖNCEDEN `product-document-qa.service.ts`'de BAĞIMSIZ bir
+ * kopya olarak duran mantığın PAYLAŞILAN halidir — artık hem Belgelere
+ * Sor hem Karar Destek (context-builder.service.ts üzerinden) AYNI
+ * fonksiyonu kullanabilir. `chat-assistant.service.ts`'deki BENZER,
+ * ÖNCEDEN VAR OLAN mantık KASITLI OLARAK dokunulmadan bırakıldı (Sprint
+ * 9.1 kapsamı dışında, çalışan/test edilmiş kod).
+ */
+export function groupMatchesByDocument(
+  matches: { chunk: VectorChunk; score: number }[]
+): { chunk: VectorChunk; score: number }[][] {
+  const groupedByDocument = new Map<string, { chunk: VectorChunk; score: number }[]>();
+  for (const m of matches) {
+    const list = groupedByDocument.get(m.chunk.documentId) ?? [];
+    list.push(m);
+    groupedByDocument.set(m.chunk.documentId, list);
+  }
+  const orderedGroups = Array.from(groupedByDocument.values()).sort(
+    (a, b) => Math.max(...b.map((m) => m.score)) - Math.max(...a.map((m) => m.score))
+  );
+  for (const group of orderedGroups) {
+    group.sort((a, b) => a.chunk.chunkIndex - b.chunk.chunkIndex);
+  }
+  logger.info(
+    "RAG",
+    `[Grouped Documents] ${orderedGroups.length} belge grubu: ${JSON.stringify(orderedGroups.map((g) => ({ documentId: g[0].chunk.documentId, chunkCount: g.length, topScore: Math.max(...g.map((m) => m.score)).toFixed(4) })))}`
+  );
+  return orderedGroups;
+}
+
+/**
+ * Sprint 9.7 — KÖK NEDEN DÜZELTMESİ (teşhis turlarında kod ve gerçek
+ * loglarla kanıtlandı): saf Global Top-N seçimi (`matches.slice(0, limit)`),
+ * bir belgenin (örn. Gübreleme Önerileri) YÜKSEK SKORLU çok sayıda
+ * chunk'ının, AYNI ürüne bağlı BAŞKA bir belgenin (örn. Garanti Edilen
+ * İçerik) threshold'u GEÇEN ama göreceli olarak daha düşük skorlu tek
+ * bir chunk'ını, "top N" dışına itmesine yol açıyordu — o chunk hiçbir
+ * zaman Prompt'a ulaşamıyordu.
+ *
+ * Algoritma: Per-Document Top-K + Global Backfill (Hybrid Selection).
+ * Her belgeye, `limit`'in belge sayısına EŞİT PAYLAŞTIRILMASIYLA
+ * (yukarı yuvarlanmış — magic number YOK, dinamik hesaplanıyor) bir
+ * kota (`maxPerDocument`) verilir. Skora göre sıralı adaylar, KENDİ
+ * belgesinin kotası dolmadığı sürece seçilir (kota İÇİNDE skor sırası
+ * korunur). Kotalar dolmasına rağmen `limit`e ulaşılmadıysa (bazı
+ * belgelerin yeterli/ilgili adayı yoksa), kalan boş slotlar skor
+ * sırasına göre GERİ KALAN en iyi adaylarla (belge sınırı olmadan)
+ * doldurulur — bütçe asla israf edilmez.
+ *
+ * YALNIZCA `documentIds` BİRDEN FAZLA belgeye scope'luyken çağrılır
+ * (bkz. searchSimilarChunks çağrı noktası) — Genel RAG Doküman Havuzu
+ * (documentIds verilmediğinde, binlerce belge) davranışı HİÇ ETKİLENMEZ,
+ * o durumda saf Global Top-N (`matches.slice(0, limit)`) aynen kullanılır.
+ *
+ * Complexity: O(n) — girdi zaten skora göre sıralı (O(n log n) sıralama
+ * ZATEN searchSimilarChunks'ta yapılıyor, burada tekrarlanmıyor); bu
+ * fonksiyon yalnızca iki lineer geçiş yapar. 6259 chunk'lık genel
+ * havuzda bile bu fonksiyon HİÇ ÇAĞRILMAZ (yalnızca scope'lu, küçük
+ * documentIds kümelerinde devreye girer — bkz. yukarı).
+ */
+export function selectDiverseTopMatches(
+  sortedMatches: { chunk: VectorChunk; score: number }[],
+  limit: number
+): { chunk: VectorChunk; score: number }[] {
+  if (sortedMatches.length === 0) return [];
+
+  const distinctDocumentIds = new Set(sortedMatches.map((m) => m.chunk.documentId));
+  const maxPerDocument = Math.max(1, Math.ceil(limit / distinctDocumentIds.size));
+
+  const selected: { chunk: VectorChunk; score: number }[] = [];
+  const countPerDocument = new Map<string, number>();
+  const deferred: { chunk: VectorChunk; score: number }[] = [];
+
+  for (const match of sortedMatches) {
+    if (selected.length >= limit) break;
+    const currentCount = countPerDocument.get(match.chunk.documentId) ?? 0;
+    if (currentCount < maxPerDocument) {
+      selected.push(match);
+      countPerDocument.set(match.chunk.documentId, currentCount + 1);
+    } else {
+      deferred.push(match);
+    }
+  }
+
+  for (const match of deferred) {
+    if (selected.length >= limit) break;
+    selected.push(match);
+  }
+
+  // Belge-bazlı seçim sırasını değil, GLOBAL skor sırasını koru (Prompt
+  // Builder'ın chunk'ları belgeye göre gruplaması ayrı bir aşama —
+  // groupMatchesByDocument, DEĞİŞTİRİLMEDİ — burada yalnızca HANGİ
+  // chunk'ların seçildiği belirleniyor, sunum sırası değil).
+  selected.sort((a, b) => b.score - a.score);
+  return selected;
+}
+
 export async function searchSimilarChunks(
   query: string,
   limit = 4,
   documentIds?: string[],
-  metadataBoostQuery?: string
+  metadataBoostQuery?: string,
+  activeCropType?: string
 ): Promise<{ chunk: VectorChunk; score: number }[]> {
   try {
+    // Sprint 9.21 — SON DEBUG TURU. GEÇİCİ, hedefli teşhis sabiti — yalnızca
+    // log çıktısını hangi chunk'ların "özel olarak" izleneceğini belirlemek
+    // için kullanılır; HİÇBİR skor/sıralama/filtreleme kararına KATILMAZ.
+    const DEBUG_TARGET_SEARCH_TERM = "10.5.40";
+    const isDebugTargetChunk = (c: VectorChunk) => (c.content || "").includes(DEBUG_TARGET_SEARCH_TERM);
+
+    // [SPRINT 9.21 — İSTEK 1] searchSimilarChunks başlar başlamaz.
+    logger.info(
+      "RAG",
+      `[DEBUG START] documentIds=${documentIds ? JSON.stringify(documentIds) : "undefined (TÜMÜ)"} limit=${limit} querySorgurUzunluk=${query.length}`
+    );
+
+    logger.info("RAG", `[Retriever Started] query="${query.slice(0, 80)}" documentIds=${documentIds ? JSON.stringify(documentIds) : "TÜMÜ (scope yok)"} limit=${limit}`);
     const queryEmbedding = await generateEmbedding(query);
     const allChunks = await vectorChunkRepository.getAll();
     const candidateChunks = documentIds
       ? allChunks.filter((chunk) => documentIds.includes(chunk.documentId))
       : allChunks;
+    logger.info("RAG", `[Candidate Count] ${candidateChunks.length} aday chunk (toplam havuz: ${allChunks.length})`);
+    logger.info(
+      "RAG",
+      `[DEBUG START — sayaçlar] allChunks.length=${allChunks.length} candidateChunks.length=${candidateChunks.length} limit=${limit}`
+    );
+
+    // [SPRINT 9.21 — İSTEK 7] documentIds filtresi uygulandıysa, ELENEN
+    // (candidateChunks dışında kalan) her chunk'ı, hangi satırdaki kuralla
+    // (documentIds.includes kontrolü) elendiğini belirterek logla.
+    if (documentIds) {
+      const excluded = allChunks.filter((c) => !documentIds.includes(c.documentId));
+      logger.info(
+        "RAG",
+        `[DEBUG documentIds FİLTRESİ] rag-retrieval.service.ts:459 satırındaki "documentIds.includes(chunk.documentId)" kuralıyla ${excluded.length} chunk elendi. Elenenlerden "${DEBUG_TARGET_SEARCH_TERM}" içerenler: ${JSON.stringify(
+          excluded.filter(isDebugTargetChunk).map((c) => ({ chunkId: c.id, documentId: c.documentId }))
+        )}`
+      );
+    }
+
+    // [SPRINT 9.21 — İSTEK 2 ve İSTEK 8] candidateChunks oluşturulduktan
+    // sonra, hedef terimi içeren HER chunk için özel log.
+    const targetChunksInCandidates = candidateChunks.filter(isDebugTargetChunk);
+    if (targetChunksInCandidates.length === 0) {
+      logger.error(
+        "RAG",
+        `[DEBUG TARGET NOT FOUND IN CANDIDATES] "${DEBUG_TARGET_SEARCH_TERM}" içeren HİÇBİR chunk candidateChunks içinde yok (${candidateChunks.length} aday arasında).`
+      );
+    } else {
+      for (const c of targetChunksInCandidates) {
+        const diskEmbedding = embeddingStorageService.readEmbedding(c.id);
+        logger.info(
+          "RAG",
+          `[DEBUG TARGET CHUNK] chunkId=${c.id} documentId=${c.documentId} heading=${c.heading ?? "null"} ilk120="${(c.content || "").slice(0, 120)}" embeddingDosyasıBulunduMu=${diskEmbedding !== null} embeddingUzunluk=${diskEmbedding?.length ?? (c.embeddings?.length ?? 0)}`
+        );
+        if (diskEmbedding === null && (!c.embeddings || c.embeddings.length === 0)) {
+          logger.error(
+            "RAG",
+            `[DEBUG EMBEDDING MISSING] chunkId=${c.id} dosyaYolu=data/embeddings/${c.id}.json readEmbedding sonucu=null, chunk.embeddings de boş`
+          );
+        }
+      }
+    }
 
     const queryWords = metadataBoostQuery
       ? metadataBoostQuery.toLocaleLowerCase("tr-TR").split(/[^\p{L}0-9]+/u).filter((w) => w.length >= 3)
@@ -282,13 +523,99 @@ export async function searchSimilarChunks(
       // still carry its embedding inline in the record itself.
       const chunkEmbedding = embeddingStorageService.readEmbedding(chunk.id) ?? chunk.embeddings;
       const baseScore = cosineSimilarity(queryEmbedding, chunkEmbedding);
-      const boost = metadataBoostQuery ? computeMetadataBoost(chunk, queryWords) : 0;
-      return { chunk, score: baseScore + boost };
+      const boost = metadataBoostQuery || activeCropType ? computeMetadataBoost(chunk, queryWords, activeCropType) : 0;
+      const finalScore = baseScore + boost;
+
+      // [SPRINT 9.21 — İSTEK 3] Similarity hesaplanırken, hedef chunk'lar için.
+      if (isDebugTargetChunk(chunk)) {
+        logger.info(
+          "RAG",
+          `[DEBUG TARGET SIMILARITY] chunkId=${chunk.id} baseScore=${baseScore} boost=${boost} finalScore=${finalScore} isNaN=${Number.isNaN(finalScore)} isZero=${finalScore === 0} normalSayıMı=${Number.isFinite(finalScore) && !Number.isNaN(finalScore)}`
+        );
+      }
+
+      return { chunk, score: finalScore };
     });
 
     // Sort descending by similarity score
     matches.sort((a, b) => b.score - a.score);
-    return matches.slice(0, limit);
+
+    // [SPRINT 9.21 — İSTEK 4] Similarity hesaplandıktan (ve sıralandıktan) sonra Top-100.
+    logger.info(
+      "RAG",
+      `[DEBUG TOP-100] ${JSON.stringify(
+        matches.slice(0, 100).map((m, i) => ({
+          sira: i + 1,
+          chunkId: m.chunk.id,
+          documentId: m.chunk.documentId,
+          heading: m.chunk.heading ?? null,
+          score: Number(m.score.toFixed(4)),
+        }))
+      )}`
+    );
+
+    // Sprint 9.7: scope'lu (documentIds, birden fazla belge) sorgularda
+    // çeşitlilik-korumalı seçim; scope'suz (Genel Doküman Havuzu) sorgularda
+    // saf Global Top-N (DAVRANIŞ HİÇ DEĞİŞMEDİ).
+    const topMatches =
+      documentIds && new Set(matches.map((m) => m.chunk.documentId)).size > 1
+        ? selectDiverseTopMatches(matches, limit)
+        : matches.slice(0, limit);
+
+    // [SPRINT 9.21 — İSTEK 5] Top-N seçildikten sonra, hedef chunk'lar
+    // Top-N dışında kaldıysa kaçıncı sırada kaldıklarını logla.
+    const topMatchIdsForTarget = new Set(topMatches.map((m) => m.chunk.id));
+    for (const c of targetChunksInCandidates) {
+      if (!topMatchIdsForTarget.has(c.id)) {
+        const rank = matches.findIndex((m) => m.chunk.id === c.id) + 1;
+        logger.info("RAG", `[DEBUG TARGET RANK] chunkId=${c.id} Top-${limit} dışında kaldı — gerçek sırası: Top-${rank}`);
+      } else {
+        logger.info("RAG", `[DEBUG TARGET RANK] chunkId=${c.id} Top-${limit} İÇİNDE (prompt'a gidecek)`);
+      }
+    }
+
+    // *** SPRINT 9.20 — GEÇİCİ DEBUG LOGLARI (yalnızca gözlemlenebilirlik,
+    // seçim mantığına HİÇBİR ETKİSİ yok) ***
+    const topMatchIds = new Set(topMatches.map((m) => m.chunk.id));
+    logger.info(
+      "RAG",
+      `[DEBUG — Tüm Adaylar, sıralı] ${JSON.stringify(
+        matches.map((m, i) => ({
+          sira: i + 1,
+          chunkId: m.chunk.id,
+          documentId: m.chunk.documentId,
+          heading: m.chunk.heading ?? null,
+          score: Number(m.score.toFixed(4)),
+          topMatchesIcindeMi: topMatchIds.has(m.chunk.id),
+          elenmeNedeni: topMatchIds.has(m.chunk.id)
+            ? null
+            : `Top-${limit} dışında kaldı (${matches.length} aday arasında ${i + 1}. sırada)`,
+        }))
+      )}`
+    );
+    logger.info(
+      "RAG",
+      `[DEBUG — Top-20 Similarity] ${JSON.stringify(
+        matches.slice(0, 20).map((m, i) => ({
+          sira: i + 1,
+          chunkId: m.chunk.id,
+          documentId: m.chunk.documentId,
+          heading: m.chunk.heading ?? null,
+          score: Number(m.score.toFixed(4)),
+        }))
+      )}`
+    );
+    // *** SPRINT 9.20 DEBUG LOGLARI SONU ***
+
+    if (topMatches.length > 0) {
+      logger.info(
+        "RAG",
+        `[Similarity Scores] ${topMatches.map((m) => `documentId=${m.chunk.documentId} chunkId=${m.chunk.id} chunkIndex=${m.chunk.chunkIndex} score=${m.score.toFixed(4)}`).join(" | ")}`
+      );
+    } else {
+      logger.info("RAG", "[Similarity Scores] Aday chunk bulunamadı (boş havuz veya documentIds hiç eşleşmedi).");
+    }
+    return topMatches;
   } catch (error) {
     logger.error("RAG", "Error occurred during vector similarity search", error);
     return [];

@@ -46,7 +46,7 @@ export interface ConfidenceResult {
  * kurallar merkezi yapıda olsun"). Tüm puanlama sabitleri yalnızca
  * burada tanımlıdır.
  */
-const CONFIDENCE_WEIGHTS = {
+export const CONFIDENCE_WEIGHTS = {
   BASE_SCORE: 50,
   STRONG_RETRIEVAL_MATCH_SCORE_THRESHOLD: 0.7,
   STRONG_RETRIEVAL_MATCH_POINTS: 20,

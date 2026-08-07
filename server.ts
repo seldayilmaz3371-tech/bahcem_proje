@@ -10,6 +10,14 @@ import { authService } from "./server/services/auth.service";
 import { settingService } from "./server/services/setting.service";
 import { aiService } from "./server/services/ai.service";
 import { aiUsageTrackerService } from "./server/services/ai-usage-tracker.service";
+import { visionService } from "./server/services/ai/vision/vision.service";
+import { productAnalysisService } from "./server/services/ai/product-analysis.service";
+import { productCreateService } from "./server/services/ai/product-create.service";
+import { productDocumentQaService } from "./server/services/ai/product-document-qa.service";
+import { productCaptureSessionService, indexProductSummary } from "./server/services/ai/product-capture-session.service";
+import type { ProductCreateRequest } from "./server/services/ai/product-create-request.types";
+import { createSilentProductInventoryItem } from "./server/services/ai/product-bank-inventory.util";
+import { checkProductDuplicate } from "./server/services/ai/product-duplicate-check.util";
 import { MAX_USER_QUERY_LENGTH } from "./server/prompts/prompt-safety.util";
 import { userRepository } from "./server/repositories/user.repository";
 import { parcelRepository, treeRepository, treeCountChangeLogRepository } from "./server/repositories/parcel.repository";
@@ -1206,6 +1214,9 @@ app.post("/api/inventory", requireAuth, requirePermission("inventory:write"), as
     unit,
     minStockAlert: parseRequiredNumber(minStockAlert, "Minimum stok uyarısı"),
     unitPrice: unitPrice ? parseRequiredNumber(unitPrice, "Birim fiyat") : 0,
+    // ADR-003: kullanıcının manuel olarak eklediği bu kayıt gerçek stok
+    // takibi amaçlıdır (AI Ürün Bilgi Bankası'ndan farklı olarak).
+    trackStock: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   });
@@ -1351,8 +1362,181 @@ app.delete("/api/inventory/applications/:id", requireAuth, requirePermission("in
 }));
 
 // ==========================================
-// 4b. BİTKİ BİLGİ SÖZLÜĞÜ (PLANT INFO)
+// 4a1. AI ÜRÜN BİLGİ BANKASI (PRODUCT BANK) — Sprint 7C
 // ==========================================
+// Architecture Freeze + ADR-001/ADR-002 kapsamında: yalnızca backend CRUD.
+// Vision analizi, RAG entegrasyonu ve frontend BİLİNÇLİ OLARAK bu
+// sprintin kapsamı dışıdır (bkz. Sprint 7D+). `inventory:read`/
+// `inventory:write` izinleri kullanılıyor — mevcut envanter izinleriyle
+// aynı, yeni bir izin türü icat edilmedi (Ürün Bilgi Bankası, kavramsal
+// olarak envanterin bir uzantısı, bkz. ADR-001).
+//
+// Sprint 7F: dedup fonksiyonları (checkProductDuplicate ve yardımcıları)
+// artık product-duplicate-check.util.ts'te — bkz. o dosyanın üstündeki
+// açıklama. Davranış hiç değişmedi, yalnızca doğru bağımlılık yönü için
+// taşındı (yeni ProductCreateService de aynı fonksiyonu kullanabilsin
+// diye).
+
+app.get("/api/products", requireAuth, requirePermission("inventory:read"), asyncHandler(async (req, res) => {
+  const { type, includeInactive } = req.query;
+  if (type !== undefined && type !== "Fertilizer" && type !== "Chemical") {
+    return res.status(400).json({ error: "type parametresi yalnızca 'Fertilizer' veya 'Chemical' olabilir." });
+  }
+
+  const shouldIncludeInactive = includeInactive === "true";
+  const filterActive = <T extends { isActive?: boolean }>(records: T[]): T[] =>
+    shouldIncludeInactive ? records : records.filter((r) => r.isActive !== false);
+
+  const fertilizers = type === "Chemical" ? [] : filterActive(await fertilizerRepository.getAll());
+  const chemicals = type === "Fertilizer" ? [] : filterActive(await chemicalRepository.getAll());
+
+  res.json({ fertilizers, chemicals });
+}));
+
+app.get("/api/products/:id", requireAuth, requirePermission("inventory:read"), asyncHandler(async (req, res) => {
+  const fertilizer = await fertilizerRepository.getById(req.params.id);
+  const chemical = fertilizer ? null : await chemicalRepository.getById(req.params.id);
+  const product = fertilizer || chemical;
+  if (!product) {
+    return res.status(404).json({ error: "Ürün bulunamadı." });
+  }
+
+  const inventoryItem = await inventoryItemRepository.getById(product.inventoryItemId);
+  res.json({
+    type: fertilizer ? "Fertilizer" : "Chemical",
+    product,
+    inventoryItem,
+  });
+}));
+
+app.post("/api/products", requireAuth, requirePermission("inventory:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { type, name, brand, unit, npkRatio, organicContentPercent, microElements, activeIngredient, concentration, targetPests, preHarvestIntervalDays } = req.body;
+
+  if (type !== "Fertilizer" && type !== "Chemical") {
+    return res.status(400).json({ error: "type alanı zorunludur ve yalnızca 'Fertilizer' veya 'Chemical' olabilir." });
+  }
+  if (!name || typeof name !== "string" || !name.trim()) {
+    return res.status(400).json({ error: "Ürün adı zorunludur." });
+  }
+  if (!unit || typeof unit !== "string" || !unit.trim()) {
+    return res.status(400).json({ error: "Birim (unit) zorunludur." });
+  }
+  if (type === "Chemical" && (!activeIngredient || typeof activeIngredient !== "string" || !activeIngredient.trim())) {
+    return res.status(400).json({ error: "Zirai ilaçlar için etken madde (activeIngredient) zorunludur." });
+  }
+
+  // ADR-001: her ürün, kullanıcıya hiçbir ek soru sormadan, otomatik ve
+  // sessizce bir InventoryItem oluşturur. Kategori, kullanıcının zaten
+  // yaptığı "Gübre"/"Zirai İlaç" seçimine (type) göre mevcut, sabit
+  // ID'li kategorilere (bkz. database.ts seedInitialDatabase) eşlenir —
+  // yeni bir kategori seçimi istenmez. stockQuantity=0 kasıtlı: bu
+  // kaydın "stokta olması" değil "bilinen bir ürün olması" anlamına
+  // geldiği durumları da kapsar (bkz. Architecture Freeze §2.1, Doküman 1).
+  // ADR-003: trackStock=false — bu kayıt yalnızca Ürün Bilgi Bankası
+  // amaçlıdır, gerçek stok takibine/bildirimlere dahil değildir.
+  // Sprint 7F: bu mantık artık `createSilentProductInventoryItem`
+  // yardımcı fonksiyonunda — hem bu route hem `/api/products/from-analysis`
+  // AYNI, PAYLAŞILAN uygulamayı kullanıyor (davranış değişmedi, yalnızca
+  // taşındı — bkz. product-bank-inventory.util.ts üstündeki açıklama).
+  const newInventoryItem = await createSilentProductInventoryItem(type, name, brand, unit);
+
+  const duplicateWarning = await checkProductDuplicate(
+    type,
+    brand || "",
+    { npkRatio },
+    { activeIngredient, concentration }
+  );
+
+  let createdProduct: Fertilizer | Chemical;
+  if (type === "Fertilizer") {
+    createdProduct = await fertilizerRepository.create({
+      inventoryItemId: newInventoryItem.id,
+      npkRatio: npkRatio || undefined,
+      organicContentPercent: parseOptionalNumber(organicContentPercent, "Organik içerik yüzdesi", 0),
+      microElements: microElements || undefined,
+      isActive: true,
+    });
+  } else {
+    createdProduct = await chemicalRepository.create({
+      inventoryItemId: newInventoryItem.id,
+      activeIngredient: activeIngredient.trim(),
+      concentration: concentration || undefined,
+      targetPests: Array.isArray(targetPests) ? targetPests : [],
+      preHarvestIntervalDays: parseOptionalInt(preHarvestIntervalDays, "Hasat öncesi bekleme süresi", 0),
+      isActive: true,
+    });
+  }
+
+  await activityLogRepository.writeLog(
+    req.user.id,
+    "PRODUCT_CREATE",
+    `Ürün Bilgi Bankasına yeni ${type === "Fertilizer" ? "gübre" : "zirai ilaç"} eklendi: '${name}'`
+  );
+
+  res.status(201).json({
+    type,
+    product: createdProduct,
+    inventoryItem: newInventoryItem,
+    duplicateWarning,
+  });
+}));
+
+app.put("/api/products/:id", requireAuth, requirePermission("inventory:write"), asyncHandler(async (req, res) => {
+  const fertilizer = await fertilizerRepository.getById(req.params.id);
+  const chemical = fertilizer ? null : await chemicalRepository.getById(req.params.id);
+  if (!fertilizer && !chemical) {
+    return res.status(404).json({ error: "Ürün bulunamadı." });
+  }
+
+  const { personalNote, isActive, npkRatio, organicContentPercent, microElements, activeIngredient, concentration, targetPests, preHarvestIntervalDays } = req.body;
+
+  let updated: Fertilizer | Chemical | null;
+  if (fertilizer) {
+    const updates: Partial<Fertilizer> = {};
+    if (personalNote !== undefined) updates.personalNote = personalNote;
+    if (isActive !== undefined) updates.isActive = Boolean(isActive);
+    if (npkRatio !== undefined) updates.npkRatio = npkRatio;
+    if (organicContentPercent !== undefined) updates.organicContentPercent = parseOptionalNumber(organicContentPercent, "Organik içerik yüzdesi", 0);
+    if (microElements !== undefined) updates.microElements = microElements;
+    updated = await fertilizerRepository.update(req.params.id, updates);
+  } else {
+    const updates: Partial<Chemical> = {};
+    if (personalNote !== undefined) updates.personalNote = personalNote;
+    if (isActive !== undefined) updates.isActive = Boolean(isActive);
+    if (activeIngredient !== undefined) {
+      if (!activeIngredient || typeof activeIngredient !== "string" || !activeIngredient.trim()) {
+        return res.status(400).json({ error: "Etken madde boş bırakılamaz." });
+      }
+      updates.activeIngredient = activeIngredient.trim();
+    }
+    if (concentration !== undefined) updates.concentration = concentration;
+    if (targetPests !== undefined) updates.targetPests = Array.isArray(targetPests) ? targetPests : [];
+    if (preHarvestIntervalDays !== undefined) updates.preHarvestIntervalDays = parseOptionalInt(preHarvestIntervalDays, "Hasat öncesi bekleme süresi", 0);
+    updated = await chemicalRepository.update(req.params.id, updates);
+  }
+
+  res.json(updated);
+}));
+
+app.delete("/api/products/:id", requireAuth, requirePermission("inventory:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const fertilizer = await fertilizerRepository.getById(req.params.id);
+  const chemical = fertilizer ? null : await chemicalRepository.getById(req.params.id);
+  if (!fertilizer && !chemical) {
+    return res.status(404).json({ error: "Ürün bulunamadı." });
+  }
+
+  const success = fertilizer
+    ? await fertilizerRepository.delete(req.params.id)
+    : await chemicalRepository.delete(req.params.id);
+
+  if (success) {
+    await activityLogRepository.writeLog(req.user.id, "PRODUCT_DELETE", `Ürün Bilgi Bankasından bir kayıt silindi (id: ${req.params.id}).`);
+  }
+
+  res.json({ success });
+}));
+
+
 // Sprint 1 kapsamı: yalnızca temel CRUD. Henüz hiçbir AI/RAG akışına
 // bağlı değil — bu bağlantı bilinçli olarak sonraki bir sprintte ele
 // alınacak (bkz. PlantInfo arayüzü, models.ts).
@@ -1837,9 +2021,153 @@ app.delete("/api/ai/documents/:id", requireAuth, requirePermission("documents:de
   res.json({ success: true, message: "Doküman ve bağlı tüm vektör indeksleri başarıyla silindi." });
 }));
 
-// Generate Contextual AI expert advice for a single parcel
-// Generate Contextual AI expert advice for a single parcel. Accepts an
-// optional userQuery field and up to 3 diagnosis photos (field name
+// ==========================================
+// AI VISION ALTYAPISI — Sprint 7D
+// ==========================================
+// Yalnızca: fotoğraf kabul et → VisionService'e devret → sonucu döndür.
+// Bilinçli olarak HİÇBİR veritabanı okuma/yazma işlemi yapmaz (bkz.
+// Sprint 7D kapsam sınırı — "henüz Product Bank'a kayıt yapmamalı").
+// Route, VisionProvider'ı veya prompt/parser fonksiyonlarını hiç
+// bilmiyor — yalnızca `visionService.analyze()`'i çağırıyor (katmanlı
+// mimari: Route → VisionService → Adapter → Gemini, hiçbir katman
+// atlanmıyor).
+app.post("/api/ai/vision/analyze", requireAuth, requirePermission("ai:read"), upload.single("photo"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const file = req.file as Express.Multer.File | undefined;
+  const outcome = await visionService.analyze(
+    file ? { buffer: file.buffer, mimetype: file.mimetype, size: file.size, originalname: file.originalname } : null
+  );
+
+  if (outcome.success === false) {
+    return res.status(400).json({ error: outcome.errorMessage });
+  }
+  res.json(outcome.result);
+}));
+
+// ==========================================
+// AI VISION → PRODUCT ANALYSIS AKIŞI — Sprint 7E
+// ==========================================
+// Sprint 7D'nin VisionService'ini (değişmeden) yeniden kullanan, ince
+// bir dönüştürme katmanı üzerinden çalışır (bkz.
+// server/services/ai/product-analysis.service.ts). Bilinçli olarak
+// HİÇBİR veritabanı okuma/yazma işlemi yapmaz — yalnızca ANALİZ eder,
+// Product Bank'a hiçbir kayıt oluşturmaz (bkz. Sprint 7E kapsam sınırı).
+app.post("/api/ai/product-analysis", requireAuth, requirePermission("ai:read"), upload.single("photo"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const file = req.file as Express.Multer.File | undefined;
+  const outcome = await productAnalysisService.analyzeProductPhoto(
+    file ? { buffer: file.buffer, mimetype: file.mimetype, size: file.size, originalname: file.originalname } : null
+  );
+
+  if (outcome.success === false) {
+    return res.status(400).json({ error: outcome.errorMessage });
+  }
+  res.json(outcome.result);
+}));
+
+// ==========================================
+// PRODUCT BANK KAYIT AKIŞI — Sprint 7F
+// ==========================================
+// Kullanıcının "Düzenle" adımında onayladığı ProductCreateRequest'i
+// (ProductAnalysisResult DEĞİL — bkz. product-create-request.types.ts)
+// kalıcı olarak Product Bank'e kaydeder. Route ince: yalnızca isteği
+// servise devrediyor, hiçbir iş kuralı burada yok (validasyon, dedup,
+// InventoryItem oluşturma — hepsi ProductCreateService'te).
+app.post("/api/products/from-analysis", requireAuth, requirePermission("inventory:write"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const outcome = await productCreateService.createFromRequest(req.body, req.user.id);
+
+  if (outcome.success === false) {
+    return res.status(400).json({ error: outcome.errorMessage });
+  }
+
+  // Sprint 8 — 5. tur düzeltmesi: bu route (Sprint 7F'nin ORİJİNAL tek
+  // fotoğraf "Ürün Analizi" akışı) daha önce documentService'e HİÇ
+  // dokunmuyordu — bu yüzden bu akıştan oluşan ürünler "Belgelere Sor"/
+  // "Karar Destek"e HİÇ ulaşmıyordu (gerçek HTTP testiyle kanıtlandı).
+  // Capture Session akışıyla PAYLAŞILAN, DEĞİŞTİRİLMEMİŞ aynı fonksiyon
+  // burada da çağrılıyor — yeni mimari/servis YOK.
+  await indexProductSummary(req.body, outcome.product.id, req.user.id);
+
+  res.status(201).json(outcome);
+}));
+
+// ==========================================
+// PRODUCT BANK RAG SORGULAMA — Sprint 7H
+// ==========================================
+// "Belgelere Sor" akışı. Route ince: yalnızca isteği ProductDocumentQaService'e
+// devrediyor. Hiçbir Inventory/trackStock/dedup mantığına dokunmuyor —
+// yalnızca OKUMA amaçlı (bkz. Sprint 7H kapsam sınırı).
+app.post("/api/products/:id/ask", requireAuth, requirePermission("inventory:read"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const outcome = await productDocumentQaService.ask(req.params.id, req.body?.question);
+
+  if (outcome.success === false) {
+    return res.status(400).json({ error: outcome.errorMessage });
+  }
+  res.json(outcome.result);
+}));
+
+// ==========================================
+// PRODUCT CAPTURE SESSION — Sprint 8
+// ==========================================
+// Route'lar ince: yalnızca isteği ProductCaptureSessionService'e (DEĞİŞMEDEN
+// bkz. product-capture-session.service.ts) devrediyorlar. İki AYRI istek
+// (analyze/save) — session backend'de KALICI değil, stateless (bkz. servis
+// dosyasının üstündeki gerekçe).
+app.post("/api/products/capture-session/analyze", requireAuth, requirePermission("ai:read"), upload.array("photos", 10), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const files = (req.files as Express.Multer.File[]) || [];
+  const imageFiles = files.map((f) => ({ buffer: f.buffer, mimetype: f.mimetype, size: f.size, originalname: f.originalname }));
+
+  const outcome = await productCaptureSessionService.analyzeImages(imageFiles);
+
+  if (outcome.success === false) {
+    return res.status(400).json({ error: outcome.errorMessage });
+  }
+  res.json(outcome.result);
+}));
+
+app.post(
+  "/api/products/capture-session/save",
+  requireAuth,
+  requirePermission("inventory:write"),
+  upload.fields([
+    { name: "photos", maxCount: 10 },
+    { name: "documents", maxCount: 10 },
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const filesByField = (req.files as { [fieldname: string]: Express.Multer.File[] }) || {};
+    const photoFiles = filesByField.photos || [];
+    const documentFiles = filesByField.documents || [];
+
+    let productCreateRequest: unknown;
+    let documentCategories: string[] = [];
+    try {
+      productCreateRequest = JSON.parse(req.body?.product || "{}");
+      documentCategories = req.body?.documentCategories ? JSON.parse(req.body.documentCategories) : [];
+    } catch {
+      return res.status(400).json({ error: "Geçersiz istek gövdesi (product/documentCategories JSON olarak beklenir)." });
+    }
+
+    const imageFiles = photoFiles.map((f) => ({ buffer: f.buffer, mimetype: f.mimetype, size: f.size, originalname: f.originalname }));
+    const documentFileInputs = documentFiles.map((f, i) => ({
+      buffer: f.buffer,
+      mimetype: f.mimetype,
+      originalname: f.originalname,
+      documentCategory: documentCategories[i] || undefined,
+    }));
+
+    const outcome = await productCaptureSessionService.saveSessionWithDocuments(
+      productCreateRequest as ProductCreateRequest,
+      req.user.id,
+      imageFiles,
+      documentFileInputs
+    );
+
+    if (outcome.success === false) {
+      return res.status(400).json({ error: outcome.errorMessage });
+    }
+    res.status(201).json(outcome.result);
+  })
+);
+
+
 // "photos") via multipart/form-data. When photos are attached, the
 // recommendation is grounded in a multimodal (text + vision) analysis
 // that prioritizes the RAG document pool before falling back to the

@@ -246,7 +246,7 @@ async function main() {
   // 8. Stok yetersizliği → FAIL/BLOCKED
   await runScenario(
     "Stok yetersizliği",
-    { inventoryItems: [{ id: "item1", categoryId: "cat1", name: "Test Ürün", stockQuantity: 1, unit: "Litre", minStockAlert: 5, unitPrice: 10, createdAt: "", updatedAt: "" }] },
+    { inventoryItems: [{ id: "item1", categoryId: "cat1", name: "Test Ürün", stockQuantity: 1, unit: "Litre", minStockAlert: 5, unitPrice: 10, trackStock: true, createdAt: "", updatedAt: "" }] },
     { inventoryItemIds: ["item1"] },
     { status: "BLOCKED", hasBlockingReason: true, explanationContains: ["Stok Kontrolü"] }
   );

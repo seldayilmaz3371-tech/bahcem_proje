@@ -19,6 +19,7 @@ import {
   Camera,
   Image as ImageIcon,
   AlertTriangle,
+  FileText,
   X
 } from "lucide-react";
 import { Parcel, Photo, AIRecommendation, AiUsageSnapshot } from "../types";
@@ -583,6 +584,30 @@ export default function AIRecommendations() {
               <div className="markdown-body text-sm text-[#2d3a2a] leading-relaxed space-y-4 prose max-w-none">
                 <ReactMarkdown>{currentReport.content}</ReactMarkdown>
               </div>
+
+              {/* Sprint 9.1 — SORUN 3: "Kullanılan Kaynaklar" artık genel bir
+                  ifade değil — mevcut veri modelinin GERÇEKTEN desteklediği
+                  alanlar (dosya adı, başlık, retrieval score) gösteriliyor.
+                  `pageNumber`/`section`/`paragraph` MEVCUT VERİ MODELİNDE
+                  YOK (bkz. Sprint 9 denetim raporu) — bu yüzden UYDURULMUYOR,
+                  yalnızca var olan alanlar render ediliyor. */}
+              {currentReport.sources && currentReport.sources.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-[#e2e8df] space-y-2">
+                  <span className="text-[10px] text-[#80907a] uppercase font-bold tracking-wider">Kullanılan RAG Kaynakları</span>
+                  {currentReport.sources.map((source, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs bg-[#f5f8f4] rounded-lg px-3 py-2">
+                      <FileText className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[#4a6b3f]" />
+                      <div className="min-w-0">
+                        <div className="font-medium text-[#2d3a2a] truncate">{source.fileName}</div>
+                        {source.headings.length > 0 && (
+                          <div className="text-[#80907a] truncate">{source.headings.join(" · ")}</div>
+                        )}
+                        <div className="text-[#80907a]">Retrieval Score: {(source.score * 100).toFixed(1)}%</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-[400px] flex flex-col items-center justify-center border-2 border-dashed border-[#e2e8df] rounded-3xl bg-[#fcfdfc] p-6 text-center">

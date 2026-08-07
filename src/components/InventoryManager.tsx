@@ -630,7 +630,11 @@ export default function InventoryManager() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredItems.length > 0 ? (
           filteredItems.map((item) => {
-            const isLowStock = item.stockQuantity <= item.minStockAlert;
+            // ADR-003: yalnızca gerçek stok takibi yapılan kayıtlar
+            // (trackStock === true) düşük-stok uyarısı gösterir — AI
+            // Ürün Bilgi Bankası kayıtları (trackStock === false) hiçbir
+            // zaman bu uyarıyı almaz.
+            const isLowStock = item.trackStock === true && item.stockQuantity <= item.minStockAlert;
             return (
               <div id={`inventory-card-${item.id}`} key={item.id} className="bg-[#fcfdfc] border border-[#e2e8df] rounded-3xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
                 <div className="space-y-3">

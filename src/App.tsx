@@ -14,6 +14,9 @@ import EquipmentManager from "./components/EquipmentManager";
 import FinanceManager from "./components/FinanceManager";
 import AIRecommendations from "./components/AIRecommendations";
 import PhotoGrowthAnalysis from "./components/PhotoGrowthAnalysis";
+import ProductAnalysisScreen from "./components/ProductAnalysisScreen";
+import ProductDocumentQaScreen from "./components/ProductDocumentQaScreen";
+import ProductCaptureSessionScreen from "./components/ProductCaptureSessionScreen";
 import DocumentHub from "./components/DocumentHub";
 import ActivityLogs from "./components/ActivityLogs";
 import BackupRecovery from "./components/BackupRecovery";
@@ -186,6 +189,9 @@ export default function App() {
         {activeTab === "finance" && <FinanceManager />}
         {activeTab === "ai-advisor" && <AIRecommendations />}
         {activeTab === "photo-growth" && <PhotoGrowthAnalysis />}
+        {activeTab === "product-analysis" && <ProductAnalysisScreen />}
+        {activeTab === "product-document-qa" && <ProductDocumentQaScreen />}
+        {activeTab === "product-capture-session" && <ProductCaptureSessionScreen />}
         {activeTab === "document-hub" && <DocumentHub />}
         {activeTab === "activities" && <ActivityLogs />}
         {activeTab === "backup-recovery" && <BackupRecovery />}

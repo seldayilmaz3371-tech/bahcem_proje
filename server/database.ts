@@ -350,7 +350,57 @@ class DatabaseManager {
       mutated = true;
     }
 
-    // Backfill: the "Çalışan" (Worker) role was originally seeded with
+    // Backfill: ADR-003 ("InventoryItem — trackStock ile Stok Takibi/
+    // Bilgi Amaçlı Kayıt Ayrımı", Sprint 7C.1). `trackStock` alanı yeni
+    // eklendiği için diskteki TÜM eski InventoryItem kayıtlarında bu
+    // alan hiç yok. ADR-003 kararı gereği bu alan ZORUNLU (opsiyonel
+    // değil) olduğundan — isActive backfill'inin aksine — burada
+    // "eksikse doldur" değil, tüm eski (gerçek stok) kayıtlarına açıkça
+    // `true` atanır; hiçbir kayıt migration sonrası `undefined` kalmaz.
+    let backfilledInventoryCount = 0;
+    for (const item of this.data.inventory) {
+      if ((item as { trackStock?: boolean }).trackStock === undefined) {
+        item.trackStock = true;
+        backfilledInventoryCount++;
+      }
+    }
+    if (backfilledInventoryCount > 0) {
+      logger.warn(
+        "DATABASE",
+        `Migration: ${backfilledInventoryCount} eski envanter kaydına ADR-003 gereği "trackStock: true" atandı.`
+      );
+      mutated = true;
+    }
+
+
+    // §4) eski Fertilizer/Chemical kayıtlarına `isActive` alanını hiç
+    // eklemedi (alan tip tanımında opsiyonel bırakıldı). Burada yalnızca
+    // `isActive` doldurulur — Sprint 7A'nın eklediği diğer alanlar
+    // BİLİNÇLİ OLARAK dokunulmadan bırakılır: bunların yokluğu ("fotoğraf
+    // yok", "AI analizi hiç yapılmadı", "kullanıcı notu yok") zaten doğru
+    // ve anlamlı bir durumu temsil eder.
+    let backfilledProductCount = 0;
+    for (const fertilizer of this.data.fertilizers) {
+      if (fertilizer.isActive === undefined) {
+        fertilizer.isActive = true;
+        backfilledProductCount++;
+      }
+    }
+    for (const chemical of this.data.chemicals) {
+      if (chemical.isActive === undefined) {
+        chemical.isActive = true;
+        backfilledProductCount++;
+      }
+    }
+    if (backfilledProductCount > 0) {
+      logger.warn(
+        "DATABASE",
+        `Migration: ${backfilledProductCount} eski gübre/ilaç kaydına varsayılan aktiflik durumu ("isActive: true") atandı.`
+      );
+      mutated = true;
+    }
+
+
     // observations:write but not observations:read — meaning a Worker
     // could add field observations but the observation history screen
     // itself (which reads the list on load) would 403 for them, breaking
@@ -585,6 +635,7 @@ class DatabaseManager {
         minStockAlert: 10,
         unitPrice: 150,
         expiryDate: "2028-12-31",
+        trackStock: true, // ADR-003: örnek/demo veri, gerçek stok takibi amaçlı
         createdAt: timestamp,
         updatedAt: timestamp
       },
@@ -599,6 +650,7 @@ class DatabaseManager {
         minStockAlert: 5,
         unitPrice: 220,
         expiryDate: "2027-06-30",
+        trackStock: true, // ADR-003: örnek/demo veri, gerçek stok takibi amaçlı
         createdAt: timestamp,
         updatedAt: timestamp
       },
@@ -612,6 +664,7 @@ class DatabaseManager {
         unit: "Adet",
         minStockAlert: 15,
         unitPrice: 35,
+        trackStock: true, // ADR-003: örnek/demo veri, gerçek stok takibi amaçlı
         createdAt: timestamp,
         updatedAt: timestamp
       },
@@ -625,6 +678,7 @@ class DatabaseManager {
         unit: "Adet",
         minStockAlert: 1,
         unitPrice: 4500,
+        trackStock: true, // ADR-003: örnek/demo veri, gerçek stok takibi amaçlı
         createdAt: timestamp,
         updatedAt: timestamp
       }

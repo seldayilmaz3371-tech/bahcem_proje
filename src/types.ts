@@ -169,6 +169,8 @@ export interface InventoryItem {
   expiryDate?: string;
   invoicePhotoUrl?: string;
   labelPhotoUrl?: string;
+  /** ADR-003 — gerçek stok takibi mi (true) yoksa yalnızca AI Ürün Bilgi Bankası kaydı mı (false). Zorunlu, backend ile senkron. */
+  trackStock: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -303,6 +305,8 @@ export interface AIRecommendation {
   usedWeatherCount: number;
   usedInventoryCount: number;
   createdDate: string;
+  /** Sprint 9.1 — SORUN 3: RAG kaynak detayları (dosya, başlık, retrieval score). Mevcut veri modelinin desteklediği alanlarla sınırlı — pageNumber/section/paragraph yok. */
+  sources?: { documentId: string; fileName: string; headings: string[]; score: number }[];
 }
 
 export interface UploadedDocument {
@@ -381,6 +385,40 @@ export type ActiveTab =
   | "finance" 
   | "ai-advisor" 
   | "photo-growth"
+  | "product-analysis"
+  | "product-document-qa"
+  | "product-capture-session"
   | "document-hub"
   | "activities"
   | "backup-recovery";
+
+/**
+ * Sprint 7E — AI Vision → Product Analysis akışı. Backend'deki
+ * `ProductAnalysisResult` DTO'suyla (server/services/ai/product-analysis.types.ts)
+ * birebir senkron. Bir Product Bank kaydı DEĞİL — yalnızca geçici bir
+ * analiz sonucu.
+ *
+ * Sprint 7G: `structuredExtraction` eklendi (katkısal, mevcut alanlar
+ * değişmedi — bkz. backend product-analysis.types.ts).
+ */
+export interface StructuredLabelExtraction {
+  productName?: string;
+  brand?: string;
+  categorySuggestion?: "Fertilizer" | "Chemical";
+  npkRatio?: string;
+  activeIngredient?: string;
+  concentration?: string;
+  formulation?: string;
+  packageSize?: string;
+  manufacturer?: string;
+  importantWarnings?: string[];
+}
+
+export interface ProductAnalysisResult {
+  description: string;
+  confidence: number;
+  detectedObjects: string[];
+  warnings: string[];
+  rawResponse: string;
+  structuredExtraction?: StructuredLabelExtraction;
+}

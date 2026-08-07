@@ -274,6 +274,15 @@ export interface InventoryItem {
   expiryDate?: string;
   invoicePhotoUrl?: string;
   labelPhotoUrl?: string;
+  /**
+   * ADR-003 — gerçek stok takibi yapılan bir kayıt mı (true), yoksa
+   * yalnızca AI Ürün Bilgi Bankası amacıyla oluşturulmuş, stok takibine/
+   * bildirimlere dahil OLMAYAN bir kayıt mı (false). Bilinçli olarak
+   * ZORUNLU (opsiyonel değil) — ADR-003 kararı gereği hiçbir kayıt bu
+   * konuda belirsiz kalmamalı. Migration, mevcut tüm kayıtlara `true`
+   * atar (bkz. database.ts runMigrations()).
+   */
+  trackStock: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -327,6 +336,22 @@ export interface PlantInfo {
 }
 
 /**
+ * Sprint 7A — AI Ürün Bilgi Bankası: Fertilizer/Chemical ortak ek
+ * alanları. Her ikisi de opsiyonel — eski kayıtlar bu alanlar hiç
+ * olmadan geçerliliğini korur.
+ *
+ * `rawText` KASITLI OLARAK YOK: Architecture Freeze §8 kararı gereği
+ * ("Sadece Vision Modeli", OCR yok) ham OCR metni hiç üretilmiyor —
+ * yalnızca Gemini'nin çıkardığı YAPILANDIRILMIŞ alanların güven
+ * durumu izleniyor.
+ */
+export interface AiExtractedLabelMeta {
+  confidence: number; // 0-1 ölçeği, mevcut LOW_CONFIDENCE_THRESHOLD ile aynı (growth-scoring.util.ts)
+  isUncertain: boolean; // mevcut isUncertainAnalysis() deseniyle aynı anlam
+  extractedAt: string; // ISO DateTime
+}
+
+/**
  * 9. Fertilizers Table Schema (Nutrient tracking helper)
  */
 export interface Fertilizer {
@@ -337,6 +362,22 @@ export interface Fertilizer {
   microElements?: string; // e.g. "Bor, Çinko"
   /** Sprint 5A — Rule Layer Foundation. Bu gübreye bağlı, bitki/dönem bazlı doz kuralları — opsiyonel, geriye dönük tam uyumlu. */
   nutritionRuleIds?: string[];
+  // ============================================================
+  // Sprint 7A — AI Ürün Bilgi Bankası (Architecture Freeze). Hepsi
+  // opsiyonel: eski kayıtlar bu alanlar hiç olmadan geçerlidir.
+  // ============================================================
+  /** Ürüne ait etiket fotoğrafları — Photo tablosuna referans (bkz. observation.repository.ts). */
+  productPhotoIds?: string[];
+  /** AI'ın etiketten çıkardığı yapılandırılmış alanların güven/iz bilgisi. */
+  aiExtractedLabel?: AiExtractedLabelMeta;
+  /** Kullanıcı, AI'ın önceden doldurduğu formu gördükten sonra kaydı onayladı mı (Freeze §5, "Kullanıcı Onayı"). */
+  userConfirmed?: boolean;
+  /** Bu ürünün etiket bilgisinden üretilen RAG dokümanına referans (UploadedDocument.id). */
+  linkedDocumentId?: string;
+  /** Kullanıcının kişisel, salt-görüntüleme notu — Freeze §5 kararı gereği hiçbir servis bu alanı okumaz. */
+  personalNote?: string;
+  /** Ürün hâlâ kullanımda mı (Freeze §4 — silme yerine durum değişikliği). Belirtilmemişse aktif kabul edilir. */
+  isActive?: boolean;
 }
 
 /**
@@ -350,6 +391,24 @@ export interface Chemical {
   preHarvestIntervalDays: number; // Hasat öncesi bekleme süresi (PH)
   /** Sprint 5A — Rule Layer Foundation. Bu ilaca bağlı doz kuralları — opsiyonel, geriye dönük tam uyumlu. */
   dosageRuleIds?: string[];
+  // ============================================================
+  // Sprint 7A — AI Ürün Bilgi Bankası (Architecture Freeze). Hepsi
+  // opsiyonel, henüz hiçbir servis/route tarafından kullanılmıyor.
+  // ============================================================
+  /** Etken maddenin konsantrasyonu (örn. "%25") — Product Fingerprint'in bir bileşeni (Freeze §3); Fertilizer'da karşılığı zaten npkRatio olduğu için yalnızca Chemical'a eklendi. */
+  concentration?: string;
+  /** Ürüne ait etiket fotoğrafları — Photo tablosuna referans. */
+  productPhotoIds?: string[];
+  /** AI'ın etiketten çıkardığı yapılandırılmış alanların güven/iz bilgisi. */
+  aiExtractedLabel?: AiExtractedLabelMeta;
+  /** Kullanıcı, AI'ın önceden doldurduğu formu gördükten sonra kaydı onayladı mı. */
+  userConfirmed?: boolean;
+  /** Bu ürünün etiket bilgisinden üretilen RAG dokümanına referans (UploadedDocument.id). */
+  linkedDocumentId?: string;
+  /** Kullanıcının kişisel, salt-görüntüleme notu — hiçbir servis bu alanı okumaz. */
+  personalNote?: string;
+  /** Ürün hâlâ kullanımda mı. Belirtilmemişse aktif kabul edilir. */
+  isActive?: boolean;
 }
 
 // ============================================================================
@@ -677,6 +736,26 @@ export interface AIRecommendation {
    * kayıtlarda bulunmaz, geriye dönük tam uyumlu.
    */
   confidenceModel?: { confidence: number; reasons: string[] };
+  /**
+   * Sprint 9.1 — SORUN 2/3. `confidenceModel` ile AYNI desen: opsiyonel,
+   * geriye dönük tam uyumlu (eski kayıtlarda bulunmaz). RAG'den gelen
+   * bilginin HANGİ belgeden, hangi skorla geldiğini gösterir. Şekil,
+   * `chat-assistant.service.ts`'in `RagSourceDocument` tipiyle AYNIDIR
+   * (o dosyaya, servis katmanından model katmanına dairesel bağımlılık
+   * yaratmamak için burada AYRI/inline tanımlandı — davranış/veri şekli
+   * tekrarlanmıyor, yalnızca tip imzası aynı). `pageNumber`/`section`/
+   * `paragraph` VectorChunk modelinde hiç bulunmadığı için UYDURULMUYOR
+   * (bkz. Sprint 8 denetim raporu).
+   */
+  sources?: { documentId: string; fileName: string; headings: string[]; score: number }[];
+  /**
+   * Sprint 9.10 — Kanıt Değerlendirme sonucu (deterministik, Gemini'ye
+   * sorulmadan hesaplandı) ve kullanılan çalışma modu. Opsiyonel,
+   * geriye dönük uyumlu — eski kayıtlarda bu alanlar yok, hiçbir
+   * migration gerektirmez.
+   */
+  documentCoverage?: "full" | "partial" | "none";
+  evidenceMode?: "STRICT_RAG" | "HYBRID";
 }
 
 /**
@@ -696,7 +775,7 @@ export interface UploadedDocument {
   // every document uploaded before this field existed, and for general
   // farming documents uploaded today) means "part of the global RAG
   // pool", exactly as before this field was introduced.
-  linkedEntityType?: "equipment";
+  linkedEntityType?: "equipment" | "product"; // Sprint 7H: "product" eklendi (katkısal, migration gerektirmez — bkz. onay mesajı Karar 1)
   linkedEntityId?: string;
   /**
    * SHA-256 hash of the document's raw text content, used to detect
@@ -717,6 +796,15 @@ export interface UploadedDocument {
    * VectorChunk'ın kendi cropType alanı, bu değerden DOĞRUDAN kopyalanır.
    */
   cropType?: string;
+  /**
+   * Sprint 8 — Product Capture Session'da yüklenen belgenin türü (örn.
+   * "Ön Etiket", "MSDS", "Teknik Föy"). Kullanıcı tarafından seçilir,
+   * İÇERİKTEN TAHMİN EDİLMEZ (cropType ile aynı ilke). Katkısal, opsiyonel
+   * alan — migration gerektirmez, mevcut/eski belgeler bu alan olmadan
+   * geçerliliğini korur (bkz. ADR-003 sonrası kurulan emsal: yeni
+   * opsiyonel alan = geriye dönük uyumlu genişleme, migration DEĞİL).
+   */
+  documentCategory?: string;
 }
 
 /**
